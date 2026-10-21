@@ -87,6 +87,17 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .btab td.r, .btab th.r { text-align: right; }
 .btab tr.telt td { color: var(--ink); font-weight: 600; }
 .btab tr.telt td:last-child { color: var(--accent); }
+.spuit { display: grid; grid-template-columns: 1fr 84px auto; gap: 10px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.spuit label { color: var(--muted); font-weight: 500; }
+.spuit input { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 22px; text-align: right; padding: 0 10px; outline: none; }
+.spuit input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.spuit .btn { min-height: 48px; padding: 0 14px; flex: none; }
+.sp { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.sp strong { color: var(--ink); font-weight: 600; }
+.sp .klein { min-height: 40px; font-size: 15px; margin-top: 6px; width: auto; padding: 0 12px; display: inline-flex; }
+.spnr { background: #1C2318; color: #fff; font: 700 13px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 999px; padding: 0 6px; line-height: 18px; text-align: center; white-space: nowrap; }
+.spijl { color: #fff; font-size: 18px; line-height: 20px; text-align: center; text-shadow: 0 0 3px #000; }
+.abl { background: #fff; color: #1C2318; font: 700 13px "Barlow", system-ui, sans-serif; border: 2px solid #1C2318; border-radius: 4px; text-align: center; line-height: 16px; }
 .toggle { width: 100%; margin-top: 10px; flex: none; }
 #map.oever { cursor: crosshair; }
 .me { width: 16px; height: 16px; border-radius: 50%; background: #3a6fd1; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
@@ -94,7 +105,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 1</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 2</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -114,6 +125,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <div id="typeBox" hidden>
       <div class="lbl2">Type waterloop, kies vóór het tikken</div>
       <div class="seg4" role="group" aria-label="Type waterloop" id="typeSeg"></div>
+    </div>
+    <div class="spuit">
+      <label for="spuitB">Spuitbreedte (m)</label>
+      <input id="spuitB" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="27">
+      <button type="button" class="btn" id="bSpuit" aria-pressed="false">Sporen</button>
     </div>
     <ul class="log" id="lijst"></ul>
     <div class="row" style="margin-top:10px"><button type="button" class="btn" id="bWis">Alles wissen</button></div>
@@ -215,11 +231,42 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   }
   const nlM = v => String(v).replace(".", ",") + " m";
   let oeverModus = false;
+  // Spuitsporen onder de perceelranden tekenen
+  const spoorLaag = L.layerGroup().addTo(map);
   const laag = L.layerGroup().addTo(map);
   const bewaar = () => store.set("kaartTestSelectie", sel);
+  const spuitEl = $("spuitB");
+  spuitEl.value = store.get("kaartSpuitBreedte", "27");
+  let spuitAan = store.get("kaartSpuitAan", false);
+  const spuitBreedte = () => { const b = parse(spuitEl.value); return b >= 1 && b <= 100 ? b : null; };
+  const kmTxt = m => (m / 1000).toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " km";
+  const mDec = v => v.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + " m";
+  spuitEl.addEventListener("input", () => { store.set("kaartSpuitBreedte", spuitEl.value); teken(); });
+  $("bSpuit").addEventListener("click", () => { spuitAan = !spuitAan; store.set("kaartSpuitAan", spuitAan); teken(); });
+  // Draaiing op het scherm van punt a naar b (Mercator is hoekgetrouw, dus los van de zoom)
+  const hoek = (a, b) => { const p = map.project([a[1], a[0]], 18), q = map.project([b[1], b[0]], 18); return Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI; };
+  function tekenSporen(q, s) {
+    s.sporen.forEach(sp => {
+      const kleur = sp.nr % 2 ? "#e8b400" : "#3a8fd8";
+      sp.banen.forEach(bn => spoorLaag.addLayer(L.polygon(bn.map(c => [c[1], c[0]]), { stroke: false, fillColor: kleur, fillOpacity: .22, interactive: false })));
+      sp.lijnen.forEach(ln => {
+        const [a, b] = sp.heen ? ln : [ln[1], ln[0]];
+        spoorLaag.addLayer(L.polyline([[a[1], a[0]], [b[1], b[0]]], { color: "#fff", weight: 2, dashArray: "8 6", opacity: .9, interactive: false }));
+        // Nummer een stukje het spoor op, zodat het niet over A of B valt
+        const nrp = [a[0] + (b[0] - a[0]) * 0.12, a[1] + (b[1] - a[1]) * 0.12];
+        spoorLaag.addLayer(L.marker([nrp[1], nrp[0]], { icon: L.divIcon({ className: "", html: '<div class="spnr">' + sp.nr + '</div>', iconSize: [24, 18] }), interactive: false, keyboard: false }));
+        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        spoorLaag.addLayer(L.marker([mid[1], mid[0]], { icon: L.divIcon({ className: "", html: '<div class="spijl" style="transform:rotate(' + hoek(a, b).toFixed(0) + 'deg)">➜</div>', iconSize: [20, 20] }), interactive: false, keyboard: false }));
+      });
+    });
+    [["A", s.a], ["B", s.b]].forEach(([t, c]) => spoorLaag.addLayer(L.marker([c[1], c[0]], { icon: L.divIcon({ className: "", html: '<div class="abl">' + t + '</div>', iconSize: [20, 20] }), interactive: false, keyboard: false })));
+  }
 
   function teken() {
-    laag.clearLayers();
+    laag.clearLayers(); spoorLaag.clearLayers();
+    const sb = spuitBreedte();
+    $("bSpuit").setAttribute("aria-pressed", spuitAan);
+    $("bSpuit").textContent = spuitAan ? "Sporen uit" : "Sporen";
     sel.forEach((q, i) => {
       const g = L.geoJSON(q.geometry, { style: stijl, interactive: false });
       g.bindTooltip(String(i + 1), { permanent: true, direction: "center", className: "pnr" });
@@ -239,10 +286,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const mt = document.createElement("div"); mt.className = "meta";
       const bf = buffer(q);
       mt.textContent = [q.jaar ? "BRP " + q.jaar : "", q.bron === "opgeslagen" ? "uit opgeslagen percelen" : ""].filter(Boolean).join(", ");
-      // Bufferstrook-uitleg onder de regel, over de volle breedte
+      // Bufferstrook- en spuituitleg onder de regel, over de volle breedte
       let detail = null;
+      const maakDetail = () => detail || (detail = Object.assign(document.createElement("div"), { className: "detail" }));
       if (bf.lengte) {
-        detail = document.createElement("div"); detail.className = "detail";
+        maakDetail();
         const lijst = Object.entries(bf.per).sort((x, y) => typeVan(y[0]).st[0] - typeVan(x[0]).st[0]);
         const kop = document.createElement("div");
         kop.textContent = lijst.map(([id, m]) => mTxt(m) + " oever, " + typeVan(id).t).join(" · ");
@@ -264,6 +312,23 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         detail.appendChild(tb);
         if (bf.stap) { const n = document.createElement("div"); n.textContent = "Meer dan 4 % (" + haTxt(bf.max) + " ha) mag niet, dan wordt de strook smaller."; detail.appendChild(n); }
         if (bf.stap === 2 && bf.af > bf.max) { const n = document.createElement("div"); n.textContent = "Nog boven 4 %, maar smaller mag niet."; detail.appendChild(n); }
+      }
+      // Spuitsporen: hoe je uitkomt met deze breedte
+      if (spuitAan && sb) {
+        const s = Perceel.sporen(q.geometry, sb, { andereKant: !!q.spuitAnders });
+        if (s) {
+          tekenSporen(q, s);
+          const d = document.createElement("div"); d.className = "sp";
+          const r1 = document.createElement("div");
+          r1.innerHTML = "<strong>Spuiten " + esc(mDec(sb)) + ":</strong> " + s.gangen + (s.gangen === 1 ? " gang" : " gangen") + " langs de lange kant (" + esc(mTxt(s.abLengte)) + "), samen " + esc(kmTxt(s.totaalM)) + " rijden.";
+          const r2 = document.createElement("div");
+          r2.textContent = s.buitenKant < 0.5 ? "Komt precies uit." :
+            "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt buiten de kant (sectie uit). Of leg hem tegen de kant: dan " + mDec(s.buitenKant) + " overlap.";
+          const kb = document.createElement("button"); kb.type = "button"; kb.className = "btn klein";
+          kb.textContent = q.spuitAnders ? "Begin weer aan kant A" : "Begin aan andere kant";
+          kb.addEventListener("click", () => { q.spuitAnders = !q.spuitAnders; bewaar(); teken(); });
+          d.append(r1, r2, kb); maakDetail().appendChild(d);
+        }
       }
       go.append(nm, mt);
       go.addEventListener("click", () => map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));

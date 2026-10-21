@@ -1,4 +1,4 @@
-// perceel.js versie 1 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 2 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -7,6 +7,7 @@
 //   Perceel.oppervlakteHa(geometry), Perceel.bevatPunt(geometry, lon, lat)
 //   Perceel.zijden(geometry), Perceel.rechteZijde(zijden, key)   // randstukjes en lengtes, voor bufferstroken
 //   Perceel.zoekWater(geometry) + Perceel.waterLangsZijden(geometry, water)   // randen langs BGT-water
+//   Perceel.sporen(geometry, breedte, { andereKant })   // spuit-/strooisporen langs de langste zijde
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
 // "offline" (geen verbinding en niks opgeslagen op deze plek), "server", "geen-perceel". De .message is Nederlands.
@@ -168,6 +169,81 @@
     return uit;
   }
 
+  /* ---------- Spuit- of strooisporen langs de lange kant ---------- */
+  // Sporen evenwijdig aan de langste rechte zijde (AB-lijn), om de `breedte` meter.
+  // Spoor 1 ligt op een halve breedte van die zijde. opts.andereKant: beginnen aan de overkant.
+  function sporen(geometry, breedte, opts) {
+    opts = opts || {};
+    const polys = polygonen(geometry);
+    if (!polys.length || !(breedte > 0)) return null;
+    // Lokaal vlak in meters (graadlengtes op deze breedte)
+    const lat0 = polys[0][0][0][1], lon0 = polys[0][0][0][0], f = lat0 * Math.PI / 180;
+    const ky = 111132.92 - 559.82 * Math.cos(2 * f) + 1.175 * Math.cos(4 * f), kx = 111412.84 * Math.cos(f) - 93.5 * Math.cos(3 * f);
+    const naarM = c => [(c[0] - lon0) * kx, (c[1] - lat0) * ky];
+    const naarLL = p => [lon0 + p[0] / kx, lat0 + p[1] / ky];
+    // Langste rechte zijde van de buitenrand bepaalt de AB-richting
+    const buiten = zijden({ type: "Polygon", coordinates: [polys[0][0]] });
+    const gehad = new Set();
+    let ab = null;
+    buiten.forEach(z => {
+      if (gehad.has(z.key)) return;
+      const run = rechteZijde(buiten, z.key, 15); run.forEach(k => gehad.add(k));
+      const delen = buiten.filter(x => run.includes(x.key));
+      const m = delen.reduce((t, x) => t + x.m, 0);
+      if (!ab || m > ab.m) {
+        let dx = 0, dy = 0;
+        delen.forEach(x => { const a = naarM(x.a), b = naarM(x.b); dx += b[0] - a[0]; dy += b[1] - a[1]; });
+        ab = { m, dx, dy, delen };
+      }
+    });
+    if (!ab) return null;
+    const len = Math.hypot(ab.dx, ab.dy), ux = ab.dx / len, uy = ab.dy / len;
+    // Gedraaid stelsel: x langs AB, y loodrecht erop
+    const anker = naarM(ab.delen[0].a);
+    const rot = p => [(p[0] - anker[0]) * ux + (p[1] - anker[1]) * uy, -(p[0] - anker[0]) * uy + (p[1] - anker[1]) * ux];
+    const terug = (x, y) => naarLL([anker[0] + x * ux - y * uy, anker[1] + x * uy + y * ux]);
+    const ringen = polys.flatMap(rings => rings.map(r => r.map(c => rot(naarM(c)))));
+    let ymin = Infinity, ymax = -Infinity, xmin = Infinity, xmax = -Infinity;
+    ringen[0].forEach(p => { ymin = Math.min(ymin, p[1]); ymax = Math.max(ymax, p[1]); xmin = Math.min(xmin, p[0]); xmax = Math.max(xmax, p[0]); });
+    // Het perceel ligt aan één kant van de AB-zijde: vanaf die zijde naar binnen tellen
+    let richtingY = Math.abs(ymin) <= Math.abs(ymax) ? 1 : -1;
+    let startY = richtingY === 1 ? ymin : ymax;
+    if (opts.andereKant) { startY = richtingY === 1 ? ymax : ymin; richtingY = -richtingY; }
+    const W = ymax - ymin;
+    // Rest onder 0,5 m telt niet: de perceelgrens zelf is ongeveer een meter nauwkeurig
+    const n = Math.max(1, Math.ceil((W - 0.5) / breedte));
+    const rest = W - (n - 1) * breedte; // wat de laatste gang nog moet doen
+    // Stukken van de lijn y binnen het perceel (snijpunten met alle randen, paarsgewijs)
+    const snij = y => {
+      const xs = [];
+      ringen.forEach(r => { for (let j = 0; j < r.length - 1; j++) { const p = r[j], q = r[j + 1]; if ((p[1] - y) * (q[1] - y) < 0) xs.push(p[0] + (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1])); } });
+      xs.sort((a, b) => a - b);
+      const d = [];
+      for (let j = 0; j + 1 < xs.length; j += 2) if (xs[j + 1] - xs[j] > 0.5) d.push({ van: xs[j], tot: xs[j + 1] });
+      return d;
+    };
+    const half = breedte / 2, uit = [];
+    for (let i = 0; i < n; i++) {
+      const y = startY + richtingY * (i + 0.5) * breedte;
+      // Valt het spoor zelf buiten het perceel (smalle rest), dan de lengte meten langs de rand
+      let delen = snij(y);
+      if (!delen.length) delen = snij(startY + richtingY * (W - Math.min(0.5, W / 2)));
+      uit.push({
+        nr: i + 1,
+        heen: i % 2 === 0, // heen en weer: oneven gangen van A naar B
+        lengte: delen.reduce((t, d) => t + d.tot - d.van, 0),
+        lijnen: delen.map(d => [terug(d.van, y), terug(d.tot, y)]),
+        banen: delen.map(d => [terug(d.van, y - half), terug(d.tot, y - half), terug(d.tot, y + half), terug(d.van, y + half), terug(d.van, y - half)])
+      });
+    }
+    return {
+      breedte, gangen: n, perceelBreedte: W, perceelLengte: xmax - xmin, rest,
+      buitenKant: rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
+      abLengte: ab.m, a: terug(xmin, startY), b: terug(xmax, startY), sporen: uit,
+      totaalM: uit.reduce((t, s) => t + s.lengte, 0)
+    };
+  }
+
   const isLandschap = f => String((f.properties || {}).category || "").toLowerCase() === "landschapselement";
 
   // Vertaal een feature naar wat de app nodig heeft
@@ -280,5 +356,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, wisCache, aantalOpgeslagen, API };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, sporen, wisCache, aantalOpgeslagen, API };
 });

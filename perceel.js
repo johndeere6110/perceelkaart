@@ -1,4 +1,4 @@
-// perceel.js versie 9 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 10 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -60,7 +60,8 @@
     return polygonen(geometry).reduce((t, rings) =>
       t + rings.reduce((a, ring, i) => i === 0 ? a + ringM2(ring) : a - ringM2(ring), 0), 0);
   }
-  const oppervlakteHa = geometry => Math.round(oppervlakteM2(geometry) / 100) / 100;
+  // In ha op 3 decimalen (10 m²)
+  const oppervlakteHa = geometry => Math.round(oppervlakteM2(geometry) / 10) / 1000;
 
   // Ray casting; buitenring wel, gaten niet
   function inRing(ring, x, y) {

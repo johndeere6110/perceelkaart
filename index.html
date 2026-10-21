@@ -121,7 +121,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 12</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 13</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -176,7 +176,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const parse = v => { const n = parseFloat(String(v || "").replace(/\s/g, "").replace(",", ".")); return isFinite(n) ? n : null; };
   const mTxt = v => Math.round(v).toLocaleString("nl-NL") + " m";
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const haTxt = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
+  const haTxt = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false });
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -235,6 +235,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   let sel = store.get("kaartTestSelectie", []);
   if (!Array.isArray(sel)) sel = [];
   sel = sel.filter(q => q && q.geometry && typeof q.ha === "number");
+  // Oppervlakte opnieuw uit de grens (eerder bewaard op 2 decimalen)
+  sel.forEach(q => { try { q.ha = Perceel.oppervlakteHa(q.geometry); } catch (e) {} });
 
   // Bufferstroken per type waterloop (RVO): breedte bij hoofdregel, 1e en 2e herberekening (>4 % van het perceel)
   const TYPES = [

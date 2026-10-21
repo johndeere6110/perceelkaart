@@ -1,4 +1,4 @@
-// perceel.js versie 6 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 7 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -9,7 +9,9 @@
 //   Perceel.zoekWater(geometry) + Perceel.waterLangsZijden(geometry, water)   // randen langs BGT-water
 //   Perceel.sporen(geometry, breedte, { andereKant, buitenronde, clip })   // spuit-/strooisporen langs de langste zijde
 //     clip = polygon-clipping (optioneel): maakt de buitenronde exact, ook bij smalle armen en inhammen
-//   Perceel.verschuif(geometry, d)   // buitenrand d meter naar binnen (negatief: naar buiten)
+//   Perceel.verschuif(geometry, d)   // buitenrand d meter naar binnen (negatief: naar buiten), eenvoudig
+//   Perceel.samenvoegen(geometries, clip, naad)   // percelen tot één vorm, naden tot 2×naad m dicht; null als los
+//   opts.abPunt [lon, lat] bij sporen(): de AB-lijn langs de kant die het dichtst bij dat punt ligt
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
 // "offline" (geen verbinding en niks opgeslagen op deze plek), "server", "geen-perceel". De .message is Nederlands.
@@ -232,7 +234,8 @@
       try { return binnenGebiedEen(polyM, d, clip, pogingen[i], i); } catch (e) { if (i === pogingen.length - 1) throw e; }
     }
   }
-  function binnenGebiedEen(polyM, d, clip, tol, poging) {
+  // Stroken (en hoekcirkels) van d meter rond elke rand. alleHoeken: ook bij uitstekende hoeken (voor dikker maken).
+  function randVormen(polyM, d, tol, poging, alleHoeken) {
     const rand = [], sch = poging * 1e-3;
     // Hoekcirkels een fractie groter en gedraaid, zodat hun punten niet op de hoeken van de randstroken vallen
     const rc = d * (1 + 5e-4), hoek0 = 0.137 + poging * 0.29, e = 0.02;
@@ -247,9 +250,9 @@
         // Strook langs de rand, aan beide uiteinden een paar cm langer zodat buren overlappen
         const a2 = [a[0] - ux * e, a[1] - uy * e], b2 = [b[0] + ux * e, b[1] + uy * e];
         rand.push([[[a2[0] + nx, a2[1] + ny], [b2[0] + nx, b2[1] + ny], [b2[0] - nx, b2[1] - ny], [a2[0] - nx, a2[1] - ny], [a2[0] + nx, a2[1] + ny]]]);
-        // Cirkel alleen bij een inspringende hoek (daar zou anders een gat aan de binnenkant blijven); bij gaten overal
+        // Cirkel bij een inspringende hoek (anders blijft daar binnen een gat); bij gaten en bij uitzetten overal
         const v = r[(j - 1 + n) % n], kruis = (a[0] - v[0]) * (b[1] - a[1]) - (a[1] - v[1]) * (b[0] - a[0]);
-        if (ri > 0 || kruis * opp < 0) {
+        if (alleHoeken || ri > 0 || kruis * opp < 0) {
           const schijf = [];
           for (let k = 0; k < 16; k++) { const t = hoek0 + k / 16 * 2 * Math.PI; schijf.push([a[0] + rc * Math.cos(t), a[1] + rc * Math.sin(t)]); }
           schijf.push(schijf[0]);
@@ -257,7 +260,32 @@
         }
       }
     }));
-    return clip.difference(polyM, clip.union(...rand));
+    return rand;
+  }
+  function binnenGebiedEen(polyM, d, clip, tol, poging) {
+    return clip.difference(polyM, clip.union(...randVormen(polyM, d, tol, poging, false)));
+  }
+  const oppM = poly => poly.reduce((t, r, i) => { let a = 0; for (let k = 0; k < r.length - 1; k++) a += r[k][0] * r[k + 1][1] - r[k + 1][0] * r[k][1]; return t + (i ? -1 : 1) * Math.abs(a / 2); }, 0);
+  // Percelen samenvoegen tot één vorm: alles `naad` m dikker, samenvoegen, weer `naad` m dunner (naden tot 2×naad dicht).
+  // Geeft een Polygon, of null als ze niet tegen elkaar liggen.
+  function samenvoegen(geoms, clip, naad) {
+    naad = naad || 1;
+    const alle = geoms.flatMap(polygonen);
+    if (!alle.length || !clip) return null;
+    const lat0 = alle[0][0][0][1], lon0 = alle[0][0][0][0], f = lat0 * Math.PI / 180;
+    const ky = 111132.92 - 559.82 * Math.cos(2 * f) + 1.175 * Math.cos(4 * f), kx = 111412.84 * Math.cos(f) - 93.5 * Math.cos(3 * f);
+    const polyM = alle.map(rings => [rings[0].map(c => [(c[0] - lon0) * kx, (c[1] - lat0) * ky])]);
+    for (let poging = 0; poging < 4; poging++) {
+      try {
+        const dik = clip.union(...polyM, ...randVormen(polyM, naad, [0.1, 0.3, 0.5, 1][poging], poging, true));
+        if (dik.length !== 1) return null;
+        const dun = binnenGebied([[dik[0][0]]], naad, clip);
+        if (!dun.length) return null;
+        const grootste = dun.reduce((a, b) => oppM(b) > oppM(a) ? b : a);
+        return { type: "Polygon", coordinates: [grootste[0].map(p => [lon0 + p[0] / kx, lat0 + p[1] / ky])] };
+      } catch (e) { /* volgende poging */ }
+    }
+    return null;
   }
   const ringLengte = r => r.reduce((t, p, i) => i ? t + Math.hypot(p[0] - r[i - 1][0], p[1] - r[i - 1][1]) : 0, 0);
 
@@ -284,36 +312,62 @@
     const ky = 111132.92 - 559.82 * Math.cos(2 * f) + 1.175 * Math.cos(4 * f), kx = 111412.84 * Math.cos(f) - 93.5 * Math.cos(3 * f);
     const naarM = c => [(c[0] - lon0) * kx, (c[1] - lat0) * ky];
     const naarLL = p => [lon0 + p[0] / kx, lat0 + p[1] / ky];
-    // Langste rechte zijde van de buitenrand bepaalt de AB-richting
-    const buiten = zijden({ type: "Polygon", coordinates: [polys[0][0]] });
-    const gehad = new Set();
-    let ab = null;
-    buiten.forEach(z => {
-      if (gehad.has(z.key)) return;
-      const run = rechteZijde(buiten, z.key, 15); run.forEach(k => gehad.add(k));
-      const delen = buiten.filter(x => run.includes(x.key));
-      const m = delen.reduce((t, x) => t + x.m, 0);
-      if (!ab || m > ab.m) {
-        let dx = 0, dy = 0;
-        delen.forEach(x => { const a = naarM(x.a), b = naarM(x.b); dx += b[0] - a[0]; dy += b[1] - a[1]; });
-        ab = { m, dx, dy, delen };
-      }
+    // AB-kant: een echte rechte zijde, van hoek tot hoek (rand vereenvoudigd tot op 1 m).
+    // opts.abPunt [lon, lat]: de kant die het dichtst bij dat punt ligt; anders de langste.
+    const buitenM = vereenvoudig(polys[0][0].map(naarM), 1);
+    const zs = [];
+    for (let j = 0; j < buitenM.length - 1; j++) {
+      const a = buitenM[j], b = buitenM[j + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (l > 0.01) zs.push({ a, b, l, h: Math.atan2(b[1] - a[1], b[0] - a[0]) });
+    }
+    if (!zs.length) return null;
+    const N = zs.length;
+    let ki = 0;
+    if (opts.abPunt) {
+      const p = naarM(opts.abPunt); let bd = Infinity;
+      zs.forEach((z, j) => {
+        const dx = z.b[0] - z.a[0], dy = z.b[1] - z.a[1], t = Math.max(0, Math.min(1, ((p[0] - z.a[0]) * dx + (p[1] - z.a[1]) * dy) / (z.l * z.l)));
+        const d = Math.hypot(p[0] - z.a[0] - t * dx, p[1] - z.a[1] - t * dy);
+        if (d < bd) { bd = d; ki = j; }
+      });
+    } else zs.forEach((z, j) => { if (z.l > zs[ki].l) ki = j; });
+    // Beste rechte lijn door alle echte randpunten op dit stuk (binnen 0,75 m): ruis middelt uit, een knik ernaast telt niet mee
+    const z = zs[ki], u0 = [(z.b[0] - z.a[0]) / z.l, (z.b[1] - z.a[1]) / z.l];
+    const op = polys[0][0].map(naarM).filter(p => {
+      const dx = p[0] - z.a[0], dy = p[1] - z.a[1], t = dx * u0[0] + dy * u0[1];
+      return Math.abs(dx * u0[1] - dy * u0[0]) <= 0.75 && t >= -0.5 && t <= z.l + 0.5;
     });
-    if (!ab) return null;
-    const len = Math.hypot(ab.dx, ab.dy), ux = ab.dx / len, uy = ab.dy / len;
-    // Gedraaid stelsel: x langs AB, y loodrecht erop
-    const anker = naarM(ab.delen[0].a);
+    let ux = u0[0], uy = u0[1], cx = (z.a[0] + z.b[0]) / 2, cy0 = (z.a[1] + z.b[1]) / 2;
+    if (op.length >= 3) {
+      cx = op.reduce((t, p) => t + p[0], 0) / op.length; cy0 = op.reduce((t, p) => t + p[1], 0) / op.length;
+      let sxx = 0, sxy = 0, syy = 0;
+      op.forEach(p => { const dx = p[0] - cx, dy = p[1] - cy0; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; });
+      const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+      ux = Math.cos(th); uy = Math.sin(th);
+      if (ux * u0[0] + uy * u0[1] < 0) { ux = -ux; uy = -uy; }
+    }
+    // A en B: de uiteinden van dit stuk, op de gevonden lijn
+    const proj = p => (p[0] - cx) * ux + (p[1] - cy0) * uy;
+    const t0 = Math.min(proj(z.a), proj(z.b)), t1 = Math.max(proj(z.a), proj(z.b));
+    const pA = [cx + ux * t0, cy0 + uy * t0];
+    const len = t1 - t0;
+    const ab = { m: len };
+    // Gedraaid stelsel: x langs de AB-kant, y loodrecht erop; de AB-kant ligt op y = 0
+    const anker = pA;
     const rot = p => [(p[0] - anker[0]) * ux + (p[1] - anker[1]) * uy, -(p[0] - anker[0]) * uy + (p[1] - anker[1]) * ux];
     const terug = (x, y) => naarLL([anker[0] + x * ux - y * uy, anker[1] + x * uy + y * ux]);
     const polyM = polys.map(rings => rings.map(r => r.map(c => rot(naarM(c)))));
     const ringen = polyM.flatMap(rings => rings);
     let ymin = Infinity, ymax = -Infinity, xmin = Infinity, xmax = -Infinity;
     ringen[0].forEach(p => { ymin = Math.min(ymin, p[1]); ymax = Math.max(ymax, p[1]); xmin = Math.min(xmin, p[0]); xmax = Math.max(xmax, p[0]); });
-    // Het perceel ligt aan één kant van de AB-zijde: vanaf die zijde naar binnen tellen
-    let richtingY = Math.abs(ymin) <= Math.abs(ymax) ? 1 : -1;
-    let startY = richtingY === 1 ? ymin : ymax;
+    // Aan welke kant van de AB-kant ligt het perceel? (zwaartepunt)
+    let cy = 0, ca = 0;
+    for (let k = 0; k < ringen[0].length - 1; k++) { const p = ringen[0][k], q = ringen[0][k + 1], c = p[0] * q[1] - q[0] * p[1]; ca += c; cy += (p[1] + q[1]) * c; }
+    // Gangen tellen vanaf de AB-kant zelf, zodat ze op beide uiteinden even ver van de kant liggen
+    let richtingY = cy / ca >= 0 ? 1 : -1;
+    const W = richtingY === 1 ? ymax : -ymin;
+    let startY = 0;
     if (opts.andereKant) { startY = richtingY === 1 ? ymax : ymin; richtingY = -richtingY; }
-    const W = ymax - ymin;
     // Buitenronde: eerst een baan langs de hele rand; de gangen doen alleen het midden,
     // en de spuit gaat uit bij het bandenspoor van de buitenronde (halve breedte van de rand)
     const ronde = opts.buitenronde ? (() => {
@@ -382,7 +436,7 @@
     return {
       breedte, gangen: uit.length, perceelBreedte: W, perceelLengte: xmax - xmin, rest, ronde: rondeUit,
       buitenKant: uit.length && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
-      abLengte: ab.m, a: terug(xmin, startY), b: terug(xmax, startY), sporen: uit,
+      abLengte: ab.m, a: terug(0, 0), b: terug(len, 0), sporen: uit,
       // Koers van de AB-lijn in graden t.o.v. het ware noorden, met de klok mee (zoals op een GPS-terminal)
       // (uit de richting in meters oost/noord op de WGS84-ellipsoïde, zoals een GPS-terminal rekent)
       koers: (Math.atan2(ux, uy) * 180 / Math.PI + 360) % 360,
@@ -502,5 +556,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, sporen, verschuif, wisCache, aantalOpgeslagen, API };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, sporen, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API };
 });

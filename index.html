@@ -120,7 +120,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 8</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 9</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -147,6 +147,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       <input id="spuitB" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="27">
       <button type="button" class="btn" id="bSpuit" aria-pressed="false">Sporen</button>
       <button type="button" class="btn ronde" id="bRonde" aria-pressed="true">Buitenronde eerst: aan</button>
+      <button type="button" class="btn ronde" id="bAB" aria-pressed="false">AB-kant kiezen</button>
     </div>
     <div id="kavelBox"></div>
     <ul class="log" id="lijst"></ul>
@@ -278,18 +279,15 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (kavelCache.has(id)) return kavelCache.get(id);
     let vorm = null;
     try {
-      const gs = kv.leden.map(k => sel.find(q => q.key === k)).filter(Boolean).map(q => Perceel.verschuif(q.geometry, -1));
-      if (window.polygonClipping && gs.length >= 2 && gs.every(Boolean)) {
-        const u = polygonClipping.union(...gs.map(g => g.coordinates));
-        if (u.length === 1) vorm = Perceel.verschuif({ type: "Polygon", coordinates: [u[0][0]] }, 1);
-      }
+      const gs = kv.leden.map(k => sel.find(q => q.key === k)).filter(Boolean).map(q => q.geometry);
+      if (window.polygonClipping && gs.length >= 2) vorm = Perceel.samenvoegen(gs, polygonClipping, 1);
     } catch (e) { vorm = null; }
     kavelCache.set(id, vorm);
     return vorm;
   }
   // Spuituitleg voor een perceel of kavel; tekent ook de sporen
   function spuitBlok(geom, obj, opslaan, sb) {
-    const s = Perceel.sporen(geom, sb, { andereKant: !!obj.spuitAnders, buitenronde, clip: window.polygonClipping });
+    const s = Perceel.sporen(geom, sb, { andereKant: !!obj.spuitAnders, buitenronde, clip: window.polygonClipping, abPunt: obj.abPunt || null });
     if (!s) return null;
     tekenSporen(obj, s);
     const d = document.createElement("div"); d.className = "sp";
@@ -309,7 +307,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const gr = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + "°";
     const xy = c => c[1].toFixed(8) + ", " + c[0].toFixed(8);
     const r3 = document.createElement("div"); r3.className = "ab";
-    r3.innerHTML = "<strong>AB-lijn:</strong> koers <strong>" + esc(gr(s.koers)) + "</strong> (van A naar B), terug " + esc(gr((s.koers + 180) % 360)) + "." +
+    r3.innerHTML = "<strong>AB-lijn</strong> (" + (obj.abPunt ? "zelf gekozen kant" : "langste rechte kant") + "): koers <strong>" + esc(gr(s.koers)) + "</strong> (van A naar B), terug " + esc(gr((s.koers + 180) % 360)) + "." +
       "<br>A: " + esc(xy(s.a)) + "<br>B: " + esc(xy(s.b));
     d.append(r1, r2, r3);
     if (s.ronde && !s.ronde.exact) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "De buitenronde kon bij deze vorm niet precies berekend worden. Kijk de tekening na."; d.appendChild(x); }
@@ -318,6 +316,12 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       kb.textContent = obj.spuitAnders ? "Begin weer aan kant A" : "Begin aan andere kant";
       kb.addEventListener("click", () => { obj.spuitAnders = !obj.spuitAnders; opslaan(); teken(); });
       d.appendChild(kb);
+    }
+    if (obj.abPunt) {
+      const ak = document.createElement("button"); ak.type = "button"; ak.className = "btn klein"; ak.style.marginLeft = "6px";
+      ak.textContent = "AB weer automatisch";
+      ak.addEventListener("click", () => { delete obj.abPunt; opslaan(); teken(); });
+      d.appendChild(ak);
     }
     return d;
   }
@@ -354,6 +358,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("bSpuit").setAttribute("aria-pressed", spuitAan);
     $("bSpuit").textContent = spuitAan ? "Sporen uit" : "Sporen";
     $("bRonde").hidden = !spuitAan;
+    $("bAB").hidden = !spuitAan;
     $("bRonde").setAttribute("aria-pressed", buitenronde);
     $("bRonde").textContent = "Buitenronde eerst: " + (buitenronde ? "aan" : "uit");
     // Kavels opschonen: weggehaalde percelen eruit, kavel met minder dan 2 percelen vervalt
@@ -452,7 +457,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (!sel.length && oeverModus) setOever(false);
     map.invalidateSize();
   }
-  $("bWis").addEventListener("click", e => { if (armed(e.currentTarget, "Tik nog eens om te wissen")) { sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); teken(); say("Selectie gewist. Tik op een perceel om te beginnen."); } });
+  $("bWis").addEventListener("click", e => { if (armed(e.currentTarget, "Tik nog eens om te wissen")) { sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken(); say("Selectie gewist. Tik op een perceel om te beginnen."); } });
 
   async function zoek(lat, lon) {
     if (map.getZoom() < 14) { map.setView([lat, lon], 16); say("Ingezoomd. Tik nog eens op het perceel."); return; }
@@ -508,7 +513,37 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     }
     bewaar(); teken();
   }
+  // AB-kant kiezen: tik bij de kant van een perceel of kavel waar de AB-lijn langs moet
+  let abModus = false;
+  function setAB(aan) {
+    if (aan && oeverModus) setOever(false);
+    if (aan && koppelModus) setKoppel(false);
+    abModus = aan;
+    $("bAB").setAttribute("aria-pressed", aan);
+    $("bAB").textContent = aan ? "Tik op de kant voor de AB-lijn" : "AB-kant kiezen";
+    $("map").classList.toggle("oever", aan);
+    if (aan) say("Tik op de kant van het perceel of de kavel waar de AB-lijn langs moet lopen.");
+  }
+  $("bAB").addEventListener("click", () => setAB(!abModus));
+  function abTik(ll) {
+    const p = map.latLngToContainerPoint(ll);
+    // Kandidaten: kavels en losse percelen; de dichtstbijzijnde rand wint
+    const objs = kavels.map(kv => ({ obj: kv, geom: kavelVorm(kv), opslaan: bewaarK, naam: kv.naam }))
+      .concat(sel.filter(q => !kavelVan(q)).map(q => ({ obj: q, geom: q.geometry, opslaan: bewaar, naam: "perceel " + (sel.indexOf(q) + 1) })))
+      .filter(o => o.geom);
+    let best = null;
+    objs.forEach(o => Perceel.zijden(o.geom).forEach(z => {
+      const a = map.latLngToContainerPoint([z.a[1], z.a[0]]), b = map.latLngToContainerPoint([z.b[1], z.b[0]]);
+      const d = L.LineUtil.pointToSegmentDistance(p, a, b);
+      if (!best || d < best.d) best = { d, o };
+    }));
+    if (!best || best.d > 30) { say("Tik dichter bij de rand van een perceel of kavel.", true); return; }
+    best.o.obj.abPunt = [ll.lng, ll.lat]; best.o.opslaan();
+    setAB(false); teken();
+    say("AB-lijn ligt nu langs de gekozen kant van " + best.o.naam + ".");
+  }
   function setOever(aan) {
+    if (aan && abModus) setAB(false);
     if (aan && koppelModus) { koppelModus = false; koppelSet.clear(); $("bKoppel").setAttribute("aria-pressed", false); $("bKoppel").textContent = "Percelen koppelen"; }
     oeverModus = aan;
     $("bOever").setAttribute("aria-pressed", aan);
@@ -521,6 +556,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // Percelen koppelen tot een kavel
   function setKoppel(aan) {
     if (aan && oeverModus) setOever(false);
+    if (aan && abModus) setAB(false);
     koppelModus = aan; koppelSet.clear();
     $("bKoppel").setAttribute("aria-pressed", aan);
     $("bKoppel").textContent = aan ? "Klaar met koppelen" : "Percelen koppelen";
@@ -587,7 +623,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     });
   }
   renderTypes();
-  map.on("click", ev => koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
+  map.on("click", ev => abModus ? abTik(ev.latlng) : koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
   teken();
   // Paneel eronder groeit/krimpt: kaart laten meeschalen
   if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe($("map"));

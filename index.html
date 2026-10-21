@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Perceelkaart</title>
+<meta name="theme-color" content="#2F5A2B">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<style>
+/* Lettertypen staan in de app zelf (Barlow, SIL OFL; zie fonts/OFL.txt): geen verzoeken naar Google */
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/barlow-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/barlow-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/barlow-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/barlow-semi-condensed-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/barlow-semi-condensed-latin-700-normal.woff2) format("woff2"); }
+/* Zelfde kleuren en stijl als de Zaaihulp */
+:root {
+  --bg: #E9EDE6; --surface: #F8FAF6; --ink: #1C2318; --muted: #5B6653; --line: #C9D1C2;
+  --accent: #2F5A2B; --accent-ink: #F3F7EF; --warn: #A3401F; --hl: #E8B400;
+  color-scheme: light; box-sizing: border-box;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141912; --surface: #1D241A; --ink: #E6ECE0; --muted: #9BA892; --line: #34402F;
+    --accent: #8DBA6A; --accent-ink: #12180F; --warn: #F08A5F; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141912; --surface: #1D241A; --ink: #E6ECE0; --muted: #9BA892; --line: #34402F;
+  --accent: #8DBA6A; --accent-ink: #12180F; --warn: #F08A5F; color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: inherit; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); display: flex; flex-direction: column;
+  font-family: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px; line-height: 1.4; -webkit-tap-highlight-color: transparent;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.num { font-family: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; font-weight: 700; font-variant-numeric: tabular-nums; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 16px; }
+header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; }
+header .tag { font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+#map { flex: 1; min-height: 45vh; background: var(--line); }
+.leaflet-container { font: inherit; }
+.panel { background: var(--bg); padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px)); max-width: 640px; width: 100%; margin: 0 auto; }
+.row { display: flex; gap: 10px; }
+.btn { flex: 1; min-height: 52px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 17px "Barlow", system-ui, sans-serif; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:disabled { opacity: .45; }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.hint { font-size: 15px; color: var(--muted); margin-top: 8px; min-height: 1.4em; }
+.hint.warn { color: var(--warn); font-weight: 600; }
+.advice { margin-top: 10px; background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
+.advice .adv-main { font-size: 36px; line-height: 1.1; }
+.advice .meta { color: var(--muted); }
+details { margin-top: 10px; font-size: 14px; color: var(--muted); }
+details pre { white-space: pre-wrap; word-break: break-all; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; color: var(--ink); font: 12px ui-monospace, Menlo, Consolas, monospace; max-height: 220px; overflow: auto; }
+.tot { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.tot .adv-main { font-size: 40px; white-space: nowrap; }
+.log { list-style: none; margin: 8px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.log li { display: grid; grid-template-columns: 30px 1fr auto 44px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.log .nr { font-size: 18px; color: var(--muted); text-align: center; }
+.log .go { border: 0; background: none; color: inherit; text-align: left; padding: 0; font: inherit; min-width: 0; }
+.log .name { font-weight: 500; overflow-wrap: anywhere; }
+.log .meta { font-size: 14px; color: var(--muted); }
+.log .w { font-size: 21px; }
+.del { border: 0; background: none; color: var(--muted); font-size: 24px; width: 44px; height: 44px; border-radius: 8px; }
+.armed { color: var(--warn) !important; font-weight: 700 !important; }
+.leaflet-tooltip.pnr { background: var(--hl); border: 0; color: #1C2318; font: 700 15px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; padding: 1px 7px; border-radius: 999px; box-shadow: none; }
+.leaflet-tooltip.pnr::before { display: none; }
+.lbl2 { margin-top: 10px; color: var(--muted); font-weight: 500; }
+.seg4 { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); margin-top: 6px; }
+.seg4 button { border: 0; background: transparent; color: var(--ink); padding: 6px 2px 8px; min-height: 64px; font: 700 20px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.seg4 button small { font: 500 12px "Barlow", system-ui, sans-serif; color: var(--muted); line-height: 1.1; text-align: center; }
+.seg4 button i { display: block; width: 70%; height: 0; border-top: 5px solid; margin-top: 3px; }
+.seg4 button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.seg4 button[aria-pressed="true"] small { color: var(--accent-ink); }
+.warn4 { color: var(--warn); font-weight: 600; }
+.af { color: var(--ink); font-weight: 600; margin-top: 2px; }
+.log .detail { grid-column: 2 / -1; font-size: 14px; color: var(--muted); margin-top: -2px; }
+.btab { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.btab th { text-align: left; font-weight: 500; font-size: 13px; color: var(--muted); padding: 0 6px 2px 0; }
+.btab td { padding: 3px 6px 3px 0; color: var(--muted); }
+.btab td.r, .btab th.r { text-align: right; }
+.btab tr.telt td { color: var(--ink); font-weight: 600; }
+.btab tr.telt td:last-child { color: var(--accent); }
+.toggle { width: 100%; margin-top: 10px; flex: none; }
+#map.oever { cursor: crosshair; }
+.me { width: 16px; height: 16px; border-radius: 50%; background: #3a6fd1; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Perceelkaart</h1><span class="tag">versie 1</span>
+</header>
+<div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
+<div class="panel">
+  <div class="row">
+    <button type="button" class="btn" id="bLaag" aria-pressed="false">Luchtfoto</button>
+    <button type="button" class="btn" id="bMij">Mijn locatie</button>
+    <button type="button" class="btn" id="bNL">Nederland</button>
+  </div>
+  <div class="hint" id="hint">Tik op een perceel om het toe te voegen. Nog eens tikken haalt het weg.</div>
+  <div class="advice" id="info" aria-live="polite" hidden>
+    <div class="tot"><span id="totLbl"></span><span class="adv-main num" id="totHa"></span></div>
+    <div class="meta" id="totSub"></div>
+    <div class="row" style="margin-top:10px">
+      <button type="button" class="btn" id="bWater">Water zoeken</button>
+      <button type="button" class="btn" id="bOever" aria-pressed="false">Oevers aanwijzen</button>
+    </div>
+    <div id="typeBox" hidden>
+      <div class="lbl2">Type waterloop, kies vóór het tikken</div>
+      <div class="seg4" role="group" aria-label="Type waterloop" id="typeSeg"></div>
+    </div>
+    <ul class="log" id="lijst"></ul>
+    <div class="row" style="margin-top:10px"><button type="button" class="btn" id="bWis">Alles wissen</button></div>
+  </div>
+  <details>
+    <summary>Ruwe data (voor het testen)</summary>
+    <pre id="ruw">Nog niks opgehaald.</pre>
+  </details>
+</div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="perceel.js"></script>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const hint = $("hint"), info = $("info"), ruw = $("ruw");
+  const say = (t, warn) => { hint.textContent = t; hint.className = "hint" + (warn ? " warn" : ""); };
+  const parse = v => { const n = parseFloat(String(v || "").replace(/\s/g, "").replace(",", ".")); return isFinite(n) ? n : null; };
+  const mTxt = v => Math.round(v).toLocaleString("nl-NL") + " m";
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const haTxt = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  if (!window.L) { say("Kaart kon niet laden. Heb je internet?", true); return; }
+  if (!window.Perceel) { say("perceel.js kon niet laden.", true); return; }
+
+  // Laatste kaartbeeld onthouden; eerste keer heel Nederland
+  // PDOK-kaarten dekken alleen Nederland: kaart daarbinnen houden, anders zie je niks
+  const NL = L.latLngBounds([50.6, 3.1], [53.7, 7.4]);
+  const inNL = (lat, lon) => NL.contains([lat, lon]);
+  let view = store.get("kaartTestView", null);
+  if (!view || !inNL(view.lat, view.lon) || !(view.z >= 7)) view = { lat: 52.15, lon: 5.4, z: 8 };
+  const map = L.map("map", { zoomControl: true, attributionControl: true, minZoom: 7, maxBounds: NL.pad(0.05), maxBoundsViscosity: 1 })
+    .setView([view.lat, view.lon], view.z);
+  store.set("kaartTestView", view);
+  $("bNL").addEventListener("click", () => map.fitBounds(NL));
+  map.on("moveend", () => { const c = map.getCenter(); store.set("kaartTestView", { lat: c.lat, lon: c.lng, z: map.getZoom() }); });
+
+  // PDOK-achtergronden (Web Mercator, geen key)
+  const attr = 'Kaart: <a href="https://www.pdok.nl">PDOK</a>, Kadaster';
+  const brt = L.tileLayer("https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png", { minZoom: 7, maxZoom: 19, attribution: attr });
+  const foto = L.tileLayer("https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg", { minZoom: 7, maxZoom: 19, attribution: "Luchtfoto: " + attr });
+  let isFoto = store.get("kaartTestFoto", false);
+  const setLaag = () => {
+    (isFoto ? brt : foto).remove(); (isFoto ? foto : brt).addTo(map);
+    $("bLaag").setAttribute("aria-pressed", isFoto); store.set("kaartTestFoto", isFoto);
+  };
+  $("bLaag").addEventListener("click", () => { isFoto = !isFoto; setLaag(); });
+  setLaag();
+
+  // Bevestigen zonder pop-up, zoals in de app: eerste tik vraagt "zeker?", tweede tik voert uit
+  function armed(btn, label) {
+    if (btn.dataset.armed === "1") { clearTimeout(btn._t); btn.dataset.armed = ""; btn.classList.remove("armed"); btn.textContent = btn._old; return true; }
+    btn.dataset.armed = "1"; btn._old = btn.textContent; btn.textContent = label; btn.classList.add("armed");
+    clearTimeout(btn._t); btn._t = setTimeout(() => { btn.dataset.armed = ""; btn.classList.remove("armed"); btn.textContent = btn._old; }, 3000);
+    return false;
+  }
+
+  let punt = null, mij = null, bezig = 0;
+  const stijl = () => ({ color: getComputedStyle(document.documentElement).getPropertyValue("--hl").trim() || "#E8B400", weight: 3, fillOpacity: .2 });
+  const sleutel = p => p.id != null ? "id:" + p.id : "g:" + JSON.stringify(p.geometry.coordinates).slice(0, 120);
+
+  // Selectie: meerdere percelen bij elkaar opgeteld, wordt onthouden
+  let sel = store.get("kaartTestSelectie", []);
+  if (!Array.isArray(sel)) sel = [];
+  sel = sel.filter(q => q && q.geometry && typeof q.ha === "number");
+
+  // Bufferstroken per type waterloop (RVO): breedte bij hoofdregel, 1e en 2e herberekening (>4 % van het perceel)
+  const TYPES = [
+    // KRW (5/3/1 of 5/3/3) en ecologisch kwetsbaar (5/5/5) komen hier niet voor, dus weggelaten
+    { id: "nat", st: [3, 1, 0.5], t: "nat of kort droog", c: "#2f7fd8", w: 6 },
+    { id: "lang", st: [1, 1, 1], t: "lang droog", c: "#5fb0f0", w: 5, d: "10 6" },
+    { id: "droog", st: [0, 0, 0], t: "droge sloot", c: "#8a8f86", w: 4, d: "3 7" }
+  ];
+  const typeVan = id => TYPES.find(t => t.id === id) || TYPES[3];
+  // Oude opslag bewaarde een breedte in plaats van een type
+  const OUD = { 3: "nat", 1: "lang", 0: "droog" };
+  const naarType = v => typeof v === "string" && TYPES.some(t => t.id === v) ? v : (OUD[v] || "nat");
+  const MAX_PCT = 4;
+  let huidigType = naarType(store.get("kaartTestType", "nat"));
+  const oudB = parse(store.get("kaartTestBuffer", "")) || 3;
+  sel.forEach(q => {
+    if (Array.isArray(q.oever)) q.oever = Object.fromEntries(q.oever.map(k => [k, oudB]));
+    if (!q.oever || typeof q.oever !== "object") q.oever = {};
+    Object.keys(q.oever).forEach(k => q.oever[k] = naarType(q.oever[k]));
+  });
+  // Per perceel: lengte per type, en de stap waarop het onder 4 % komt (of de laatste stap)
+  function buffer(q) {
+    const per = {};
+    Perceel.zijden(q.geometry).forEach(z => { const id = q.oever[z.key]; if (id) per[id] = (per[id] || 0) + z.m; });
+    const opp = i => Object.entries(per).reduce((a, [id, m]) => a + m * typeVan(id).st[i] / 10000, 0);
+    const lengte = Object.values(per).reduce((a, m) => a + m, 0), max = q.ha * MAX_PCT / 100;
+    const stappen = [{ i: 0, af: opp(0) }];
+    while (stappen.length < 3 && stappen[stappen.length - 1].af > max) stappen.push({ i: stappen.length, af: opp(stappen.length) });
+    const stap = stappen.length - 1;
+    return { per, lengte, hoofd: stappen[0].af, af: Math.min(stappen[stap].af, q.ha), stap, stappen, max };
+  }
+  const nlM = v => String(v).replace(".", ",") + " m";
+  let oeverModus = false;
+  const laag = L.layerGroup().addTo(map);
+  const bewaar = () => store.set("kaartTestSelectie", sel);
+
+  function teken() {
+    laag.clearLayers();
+    sel.forEach((q, i) => {
+      const g = L.geoJSON(q.geometry, { style: stijl, interactive: false });
+      g.bindTooltip(String(i + 1), { permanent: true, direction: "center", className: "pnr" });
+      laag.addLayer(g);
+      Perceel.zijden(q.geometry).filter(z => q.oever[z.key] != null).forEach(z => {
+        const t = typeVan(q.oever[z.key]);
+        laag.addLayer(L.polyline([[z.a[1], z.a[0]], [z.b[1], z.b[0]]], { color: t.c, weight: t.w, opacity: .95, dashArray: t.d || null, lineCap: "butt", interactive: false }));
+      });
+    });
+    const ul = $("lijst"); ul.innerHTML = "";
+    sel.forEach((q, i) => {
+      const li = document.createElement("li");
+      const nr = document.createElement("div"); nr.className = "nr num"; nr.textContent = i + 1;
+      const go = document.createElement("button"); go.type = "button"; go.className = "go";
+      go.setAttribute("aria-label", "Toon perceel " + (i + 1) + " op de kaart");
+      const nm = document.createElement("div"); nm.className = "name"; nm.textContent = q.gewas || "Onbekend gewas";
+      const mt = document.createElement("div"); mt.className = "meta";
+      const bf = buffer(q);
+      mt.textContent = [q.jaar ? "BRP " + q.jaar : "", q.bron === "opgeslagen" ? "uit opgeslagen percelen" : ""].filter(Boolean).join(", ");
+      // Bufferstrook-uitleg onder de regel, over de volle breedte
+      let detail = null;
+      if (bf.lengte) {
+        detail = document.createElement("div"); detail.className = "detail";
+        const lijst = Object.entries(bf.per).sort((x, y) => typeVan(y[0]).st[0] - typeVan(x[0]).st[0]);
+        const kop = document.createElement("div");
+        kop.textContent = lijst.map(([id, m]) => mTxt(m) + " oever, " + typeVan(id).t).join(" · ");
+        detail.appendChild(kop);
+        const pct = v => (v / q.ha * 100).toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
+        // Eén type: breedte per stap tonen; gemengd: stapnaam
+        const nat = lijst.filter(([id]) => typeVan(id).st[0] > 0);
+        const label = x => nat.length === 1 ? nlM(typeVan(nat[0][0]).st[x.i]) : ["Hoofdregel", "1e herber.", "2e herber."][x.i];
+        const tb = document.createElement("table"); tb.className = "btab";
+        tb.innerHTML = "<tr><th>" + (nat.length === 1 ? "Breedte" : "Stap") + '</th><th class="r">Strook</th><th class="r">Deel perceel</th><th></th></tr>';
+        bf.stappen.forEach(x => {
+          const tr = document.createElement("tr"), telt = x.i === bf.stap;
+          if (telt) tr.className = "telt";
+          [label(x), haTxt(x.af) + " ha", pct(x.af), telt ? "✓ telt" : "te veel"].forEach((t, k) => {
+            const td = document.createElement("td"); td.textContent = t; if (k === 1 || k === 2) td.className = "r"; tr.appendChild(td);
+          });
+          tb.appendChild(tr);
+        });
+        detail.appendChild(tb);
+        if (bf.stap) { const n = document.createElement("div"); n.textContent = "Meer dan 4 % (" + haTxt(bf.max) + " ha) mag niet, dan wordt de strook smaller."; detail.appendChild(n); }
+        if (bf.stap === 2 && bf.af > bf.max) { const n = document.createElement("div"); n.textContent = "Nog boven 4 %, maar smaller mag niet."; detail.appendChild(n); }
+      }
+      go.append(nm, mt);
+      go.addEventListener("click", () => map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
+      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha) + " ha";
+      const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "×";
+      del.setAttribute("aria-label", "Haal perceel " + (i + 1) + " weg");
+      del.addEventListener("click", () => { sel.splice(i, 1); bewaar(); teken(); });
+      li.append(nr, go, w, del); if (detail) li.appendChild(detail); ul.appendChild(li);
+    });
+    const bfs = sel.map(buffer), tot = sel.reduce((a, q) => a + q.ha, 0);
+    const af = bfs.reduce((a, x) => a + x.af, 0), om = bfs.reduce((a, x) => a + x.lengte, 0);
+    $("totLbl").textContent = (sel.length === 1 ? "1 perceel" : sel.length + " percelen samen") + (af ? ", zonder bufferstrook" : "");
+    $("totHa").textContent = haTxt(tot - af) + " ha";
+    $("totSub").textContent = af ? "Bruto " + haTxt(tot) + " ha − bufferstroken " + haTxt(af) + " ha (" + mTxt(om) + " oever)"
+      : om ? mTxt(om) + " oever, alleen droge sloten: geen bufferstrook." : "";
+    $("info").hidden = !sel.length;
+    if (!sel.length && oeverModus) setOever(false);
+    map.invalidateSize();
+  }
+  $("bWis").addEventListener("click", e => { if (armed(e.currentTarget, "Tik nog eens om te wissen")) { sel = []; bewaar(); setOever(false); teken(); say("Selectie gewist. Tik op een perceel om te beginnen."); } });
+
+  async function zoek(lat, lon) {
+    if (map.getZoom() < 14) { map.setView([lat, lon], 16); say("Ingezoomd. Tik nog eens op het perceel."); return; }
+    // Tik in een perceel dat al gekozen is: weghalen, zonder internet
+    const al = sel.findIndex(q => Perceel.bevatPunt(q.geometry, lon, lat));
+    if (al >= 0) {
+      const weg = sel.splice(al, 1)[0]; bewaar(); teken();
+      say((weg.gewas || "Perceel") + " (" + haTxt(weg.ha) + " ha) weggehaald.");
+      return;
+    }
+    const nr = ++bezig;
+    if (punt) punt.remove();
+    punt = L.circleMarker([lat, lon], { radius: 5, color: "#fff", weight: 2, fillColor: "#1C2318", fillOpacity: 1 }).addTo(map);
+    say("Perceel ophalen…");
+    try {
+      const r = await Perceel.zoekOpPunt(lon, lat);
+      if (nr !== bezig) return; // er is intussen ergens anders getikt
+      const p = r.perceel, key = sleutel(p);
+      if (punt) { punt.remove(); punt = null; }
+      if (!sel.some(q => q.key === key)) {
+        sel.push({ key, gewas: p.gewas, jaar: p.jaar, ha: p.ha, bron: p.bron, geometry: p.geometry, oever: {} });
+        bewaar(); teken();
+      }
+      say((p.gewas || "Perceel") + " (" + haTxt(p.ha) + " ha) toegevoegd." + (p.bron === "opgeslagen" ? " Geen verbinding: uit opgeslagen percelen." : ""), p.bron === "opgeslagen");
+      ruw.textContent = JSON.stringify({ punt: [+lon.toFixed(6), +lat.toFixed(6)], bron: p.bron, id: p.id, properties: p.eigenschappen,
+        geometrie: p.geometry.type + ", " + (p.geometry.type === "Polygon" ? p.geometry.coordinates[0].length : "?") + " punten",
+        opgeslagen: Perceel.aantalOpgeslagen() + (Perceel.aantalOpgeslagen() === 1 ? " perceel" : " percelen") }, null, 2);
+    } catch (e) {
+      if (nr !== bezig) return;
+      say(e && e.code === "geen-perceel" ? "Hier ligt geen landbouwperceel in de BRP. Tik binnen een perceel." : (e && e.message) || "Ophalen lukte niet.", true);
+      ruw.textContent = "Fout: " + (e && e.code ? e.code + " – " : "") + (e && e.message);
+    }
+  }
+  // Oevers aanwijzen: tik bij de rand, het hele rechte stuk gaat aan of uit
+  function oeverTik(ll) {
+    const p = map.latLngToContainerPoint(ll);
+    let best = null;
+    sel.forEach(q => Perceel.zijden(q.geometry).forEach(z => {
+      const a = map.latLngToContainerPoint([z.a[1], z.a[0]]), b = map.latLngToContainerPoint([z.b[1], z.b[0]]);
+      const d = L.LineUtil.pointToSegmentDistance(p, a, b);
+      if (!best || d < best.d) best = { d, q, z };
+    }));
+    if (!best || best.d > 24) { say("Tik op de rand van een gekozen perceel, aan de kant van het water.", true); return; }
+    const { q, z } = best, alle = Perceel.zijden(q.geometry), run = Perceel.rechteZijde(alle, z.key);
+    const lengte = alle.filter(x => run.includes(x.key)).reduce((a, x) => a + x.m, 0);
+    const nr = sel.indexOf(q) + 1;
+    // Zelfde type nog eens: weghalen. Ander type: omzetten.
+    const was = q.oever[z.key];
+    if (was === huidigType) { run.forEach(k => delete q.oever[k]); say("Oever van " + mTxt(lengte) + " weggehaald bij perceel " + nr + "."); }
+    else {
+      run.forEach(k => q.oever[k] = huidigType);
+      say("Oever van " + mTxt(lengte) + (was != null ? " omgezet naar " : " toegevoegd: ") + typeVan(huidigType).t + " (" + nlM(typeVan(huidigType).st[0]) + "), perceel " + nr + ". Bochtige sloot? Tik op het volgende stuk.");
+    }
+    bewaar(); teken();
+  }
+  function setOever(aan) {
+    oeverModus = aan;
+    $("bOever").setAttribute("aria-pressed", aan);
+    $("bOever").textContent = aan ? "Klaar met oevers" : "Oevers aanwijzen";
+    $("map").classList.toggle("oever", aan);
+    $("typeBox").hidden = !aan;
+    say(aan ? "Tik op de randen langs het water. Nog eens tikken haalt een oever weg." : "Tik op een perceel om het toe te voegen. Nog eens tikken haalt het weg.");
+  }
+  $("bOever").addEventListener("click", () => setOever(!oeverModus));
+  // Water zoeken: randen langs BGT-water automatisch markeren; zelf aangewezen randen blijven staan
+  $("bWater").addEventListener("click", async e => {
+    const btn = e.currentTarget, old = btn.textContent;
+    if (btn.disabled || !sel.length) return;
+    btn.disabled = true; btn.textContent = "Water zoeken…";
+    const regels = [], ruwData = [];
+    let fout = null;
+    for (const [i, q] of sel.entries()) {
+      try {
+        const water = await Perceel.zoekWater(q.geometry);
+        const hits = Perceel.waterLangsZijden(q.geometry, water);
+        const alle = Perceel.zijden(q.geometry);
+        let nat = 0, droog = 0;
+        Object.entries(hits).forEach(([k, h]) => {
+          if (q.oever[k] != null) return;
+          q.oever[k] = h.droog ? "droog" : "nat";
+          const m = alle.find(z => z.key === k).m; if (h.droog) droog += m; else nat += m;
+        });
+        regels.push("Perceel " + (i + 1) + ": " + (nat || droog ? [nat ? mTxt(nat) + " water" : "", droog ? mTxt(droog) + " greppel/droge sloot" : ""].filter(Boolean).join(", ") : "geen (nieuw) water langs de rand"));
+        ruwData.push({ perceel: i + 1, waterdelen: water.length, voorbeeld: water.slice(0, 3).map(w => w.properties) });
+      } catch (er) { fout = er; regels.push("Perceel " + (i + 1) + ": " + er.message); }
+    }
+    bewaar(); teken();
+    btn.disabled = false; btn.textContent = old;
+    say(regels.join(" · ") + (fout ? "" : ". Water staat op 'nat of kort droog' (3 m): zet lang droogvallend en droge sloten zelf om via Oevers aanwijzen."), !!fout);
+    ruw.textContent = JSON.stringify(ruwData, null, 2);
+  });
+  // Keuze type waterloop
+  function renderTypes() {
+    const box = $("typeSeg"); box.innerHTML = "";
+    TYPES.forEach(t => {
+      const bt = document.createElement("button"); bt.type = "button"; bt.setAttribute("aria-pressed", t.id === huidigType);
+      bt.innerHTML = nlM(t.st[0]) + "<small>" + esc(t.t) + "</small>";
+      const streep = document.createElement("i"); streep.style.borderTopColor = t.c; if (t.d) streep.style.borderTopStyle = "dashed";
+      bt.appendChild(streep);
+      bt.addEventListener("click", () => { huidigType = t.id; store.set("kaartTestType", t.id); renderTypes(); });
+      box.appendChild(bt);
+    });
+  }
+  renderTypes();
+  map.on("click", ev => oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
+  teken();
+  // Paneel eronder groeit/krimpt: kaart laten meeschalen
+  if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe($("map"));
+
+  $("bMij").addEventListener("click", async e => {
+    const btn = e.currentTarget, old = btn.textContent;
+    btn.disabled = true; btn.textContent = "Locatie zoeken…";
+    try {
+      const p = await Perceel.positie();
+      if (!inNL(p.lat, p.lon)) { say("Je locatie ligt buiten Nederland; daar heeft PDOK geen kaart of percelen.", true); return; }
+      if (mij) mij.remove();
+      mij = L.marker([p.lat, p.lon], { icon: L.divIcon({ className: "", html: '<div class="me"></div>', iconSize: [22, 22] }), interactive: false }).addTo(map);
+      map.setView([p.lat, p.lon], 16);
+      say("Tik op een perceel op de kaart.");
+    } catch (er) { say(er.message, true); }
+    finally { btn.disabled = false; btn.textContent = old; }
+  });
+})();
+</script>
+</body>
+</html>

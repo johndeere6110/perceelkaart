@@ -121,7 +121,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 15</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 16</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -620,14 +620,6 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   $("bWater").addEventListener("click", async e => {
     const btn = e.currentTarget;
     if (btn.disabled || !sel.length) return;
-    // BRP-percelen: de bufferstrook ligt meestal al buiten het ingetekende perceel. Eerst bevestigen.
-    const brp = sel.filter(q => !q.ref).length;
-    if (brp && !armed(btn, "Tik nog eens: toch zoeken")) {
-      say("Let op: bij BRP-percelen ligt de bufferstrook meestal al buiten het perceel, dan zit hij er al af. " +
-        (brp === sel.length ? "" : "(Dit geldt voor de " + brp + " BRP-percelen; referentiepercelen lopen door tot de sloot.) ") +
-        "Toch water zoeken en aftrekken? Tik nog eens op de knop.", true);
-      return;
-    }
     const old = btn.textContent;
     btn.disabled = true; btn.textContent = "Water zoeken…";
     const regels = [], ruwData = [];

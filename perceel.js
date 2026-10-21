@@ -1,4 +1,4 @@
-// perceel.js versie 2 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 3 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -7,7 +7,7 @@
 //   Perceel.oppervlakteHa(geometry), Perceel.bevatPunt(geometry, lon, lat)
 //   Perceel.zijden(geometry), Perceel.rechteZijde(zijden, key)   // randstukjes en lengtes, voor bufferstroken
 //   Perceel.zoekWater(geometry) + Perceel.waterLangsZijden(geometry, water)   // randen langs BGT-water
-//   Perceel.sporen(geometry, breedte, { andereKant })   // spuit-/strooisporen langs de langste zijde
+//   Perceel.sporen(geometry, breedte, { andereKant, buitenronde })   // spuit-/strooisporen langs de langste zijde
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
 // "offline" (geen verbinding en niks opgeslagen op deze plek), "server", "geen-perceel". De .message is Nederlands.
@@ -169,6 +169,40 @@
     return uit;
   }
 
+  /* ---------- Rand naar binnen verschuiven (buitenronde) ---------- */
+  // ring in meters (gesloten). Geeft de rand d meter naar binnen terug, ook gesloten.
+  function binnenrand(ring, d) {
+    // Dubbele en bijna rechte punten eruit: BRP-randen hebben veel kleine stukjes
+    let pts = ring.slice(0, -1).filter((p, i, a) => i === 0 || Math.hypot(p[0] - a[i - 1][0], p[1] - a[i - 1][1]) > 0.3);
+    for (let ronde = 0; ronde < 3; ronde++) pts = pts.filter((p, i, a) => {
+      const v = a[(i - 1 + a.length) % a.length], w = a[(i + 1) % a.length];
+      const h1 = Math.atan2(p[1] - v[1], p[0] - v[0]), h2 = Math.atan2(w[1] - p[1], w[0] - p[0]);
+      let dh = Math.abs(h1 - h2) % (2 * Math.PI); if (dh > Math.PI) dh = 2 * Math.PI - dh;
+      return a.length <= 3 || dh > 4 * Math.PI / 180;
+    });
+    const n = pts.length; if (n < 3) return null;
+    let opp = 0; for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; opp += a[0] * b[1] - b[0] * a[1]; }
+    const sgn = opp > 0 ? 1 : -1; // tegen de klok in: binnen ligt links
+    const lijnen = pts.map((a, i) => {
+      const b = pts[(i + 1) % n], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, ux = (b[0] - a[0]) / l, uy = (b[1] - a[1]) / l;
+      const nx = -uy * sgn, ny = ux * sgn;
+      return { p: [a[0] + nx * d, a[1] + ny * d], u: [ux, uy], nrm: [nx, ny] };
+    });
+    const uit = pts.map((p, i) => {
+      const L1 = lijnen[(i - 1 + n) % n], L2 = lijnen[i];
+      const kruis = L1.u[0] * L2.u[1] - L1.u[1] * L2.u[0];
+      if (Math.abs(kruis) < 1e-3) return L2.p;
+      const t = ((L2.p[0] - L1.p[0]) * L2.u[1] - (L2.p[1] - L1.p[1]) * L2.u[0]) / kruis;
+      const q = [L1.p[0] + L1.u[0] * t, L1.p[1] + L1.u[1] * t];
+      // Scherpe punt: niet verder dan 3× d van de hoek
+      if (Math.hypot(q[0] - p[0], q[1] - p[1]) > 3 * Math.abs(d)) { const mx = L1.nrm[0] + L2.nrm[0], my = L1.nrm[1] + L2.nrm[1], ml = Math.hypot(mx, my) || 1; return [p[0] + mx / ml * d, p[1] + my / ml * d]; }
+      return q;
+    });
+    uit.push(uit[0]);
+    return uit;
+  }
+  const ringLengte = r => r.reduce((t, p, i) => i ? t + Math.hypot(p[0] - r[i - 1][0], p[1] - r[i - 1][1]) : 0, 0);
+
   /* ---------- Spuit- of strooisporen langs de lange kant ---------- */
   // Sporen evenwijdig aan de langste rechte zijde (AB-lijn), om de `breedte` meter.
   // Spoor 1 ligt op een halve breedte van die zijde. opts.andereKant: beginnen aan de overkant.
@@ -210,13 +244,24 @@
     let startY = richtingY === 1 ? ymin : ymax;
     if (opts.andereKant) { startY = richtingY === 1 ? ymax : ymin; richtingY = -richtingY; }
     const W = ymax - ymin;
+    // Buitenronde: eerst een baan langs de hele rand; de gangen doen alleen het midden,
+    // en de spuit gaat uit bij het bandenspoor van de buitenronde (halve breedte van de rand)
+    const ronde = opts.buitenronde ? (() => {
+      const spoor = binnenrand(ringen[0], breedte / 2);
+      if (!spoor) return null;
+      const binnen = W > 2 * breedte + 0.5 ? binnenrand(ringen[0], breedte) : null;
+      return { spoor, binnen };
+    })() : null;
+    const marge = ronde ? breedte : 0;      // strook langs de lange kanten die de buitenronde al doet
+    const midden = W - 2 * marge;           // breedte die de gangen nog moeten doen
     // Rest onder 0,5 m telt niet: de perceelgrens zelf is ongeveer een meter nauwkeurig
-    const n = Math.max(1, Math.ceil((W - 0.5) / breedte));
-    const rest = W - (n - 1) * breedte; // wat de laatste gang nog moet doen
+    const n = ronde ? (midden > 0.5 ? Math.ceil((midden - 0.5) / breedte) : 0) : Math.max(1, Math.ceil((W - 0.5) / breedte));
+    const rest = n ? midden - (n - 1) * breedte : 0; // wat de laatste gang nog moet doen
+    const knipRingen = ronde ? [ronde.spoor] : ringen;
     // Stukken van de lijn y binnen het perceel (snijpunten met alle randen, paarsgewijs)
     const snij = y => {
       const xs = [];
-      ringen.forEach(r => { for (let j = 0; j < r.length - 1; j++) { const p = r[j], q = r[j + 1]; if ((p[1] - y) * (q[1] - y) < 0) xs.push(p[0] + (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1])); } });
+      knipRingen.forEach(r => { for (let j = 0; j < r.length - 1; j++) { const p = r[j], q = r[j + 1]; if ((p[1] - y) * (q[1] - y) < 0) xs.push(p[0] + (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1])); } });
       xs.sort((a, b) => a - b);
       const d = [];
       for (let j = 0; j + 1 < xs.length; j += 2) if (xs[j + 1] - xs[j] > 0.5) d.push({ van: xs[j], tot: xs[j + 1] });
@@ -224,10 +269,10 @@
     };
     const half = breedte / 2, uit = [];
     for (let i = 0; i < n; i++) {
-      const y = startY + richtingY * (i + 0.5) * breedte;
+      const y = startY + richtingY * (marge + (i + 0.5) * breedte);
       // Valt het spoor zelf buiten het perceel (smalle rest), dan de lengte meten langs de rand
       let delen = snij(y);
-      if (!delen.length) delen = snij(startY + richtingY * (W - Math.min(0.5, W / 2)));
+      if (!delen.length) delen = snij(startY + richtingY * (W - marge - Math.min(0.5, W / 2)));
       uit.push({
         nr: i + 1,
         heen: i % 2 === 0, // heen en weer: oneven gangen van A naar B
@@ -236,11 +281,19 @@
         banen: delen.map(d => [terug(d.van, y - half), terug(d.tot, y - half), terug(d.tot, y + half), terug(d.van, y + half), terug(d.van, y - half)])
       });
     }
+    const rondeUit = ronde ? {
+      lengte: ringLengte(ronde.spoor),
+      spoor: ronde.spoor.map(p => terug(p[0], p[1])),
+      // Baan van de buitenronde: buitenrand met (als het perceel breed genoeg is) de binnenrand als gat
+      band: [ringen[0].map(p => terug(p[0], p[1]))].concat(ronde.binnen ? [ronde.binnen.map(p => terug(p[0], p[1]))] : []),
+      // Smal perceel: de buitenronde overlapt zichzelf in het midden
+      dubbel: W < 2 * breedte ? 2 * breedte - W : 0
+    } : null;
     return {
-      breedte, gangen: n, perceelBreedte: W, perceelLengte: xmax - xmin, rest,
-      buitenKant: rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
+      breedte, gangen: n, perceelBreedte: W, perceelLengte: xmax - xmin, rest, ronde: rondeUit,
+      buitenKant: n && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
       abLengte: ab.m, a: terug(xmin, startY), b: terug(xmax, startY), sporen: uit,
-      totaalM: uit.reduce((t, s) => t + s.lengte, 0)
+      totaalM: uit.reduce((t, s) => t + s.lengte, 0) + (rondeUit ? rondeUit.lengte : 0)
     };
   }
 

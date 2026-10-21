@@ -92,6 +92,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .spuit input { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 22px; text-align: right; padding: 0 10px; outline: none; }
 .spuit input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .spuit .btn { min-height: 48px; padding: 0 14px; flex: none; }
+.spuit .ronde { grid-column: 1 / -1; }
+.spuit .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .sp { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); }
 .sp strong { color: var(--ink); font-weight: 600; }
 .sp .klein { min-height: 40px; font-size: 15px; margin-top: 6px; width: auto; padding: 0 12px; display: inline-flex; }
@@ -105,7 +107,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 2</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 3</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -130,6 +132,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       <label for="spuitB">Spuitbreedte (m)</label>
       <input id="spuitB" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="27">
       <button type="button" class="btn" id="bSpuit" aria-pressed="false">Sporen</button>
+      <button type="button" class="btn ronde" id="bRonde" aria-pressed="true">Buitenronde eerst: aan</button>
     </div>
     <ul class="log" id="lijst"></ul>
     <div class="row" style="margin-top:10px"><button type="button" class="btn" id="bWis">Alles wissen</button></div>
@@ -238,6 +241,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const spuitEl = $("spuitB");
   spuitEl.value = store.get("kaartSpuitBreedte", "27");
   let spuitAan = store.get("kaartSpuitAan", false);
+  let buitenronde = store.get("kaartBuitenronde", true);
+  $("bRonde").addEventListener("click", () => { buitenronde = !buitenronde; store.set("kaartBuitenronde", buitenronde); teken(); });
   const spuitBreedte = () => { const b = parse(spuitEl.value); return b >= 1 && b <= 100 ? b : null; };
   const kmTxt = m => (m / 1000).toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " km";
   const mDec = v => v.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + " m";
@@ -246,6 +251,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // Draaiing op het scherm van punt a naar b (Mercator is hoekgetrouw, dus los van de zoom)
   const hoek = (a, b) => { const p = map.project([a[1], a[0]], 18), q = map.project([b[1], b[0]], 18); return Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI; };
   function tekenSporen(q, s) {
+    if (s.ronde) {
+      const ll = r => r.map(c => [c[1], c[0]]);
+      spoorLaag.addLayer(L.polygon(s.ronde.band.map(ll), { stroke: false, fillColor: "#4cae5a", fillOpacity: .3, interactive: false }));
+      spoorLaag.addLayer(L.polyline(ll(s.ronde.spoor), { color: "#fff", weight: 2, dashArray: "8 6", opacity: .9, interactive: false }));
+      const r0 = s.ronde.spoor[0];
+      spoorLaag.addLayer(L.marker([r0[1], r0[0]], { icon: L.divIcon({ className: "", html: '<div class="spnr">R</div>', iconSize: [20, 18] }), interactive: false, keyboard: false }));
+    }
     s.sporen.forEach(sp => {
       const kleur = sp.nr % 2 ? "#e8b400" : "#3a8fd8";
       sp.banen.forEach(bn => spoorLaag.addLayer(L.polygon(bn.map(c => [c[1], c[0]]), { stroke: false, fillColor: kleur, fillOpacity: .22, interactive: false })));
@@ -267,6 +279,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const sb = spuitBreedte();
     $("bSpuit").setAttribute("aria-pressed", spuitAan);
     $("bSpuit").textContent = spuitAan ? "Sporen uit" : "Sporen";
+    $("bRonde").hidden = !spuitAan;
+    $("bRonde").setAttribute("aria-pressed", buitenronde);
+    $("bRonde").textContent = "Buitenronde eerst: " + (buitenronde ? "aan" : "uit");
     sel.forEach((q, i) => {
       const g = L.geoJSON(q.geometry, { style: stijl, interactive: false });
       g.bindTooltip(String(i + 1), { permanent: true, direction: "center", className: "pnr" });
@@ -315,19 +330,25 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       }
       // Spuitsporen: hoe je uitkomt met deze breedte
       if (spuitAan && sb) {
-        const s = Perceel.sporen(q.geometry, sb, { andereKant: !!q.spuitAnders });
+        const s = Perceel.sporen(q.geometry, sb, { andereKant: !!q.spuitAnders, buitenronde });
         if (s) {
           tekenSporen(q, s);
           const d = document.createElement("div"); d.className = "sp";
           const r1 = document.createElement("div");
-          r1.innerHTML = "<strong>Spuiten " + esc(mDec(sb)) + ":</strong> " + s.gangen + (s.gangen === 1 ? " gang" : " gangen") + " langs de lange kant (" + esc(mTxt(s.abLengte)) + "), samen " + esc(kmTxt(s.totaalM)) + " rijden.";
+          const gTxt = s.gangen + (s.gangen === 1 ? " gang" : " gangen") + " langs de lange kant (" + mTxt(s.abLengte) + ")";
+          r1.innerHTML = "<strong>Spuiten " + esc(mDec(sb)) + ":</strong> " + esc(s.ronde
+            ? (s.gangen ? "eerst de buitenronde (" + kmTxt(s.ronde.lengte) + "), daarna " + gTxt + ". Spuit uit zodra je over het bandenspoor van de buitenronde gaat." : "alleen de buitenronde (" + kmTxt(s.ronde.lengte) + ").")
+            : gTxt + ".") + " Samen " + esc(kmTxt(s.totaalM)) + " rijden.";
           const r2 = document.createElement("div");
-          r2.textContent = s.buitenKant < 0.5 ? "Komt precies uit." :
-            "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt buiten de kant (sectie uit). Of leg hem tegen de kant: dan " + mDec(s.buitenKant) + " overlap.";
+          r2.textContent = s.ronde && !s.gangen ? (s.ronde.dubbel >= 0.5 ? "Daarmee ben je klaar. Smal perceel: in het midden spuit je " + mDec(s.ronde.dubbel) + " dubbel." : "Daarmee ben je klaar, het komt precies uit.") :
+            s.buitenKant < 0.5 ? "Komt precies uit." :
+            (s.ronde
+              ? "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt over de buitenronde (die secties uit, anders dubbel)."
+              : "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt buiten de kant (sectie uit). Of leg hem tegen de kant: dan " + mDec(s.buitenKant) + " overlap.");
           const kb = document.createElement("button"); kb.type = "button"; kb.className = "btn klein";
           kb.textContent = q.spuitAnders ? "Begin weer aan kant A" : "Begin aan andere kant";
           kb.addEventListener("click", () => { q.spuitAnders = !q.spuitAnders; bewaar(); teken(); });
-          d.append(r1, r2, kb); maakDetail().appendChild(d);
+          d.append(r1, r2); if (s.gangen) d.appendChild(kb); maakDetail().appendChild(d);
         }
       }
       go.append(nm, mt);

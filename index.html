@@ -121,7 +121,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 16</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 17</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -257,17 +257,43 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (!q.oever || typeof q.oever !== "object") q.oever = {};
     Object.keys(q.oever).forEach(k => q.oever[k] = naarType(q.oever[k]));
   });
-  // Per perceel: lengte per type, en de stap waarop het onder 4 % komt (of de laatste stap)
+  // Strook vanaf de waterkant (BGT) langs de randen die Water zoeken vond (q.wauto), per stap; null = niet te berekenen
+  const strookCache = new Map();
+  // hand: zelf aangewezen randen met een strook; daar telt de strook vanaf de waterkant niet nog eens
+  function waterStrook(q, keys, hand, i) {
+    if (!keys.length || !Array.isArray(q.water) || !window.polygonClipping) return null;
+    const id = q.key + "|" + i + "|" + (q.waterTs || 0) + "|" + keys.join(",") + "|" + hand.join(",");
+    if (!strookCache.has(id)) {
+      let r = null;
+      try { r = Perceel.waterStrook(q.geometry, q.water, typeVan("nat").st[i], polygonClipping, { zijden: keys, hand }); } catch (e) { r = null; }
+      strookCache.set(id, r);
+    }
+    return strookCache.get(id);
+  }
+  // Per perceel: lengte per type, en de stap waarop het onder 4 % komt (of de laatste stap).
+  // Zelf aangewezen oevers: lengte × breedte vanaf de perceelrand. Gevonden water: strook vanaf de waterkant, deel binnen het perceel.
   function buffer(q) {
-    const per = {};
-    Perceel.zijden(q.geometry).forEach(z => { const id = q.oever[z.key]; if (id) per[id] = (per[id] || 0) + z.m; });
-    const opp = i => Object.entries(per).reduce((a, [id, m]) => a + m * typeVan(id).st[i] / 10000, 0);
+    const per = {}, hand = {}, autoNat = [];
+    let autoM = 0;
+    Perceel.zijden(q.geometry).forEach(z => {
+      const id = q.oever[z.key]; if (!id) return;
+      per[id] = (per[id] || 0) + z.m;
+      if (id === "nat" && q.wauto && q.wauto[z.key]) { autoNat.push(z.key); autoM += z.m; }
+      else hand[id] = (hand[id] || 0) + z.m;
+    });
+    const langs = (lijst, i) => Object.entries(lijst).reduce((a, [id, m]) => a + m * typeVan(id).st[i] / 10000, 0);
+    const ws = i => waterStrook(q, autoNat, Object.keys(q.oever).filter(k => !autoNat.includes(k) && typeVan(q.oever[k]).st[i] > 0), i);
+    const wsOk = autoNat.length > 0 && [0, 1, 2].every(i => ws(i));
+    const opp = i => wsOk ? langs(hand, i) + ws(i).m2 / 10000 : langs(per, i);
     const lengte = Object.values(per).reduce((a, m) => a + m, 0), max = q.ha * MAX_PCT / 100;
     const stappen = [{ i: 0, af: opp(0) }];
     while (stappen.length < 3 && stappen[stappen.length - 1].af > max) stappen.push({ i: stappen.length, af: opp(stappen.length) });
     const stap = stappen.length - 1;
-    return { per, lengte, hoofd: stappen[0].af, af: Math.min(stappen[stap].af, q.ha), stap, stappen, max };
+    // Vergelijking voor de stap die telt: gevonden water vanaf de waterkant tegenover vanaf de perceelrand
+    const water = autoNat.length ? { m: autoM, breedte: typeVan("nat").st[stap], kant: wsOk ? ws(stap) : null, rand: autoM * typeVan("nat").st[stap] } : null;
+    return { per, lengte, hoofd: stappen[0].af, af: Math.min(stappen[stap].af, q.ha), stap, stappen, max, water };
   }
+  const m2Txt = v => Math.round(v).toLocaleString("nl-NL") + " m²";
   const nlM = v => String(v).replace(".", ",") + " m";
   let oeverModus = false;
   // Spuitsporen onder de perceelranden tekenen
@@ -443,6 +469,14 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         detail.appendChild(tb);
         if (bf.stap) { const n = document.createElement("div"); n.textContent = "Meer dan 4 % (" + haTxt(bf.max) + " ha) mag niet, dan wordt de strook smaller."; detail.appendChild(n); }
         if (bf.stap === 2 && bf.af > bf.max) { const n = document.createElement("div"); n.textContent = "Nog boven 4 %, maar smaller mag niet."; detail.appendChild(n); }
+        if (bf.water) {
+          const n = document.createElement("div"), w = bf.water;
+          n.textContent = w.kant
+            ? "Gevonden water (" + mTxt(w.m) + " rand): strook van " + nlM(w.breedte) + " vanaf de waterkant, daarvan " + m2Txt(w.kant.m2) + " binnen het perceel. Vanaf de perceelrand zou het " + m2Txt(w.rand) + " zijn."
+            : "Gevonden water (" + mTxt(w.m) + " rand): de strook vanaf de waterkant kon niet berekend worden, gerekend vanaf de perceelrand (" + m2Txt(w.rand) + "). Zoek het water opnieuw.";
+          detail.appendChild(n);
+          if (w.kant) laag.addLayer(L.geoJSON(w.kant.geometry, { style: { stroke: false, fillColor: "#2f7fd8", fillOpacity: .45 }, interactive: false }));
+        }
       }
       // Spuitsporen: los perceel hier, percelen in een kavel bij de kavel
       const kv = kavelVan(q);
@@ -539,6 +573,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const nr = sel.indexOf(q) + 1;
     // Zelfde type nog eens: weghalen. Ander type: omzetten.
     const was = q.oever[z.key];
+    // Zelf aangewezen: telt vanaf de perceelrand, niet meer als gevonden water
+    if (q.wauto) run.forEach(k => delete q.wauto[k]);
     if (was === huidigType) { run.forEach(k => delete q.oever[k]); say("Oever van " + mTxt(lengte) + " weggehaald bij perceel " + nr + "."); }
     else {
       run.forEach(k => q.oever[k] = huidigType);
@@ -630,18 +666,26 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         const hits = Perceel.waterLangsZijden(q.geometry, water);
         const alle = Perceel.zijden(q.geometry);
         let nat = 0, droog = 0;
+        if (!q.wauto || typeof q.wauto !== "object") q.wauto = {};
+        // Eerder gevonden randen die nu niet meer langs water liggen: weg
+        Object.keys(q.wauto).forEach(k => { if (!hits[k]) { delete q.oever[k]; delete q.wauto[k]; } });
         Object.entries(hits).forEach(([k, h]) => {
-          if (q.oever[k] != null) return;
-          q.oever[k] = h.droog ? "droog" : "nat";
+          const t = h.droog ? "droog" : "nat", nieuw = q.oever[k] == null;
+          if (!nieuw && q.oever[k] !== t) return; // zelf omgezet: blijft zoals aangewezen
+          q.oever[k] = t; q.wauto[k] = true;
+          if (!nieuw) return;
           const m = alle.find(z => z.key === k).m; if (h.droog) droog += m; else nat += m;
         });
+        // Waterdelen bewaren (bijgeknipt): de strook wordt vanaf de waterkant gerekend
+        q.water = window.polygonClipping ? Perceel.waterBijPerceel(q.geometry, water, polygonClipping) : [];
+        q.waterTs = Date.now();
         regels.push("Perceel " + (i + 1) + ": " + (nat || droog ? [nat ? mTxt(nat) + " water" : "", droog ? mTxt(droog) + " greppel/droge sloot" : ""].filter(Boolean).join(", ") : "geen (nieuw) water langs de rand"));
         ruwData.push({ perceel: i + 1, waterdelen: water.length, voorbeeld: water.slice(0, 3).map(w => w.properties) });
       } catch (er) { fout = er; regels.push("Perceel " + (i + 1) + ": " + er.message); }
     }
     bewaar(); teken();
     btn.disabled = false; btn.textContent = old;
-    say(regels.join(" · ") + (fout ? "" : ". Water staat op 'nat of kort droog' (3 m): zet lang droogvallend en droge sloten zelf om via Oevers aanwijzen."), !!fout);
+    say(regels.join(" · ") + (fout ? "" : ". Water staat op 'nat of kort droog' (3 m, vanaf de waterkant): zet lang droogvallend en droge sloten zelf om via Oevers aanwijzen."), !!fout);
     ruw.textContent = JSON.stringify(ruwData, null, 2);
   });
   // Keuze type waterloop

@@ -1,4 +1,4 @@
-// perceel.js versie 11 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 12 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -7,6 +7,8 @@
 //   Perceel.oppervlakteHa(geometry), Perceel.bevatPunt(geometry, lon, lat)
 //   Perceel.zijden(geometry), Perceel.rechteZijde(zijden, key)   // randstukjes en lengtes, voor bufferstroken
 //   Perceel.zoekWater(geometry) + Perceel.waterLangsZijden(geometry, water)   // randen langs BGT-water
+//   Perceel.waterBijPerceel(geometry, water, clip)   // waterdelen bijgeknipt rond het perceel, om te bewaren
+//   Perceel.waterStrook(geometry, water, breedte, clip, { zijden })   // strook vanaf de waterkant, deel binnen het perceel (m²)
 //   Perceel.sporen(geometry, breedte, { andereKant, buitenronde, clip })   // spuit-/strooisporen langs de langste zijde
 //     clip = polygon-clipping (optioneel): maakt de buitenronde exact, ook bij smalle armen en inhammen
 //   Perceel.verschuif(geometry, d)   // buitenrand d meter naar binnen (negatief: naar buiten), eenvoudig
@@ -293,6 +295,81 @@
     return null;
   }
   const ringLengte = r => r.reduce((t, p, i) => i ? t + Math.hypot(p[0] - r[i - 1][0], p[1] - r[i - 1][1]) : 0, 0);
+
+  /* ---------- Bufferstrook vanaf de waterkant (insteek) ---------- */
+  // Lokaal vlak in meters rond een perceel: m(lonlat) -> [x, y], ll([x, y]) -> lonlat
+  function vlak(geometry) {
+    const p = polygonen(geometry)[0][0][0], lon0 = p[0], lat0 = p[1], f = lat0 * Math.PI / 180;
+    const ky = 111132.92 - 559.82 * Math.cos(2 * f) + 1.175 * Math.cos(4 * f), kx = 111412.84 * Math.cos(f) - 93.5 * Math.cos(3 * f);
+    return { m: c => [(c[0] - lon0) * kx, (c[1] - lat0) * ky], ll: q => [lon0 + q[0] / kx, lat0 + q[1] / ky] };
+  }
+  // Waterdelen rond een perceel, bijgeknipt tot het perceel + marge m, om te bewaren: [{ droog, geometry }]
+  function waterBijPerceel(geometry, water, clip, marge) {
+    marge = marge == null ? 15 : marge;
+    if (!polygonen(geometry).length || !clip) return [];
+    const v = vlak(geometry);
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    polygonen(geometry).forEach(rings => rings[0].forEach(c => { const p = v.m(c); x1 = Math.min(x1, p[0]); y1 = Math.min(y1, p[1]); x2 = Math.max(x2, p[0]); y2 = Math.max(y2, p[1]); }));
+    x1 -= marge; y1 -= marge; x2 += marge; y2 += marge;
+    const rh = [[[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]]];
+    return water.flatMap(w => {
+      let delen;
+      try { delen = clip.intersection(polygonen(w.geometry).map(rings => rings.map(r => r.map(v.m))), rh); } catch (e) { return []; }
+      return delen.length ? [{ droog: isDroog(w), geometry: { type: "MultiPolygon", coordinates: rond(delen.map(poly => poly.map(r => r.map(v.ll)))) } }] : [];
+    });
+  }
+  // Strook van `breedte` m vanaf de rand van elk nat waterdeel (het water zelf niet), alleen het deel binnen het perceel.
+  // water: features of { droog, geometry } (droge sloten tellen niet). o.zijden: alleen langs deze randstukjes
+  // van het perceel (keys), tot breedte + o.tol m ervan. Geeft { m2, geometry } (MultiPolygon); gooit als het niet lukt.
+  function waterStrook(geometry, water, breedte, clip, o) {
+    o = o || {};
+    const tol = o.tol == null ? 6 : o.tol;
+    const leeg = { m2: 0, geometry: { type: "MultiPolygon", coordinates: [] } };
+    if (!(breedte > 0) || !polygonen(geometry).length) return leeg;
+    const v = vlak(geometry);
+    const inM = w => polygonen(w.geometry).map(rings => rings.map(r => r.map(v.m)));
+    const perceel = polygonen(geometry).map(rings => rings.map(r => r.map(v.m)));
+    const alleWater = water.flatMap(inM);
+    const nat = water.filter(w => !(typeof w.droog === "boolean" ? w.droog : isDroog(w))).flatMap(inM);
+    if (!nat.length) return leeg;
+    // Alleen bij de gekozen randstukjes: per stukje een band van breedte + tol aan weerskanten. Naast een stukje
+    // dat ook een strook heeft (gekozen, of in o.hand: zelf aangewezen) afgeknipt op de bissectrice, zodat de
+    // strook langs een zelf aangewezen buurrand niet dubbel telt; anders een strookbreedte recht door.
+    let gang = null;
+    if (o.zijden) {
+      const keys = new Set(o.zijden), hand = new Set(o.hand || []), h = breedte + tol, alle = zijden(geometry), op = new Map(alle.map(z => [z.key, z]));
+      const normaal = z => { const a = v.m(z.a), b = v.m(z.b), l = Math.hypot(b[0] - a[0], b[1] - a[1]); return [-(b[1] - a[1]) / l, (b[0] - a[0]) / l]; };
+      // Volgend (stap 1) of vorig (stap -1) stukje van dezelfde ring dat niet (bijna) nul lang is
+      const buur = (z, stap) => {
+        for (let i = 1; i < z.n; i++) { const b = op.get("p" + z.pi + "r" + z.ri + "s" + ((z.si + stap * i) % z.n + z.n) % z.n); if (b && b.m >= 0.01) return b; }
+        return z;
+      };
+      // Verstek in een hoekpunt: m·n1 = m·n2 = 1; bij een heel scherpe hoek gewoon haaks
+      const verstek = (n1, n2) => { const c = 1 + n1[0] * n2[0] + n1[1] * n2[1]; return c < 0.2 ? n1 : [(n1[0] + n2[0]) / c, (n1[1] + n2[1]) / c]; };
+      // Uiteinde p van stukje z (s = -1 begin, 1 eind): de twee hoekpunten van de band
+      const eind = (z, p, n, s) => {
+        const nb = buur(z, s);
+        if (nb !== z && (keys.has(nb.key) || hand.has(nb.key))) { const m = verstek(n, normaal(nb)); return [[p[0] + m[0] * h, p[1] + m[1] * h], [p[0] - m[0] * h, p[1] - m[1] * h]]; }
+        const q = [p[0] + n[1] * s * breedte, p[1] - n[0] * s * breedte]; // richting van het stukje is (n[1], -n[0])
+        return [[q[0] + n[0] * h, q[1] + n[1] * h], [q[0] - n[0] * h, q[1] - n[1] * h]];
+      };
+      gang = alle.filter(z => keys.has(z.key) && z.m >= 0.01).map(z => {
+        const n = normaal(z), [a1, a2] = eind(z, v.m(z.a), n, -1), [b1, b2] = eind(z, v.m(z.b), n, 1);
+        return [[a1, b1, b2, a2, a1]];
+      });
+      if (!gang.length) return leeg;
+    }
+    // Zelfde aanpak als binnenGebied: struikelt de rekenbibliotheek, dan opnieuw met een iets grovere rand
+    const pogingen = [0.3, 0.5, 1, 2];
+    for (let i = 0; i < pogingen.length; i++) {
+      try {
+        let strook = clip.difference(clip.union(...randVormen(nat, breedte, pogingen[i], i, true)), ...alleWater);
+        if (strook.length) strook = clip.intersection(strook, perceel);
+        if (strook.length && gang) strook = clip.intersection(strook, clip.union(...gang));
+        return { m2: strook.reduce((t, p) => t + oppM(p), 0), geometry: { type: "MultiPolygon", coordinates: strook.map(poly => poly.map(r => r.map(v.ll))) } };
+      } catch (e) { if (i === pogingen.length - 1) throw e; }
+    }
+  }
 
   // Buitenrand van (het grootste deel van) een perceel d meter naar binnen; negatief = naar buiten
   function verschuif(geometry, d) {
@@ -583,5 +660,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, sporen, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
 });

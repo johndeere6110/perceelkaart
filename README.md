@@ -6,7 +6,8 @@ Percelen kiezen op de kaart en het totaal in ha zien, met bufferstroken langs wa
 
 - Tik op een perceel om het toe te voegen, nog eens tikken haalt het weg.
 - **Grenzen:** kies tussen het BRP-gewasperceel (zoals ingetekend bij de Gecombineerde opgave) en het referentieperceel (RVO, afgeleid van de BGT: de kavel tot de slootkant, meestal nauwkeuriger).
-- **Water zoeken** markeert randen langs BGT-water (sloot = 3 m, greppel/droge sloot = 0 m).
+- **Water zoeken** markeert randen langs BGT-water (sloot = 3 m, greppel/droge sloot = 0 m). De strook gaat vanaf de waterkant (insteek, BGT waterdeel): alleen het deel binnen het perceel telt, want de perceelgrens ligt niet precies op de insteek. Per perceel zie je ook wat het vanaf de perceelrand zou zijn.
+- Zelf aangewezen oevers (**Oevers aanwijzen**) rekenen vanaf de perceelrand: lengte × breedte.
 - **Oevers aanwijzen** om een rand zelf om te zetten: nat of kort droogvallend (3 m), lang droogvallend (1 m), droge sloot (0 m).
 - Boven 4 % van het perceel rekent hij de strook smaller, zoals RVO (3 m → 1 m → 0,5 m).
 - **Sporen** tekent de spuitsporen (standaard 27 m) evenwijdig aan de lange kant, met A en B, genummerde gangen en pijlen heen en weer. Met **Buitenronde eerst** rijd je eerst een ronde langs de rand en gaat de spuit uit bij het bandenspoor daarvan. Per perceel zie je hoe de laatste gang uitkomt.

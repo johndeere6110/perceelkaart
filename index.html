@@ -93,6 +93,14 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .spuit input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .spuit .btn { min-height: 48px; padding: 0 14px; flex: none; }
 .spuit .ronde { grid-column: 1 / -1; }
+.kavel { margin-top: 10px; border: 2px solid #e8590c; border-radius: 10px; padding: 10px 12px; }
+.kavel .kop { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; }
+.kavel .naam { font-weight: 600; }
+.kavel .w { font-size: 21px; }
+.kavel .meta { font-size: 14px; color: var(--muted); }
+.kavel .klein { min-height: 40px; font-size: 15px; margin-top: 6px; width: auto; padding: 0 12px; display: inline-flex; }
+.leaflet-tooltip.kav { background: #e8590c; color: #fff; }
+#bKoppel[aria-pressed="true"] { background: #e8590c; border-color: #e8590c; color: #fff; }
 .spuit .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .sp { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); }
 .sp strong { color: var(--ink); font-weight: 600; }
@@ -107,7 +115,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 3</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 4</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -124,6 +132,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       <button type="button" class="btn" id="bWater">Water zoeken</button>
       <button type="button" class="btn" id="bOever" aria-pressed="false">Oevers aanwijzen</button>
     </div>
+    <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bKoppel" aria-pressed="false">Percelen koppelen</button></div>
     <div id="typeBox" hidden>
       <div class="lbl2">Type waterloop, kies vóór het tikken</div>
       <div class="seg4" role="group" aria-label="Type waterloop" id="typeSeg"></div>
@@ -134,6 +143,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       <button type="button" class="btn" id="bSpuit" aria-pressed="false">Sporen</button>
       <button type="button" class="btn ronde" id="bRonde" aria-pressed="true">Buitenronde eerst: aan</button>
     </div>
+    <div id="kavelBox"></div>
     <ul class="log" id="lijst"></ul>
     <div class="row" style="margin-top:10px"><button type="button" class="btn" id="bWis">Alles wissen</button></div>
   </div>
@@ -144,6 +154,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/polygon-clipping/polygon-clipping.umd.min.js"></script>
 <script src="perceel.js"></script>
 <script>
 (function () {
@@ -248,6 +259,55 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const mDec = v => v.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + " m";
   spuitEl.addEventListener("input", () => { store.set("kaartSpuitBreedte", spuitEl.value); teken(); });
   $("bSpuit").addEventListener("click", () => { spuitAan = !spuitAan; store.set("kaartSpuitAan", spuitAan); teken(); });
+  // Kavels: percelen die tegen elkaar liggen en samen gespoten worden
+  let kavels = store.get("kaartKavels", []);
+  if (!Array.isArray(kavels)) kavels = [];
+  const bewaarK = () => store.set("kaartKavels", kavels);
+  let koppelModus = false;
+  const koppelSet = new Set();
+  const kavelVan = q => kavels.find(k => k.leden.includes(q.key));
+  const kavelCache = new Map();
+  // Samengevoegde vorm: elk perceel 1 m groter (naden dicht), samenvoegen, weer 1 m kleiner. null = ligt niet tegen elkaar.
+  function kavelVorm(kv) {
+    const id = kv.leden.slice().sort().join("|");
+    if (kavelCache.has(id)) return kavelCache.get(id);
+    let vorm = null;
+    try {
+      const gs = kv.leden.map(k => sel.find(q => q.key === k)).filter(Boolean).map(q => Perceel.verschuif(q.geometry, -1));
+      if (window.polygonClipping && gs.length >= 2 && gs.every(Boolean)) {
+        const u = polygonClipping.union(...gs.map(g => g.coordinates));
+        if (u.length === 1) vorm = Perceel.verschuif({ type: "Polygon", coordinates: [u[0][0]] }, 1);
+      }
+    } catch (e) { vorm = null; }
+    kavelCache.set(id, vorm);
+    return vorm;
+  }
+  // Spuituitleg voor een perceel of kavel; tekent ook de sporen
+  function spuitBlok(geom, obj, opslaan, sb) {
+    const s = Perceel.sporen(geom, sb, { andereKant: !!obj.spuitAnders, buitenronde });
+    if (!s) return null;
+    tekenSporen(obj, s);
+    const d = document.createElement("div"); d.className = "sp";
+    const r1 = document.createElement("div");
+    const gTxt = s.gangen + (s.gangen === 1 ? " gang" : " gangen") + " langs de lange kant (" + mTxt(s.abLengte) + ")";
+    r1.innerHTML = "<strong>Spuiten " + esc(mDec(sb)) + ":</strong> " + esc(s.ronde
+      ? (s.gangen ? "eerst de buitenronde (" + kmTxt(s.ronde.lengte) + "), daarna " + gTxt + ". Spuit uit zodra je over het bandenspoor van de buitenronde gaat." : "alleen de buitenronde (" + kmTxt(s.ronde.lengte) + ").")
+      : gTxt + ".") + " Samen " + esc(kmTxt(s.totaalM)) + " rijden.";
+    const r2 = document.createElement("div");
+    r2.textContent = s.ronde && !s.gangen ? (s.ronde.dubbel >= 0.5 ? "Daarmee ben je klaar. Smal perceel: in het midden spuit je " + mDec(s.ronde.dubbel) + " dubbel." : "Daarmee ben je klaar, het komt precies uit.") :
+      s.buitenKant < 0.5 ? "Komt precies uit." :
+      (s.ronde
+        ? "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt over de buitenronde (die secties uit, anders dubbel)."
+        : "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt buiten de kant (sectie uit). Of leg hem tegen de kant: dan " + mDec(s.buitenKant) + " overlap.");
+    d.append(r1, r2);
+    if (s.gangen) {
+      const kb = document.createElement("button"); kb.type = "button"; kb.className = "btn klein";
+      kb.textContent = obj.spuitAnders ? "Begin weer aan kant A" : "Begin aan andere kant";
+      kb.addEventListener("click", () => { obj.spuitAnders = !obj.spuitAnders; opslaan(); teken(); });
+      d.appendChild(kb);
+    }
+    return d;
+  }
   // Draaiing op het scherm van punt a naar b (Mercator is hoekgetrouw, dus los van de zoom)
   const hoek = (a, b) => { const p = map.project([a[1], a[0]], 18), q = map.project([b[1], b[0]], 18); return Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI; };
   function tekenSporen(q, s) {
@@ -282,7 +342,12 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("bRonde").hidden = !spuitAan;
     $("bRonde").setAttribute("aria-pressed", buitenronde);
     $("bRonde").textContent = "Buitenronde eerst: " + (buitenronde ? "aan" : "uit");
+    // Kavels opschonen: weggehaalde percelen eruit, kavel met minder dan 2 percelen vervalt
+    const keys = new Set(sel.map(q => q.key)), voor = JSON.stringify(kavels);
+    kavels = kavels.map(k => Object.assign(k, { leden: (k.leden || []).filter(x => keys.has(x)) })).filter(k => k.leden.length >= 2);
+    if (JSON.stringify(kavels) !== voor) bewaarK();
     sel.forEach((q, i) => {
+      if (koppelModus && koppelSet.has(q.key)) laag.addLayer(L.geoJSON(q.geometry, { style: { color: "#e8590c", weight: 5, fillColor: "#e8590c", fillOpacity: .35 }, interactive: false }));
       const g = L.geoJSON(q.geometry, { style: stijl, interactive: false });
       g.bindTooltip(String(i + 1), { permanent: true, direction: "center", className: "pnr" });
       laag.addLayer(g);
@@ -328,29 +393,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         if (bf.stap) { const n = document.createElement("div"); n.textContent = "Meer dan 4 % (" + haTxt(bf.max) + " ha) mag niet, dan wordt de strook smaller."; detail.appendChild(n); }
         if (bf.stap === 2 && bf.af > bf.max) { const n = document.createElement("div"); n.textContent = "Nog boven 4 %, maar smaller mag niet."; detail.appendChild(n); }
       }
-      // Spuitsporen: hoe je uitkomt met deze breedte
-      if (spuitAan && sb) {
-        const s = Perceel.sporen(q.geometry, sb, { andereKant: !!q.spuitAnders, buitenronde });
-        if (s) {
-          tekenSporen(q, s);
-          const d = document.createElement("div"); d.className = "sp";
-          const r1 = document.createElement("div");
-          const gTxt = s.gangen + (s.gangen === 1 ? " gang" : " gangen") + " langs de lange kant (" + mTxt(s.abLengte) + ")";
-          r1.innerHTML = "<strong>Spuiten " + esc(mDec(sb)) + ":</strong> " + esc(s.ronde
-            ? (s.gangen ? "eerst de buitenronde (" + kmTxt(s.ronde.lengte) + "), daarna " + gTxt + ". Spuit uit zodra je over het bandenspoor van de buitenronde gaat." : "alleen de buitenronde (" + kmTxt(s.ronde.lengte) + ").")
-            : gTxt + ".") + " Samen " + esc(kmTxt(s.totaalM)) + " rijden.";
-          const r2 = document.createElement("div");
-          r2.textContent = s.ronde && !s.gangen ? (s.ronde.dubbel >= 0.5 ? "Daarmee ben je klaar. Smal perceel: in het midden spuit je " + mDec(s.ronde.dubbel) + " dubbel." : "Daarmee ben je klaar, het komt precies uit.") :
-            s.buitenKant < 0.5 ? "Komt precies uit." :
-            (s.ronde
-              ? "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt over de buitenronde (die secties uit, anders dubbel)."
-              : "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt buiten de kant (sectie uit). Of leg hem tegen de kant: dan " + mDec(s.buitenKant) + " overlap.");
-          const kb = document.createElement("button"); kb.type = "button"; kb.className = "btn klein";
-          kb.textContent = q.spuitAnders ? "Begin weer aan kant A" : "Begin aan andere kant";
-          kb.addEventListener("click", () => { q.spuitAnders = !q.spuitAnders; bewaar(); teken(); });
-          d.append(r1, r2); if (s.gangen) d.appendChild(kb); maakDetail().appendChild(d);
-        }
-      }
+      // Spuitsporen: los perceel hier, percelen in een kavel bij de kavel
+      const kv = kavelVan(q);
+      if (kv) mt.textContent += (mt.textContent ? " · " : "") + kv.naam;
+      if (spuitAan && sb && !kv) { const d = spuitBlok(q.geometry, q, bewaar, sb); if (d) maakDetail().appendChild(d); }
       go.append(nm, mt);
       go.addEventListener("click", () => map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
       const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha) + " ha";
@@ -358,6 +404,29 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       del.setAttribute("aria-label", "Haal perceel " + (i + 1) + " weg");
       del.addEventListener("click", () => { sel.splice(i, 1); bewaar(); teken(); });
       li.append(nr, go, w, del); if (detail) li.appendChild(detail); ul.appendChild(li);
+    });
+    const kb = $("kavelBox"); kb.innerHTML = "";
+    kavels.forEach(kv => {
+      const vorm = kavelVorm(kv), leden = kv.leden.map(k => sel.find(q => q.key === k));
+      if (vorm) {
+        const g = L.geoJSON(vorm, { style: { color: "#e8590c", weight: 4, fill: false }, interactive: false });
+        g.bindTooltip(kv.naam, { permanent: true, direction: "top", className: "pnr kav" });
+        laag.addLayer(g);
+      }
+      const box = document.createElement("div"); box.className = "kavel";
+      const kop = document.createElement("div"); kop.className = "kop";
+      const nm = document.createElement("div");
+      const n1 = document.createElement("div"); n1.className = "naam"; n1.textContent = kv.naam;
+      const n2 = document.createElement("div"); n2.className = "meta"; n2.textContent = "perceel " + leden.map(q => sel.indexOf(q) + 1).join(" + ");
+      nm.append(n1, n2);
+      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(leden.reduce((t, q) => t + q.ha, 0)) + " ha";
+      kop.append(nm, w); box.appendChild(kop);
+      if (!vorm) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Deze percelen liggen niet tegen elkaar aan."; box.appendChild(x); }
+      if (spuitAan && sb && vorm) { const d = spuitBlok(vorm, kv, bewaarK, sb); if (d) box.appendChild(d); }
+      const los = document.createElement("button"); los.type = "button"; los.className = "btn klein"; los.textContent = "Ontkoppelen";
+      los.addEventListener("click", () => { if (!armed(los, "Tik nog eens")) return; kavels = kavels.filter(k => k !== kv); bewaarK(); teken(); });
+      box.appendChild(los);
+      kb.appendChild(box);
     });
     const bfs = sel.map(buffer), tot = sel.reduce((a, q) => a + q.ha, 0);
     const af = bfs.reduce((a, x) => a + x.af, 0), om = bfs.reduce((a, x) => a + x.lengte, 0);
@@ -369,7 +438,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (!sel.length && oeverModus) setOever(false);
     map.invalidateSize();
   }
-  $("bWis").addEventListener("click", e => { if (armed(e.currentTarget, "Tik nog eens om te wissen")) { sel = []; bewaar(); setOever(false); teken(); say("Selectie gewist. Tik op een perceel om te beginnen."); } });
+  $("bWis").addEventListener("click", e => { if (armed(e.currentTarget, "Tik nog eens om te wissen")) { sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); teken(); say("Selectie gewist. Tik op een perceel om te beginnen."); } });
 
   async function zoek(lat, lon) {
     if (map.getZoom() < 14) { map.setView([lat, lon], 16); say("Ingezoomd. Tik nog eens op het perceel."); return; }
@@ -426,6 +495,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     bewaar(); teken();
   }
   function setOever(aan) {
+    if (aan && koppelModus) { koppelModus = false; koppelSet.clear(); $("bKoppel").setAttribute("aria-pressed", false); $("bKoppel").textContent = "Percelen koppelen"; }
     oeverModus = aan;
     $("bOever").setAttribute("aria-pressed", aan);
     $("bOever").textContent = aan ? "Klaar met oevers" : "Oevers aanwijzen";
@@ -434,6 +504,35 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     say(aan ? "Tik op de randen langs het water. Nog eens tikken haalt een oever weg." : "Tik op een perceel om het toe te voegen. Nog eens tikken haalt het weg.");
   }
   $("bOever").addEventListener("click", () => setOever(!oeverModus));
+  // Percelen koppelen tot een kavel
+  function setKoppel(aan) {
+    if (aan && oeverModus) setOever(false);
+    koppelModus = aan; koppelSet.clear();
+    $("bKoppel").setAttribute("aria-pressed", aan);
+    $("bKoppel").textContent = aan ? "Klaar met koppelen" : "Percelen koppelen";
+    say(aan ? "Tik op de percelen die bij elkaar horen (minstens 2), daarna Klaar met koppelen." : "Tik op een perceel om het toe te voegen. Nog eens tikken haalt het weg.");
+    teken();
+  }
+  function koppelTik(lat, lon) {
+    const q = sel.find(x => Perceel.bevatPunt(x.geometry, lon, lat));
+    if (!q) { say("Tik in een gekozen perceel.", true); return; }
+    if (koppelSet.has(q.key)) koppelSet.delete(q.key); else koppelSet.add(q.key);
+    teken();
+    say(koppelSet.size + (koppelSet.size === 1 ? " perceel" : " percelen") + " gekozen. Tik op Klaar met koppelen als je ze allemaal hebt.");
+  }
+  $("bKoppel").addEventListener("click", () => {
+    if (!koppelModus) { setKoppel(true); return; }
+    const leden = [...koppelSet];
+    if (leden.length < 2) { setKoppel(false); say("Kies minstens 2 percelen om te koppelen.", true); return; }
+    const nr = Math.max(0, ...kavels.map(k => parseInt(String(k.naam).replace(/\D/g, ""), 10) || 0)) + 1;
+    const kv = { naam: "Kavel " + nr, leden };
+    if (!kavelVorm(kv)) { setKoppel(false); say("Deze percelen liggen niet tegen elkaar aan (meer dan ongeveer 2 m ertussen, bijvoorbeeld een sloot). Niet gekoppeld.", true); return; }
+    kavels.forEach(k => k.leden = k.leden.filter(x => !leden.includes(x)));
+    kavels = kavels.filter(k => k.leden.length >= 2);
+    kavels.push(kv); bewaarK();
+    setKoppel(false);
+    say(kv.naam + ": " + leden.length + " percelen gekoppeld, samen " + haTxt(leden.reduce((t, k) => t + sel.find(q => q.key === k).ha, 0)) + " ha.");
+  });
   // Water zoeken: randen langs BGT-water automatisch markeren; zelf aangewezen randen blijven staan
   $("bWater").addEventListener("click", async e => {
     const btn = e.currentTarget, old = btn.textContent;
@@ -474,7 +573,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     });
   }
   renderTypes();
-  map.on("click", ev => oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
+  map.on("click", ev => koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
   teken();
   // Paneel eronder groeit/krimpt: kaart laten meeschalen
   if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe($("map"));

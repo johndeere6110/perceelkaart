@@ -1,4 +1,4 @@
-// perceel.js versie 3 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 4 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -8,6 +8,7 @@
 //   Perceel.zijden(geometry), Perceel.rechteZijde(zijden, key)   // randstukjes en lengtes, voor bufferstroken
 //   Perceel.zoekWater(geometry) + Perceel.waterLangsZijden(geometry, water)   // randen langs BGT-water
 //   Perceel.sporen(geometry, breedte, { andereKant, buitenronde })   // spuit-/strooisporen langs de langste zijde
+//   Perceel.verschuif(geometry, d)   // buitenrand d meter naar binnen (negatief: naar buiten)
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
 // "offline" (geen verbinding en niks opgeslagen op deze plek), "server", "geen-perceel". De .message is Nederlands.
@@ -202,6 +203,17 @@
     return uit;
   }
   const ringLengte = r => r.reduce((t, p, i) => i ? t + Math.hypot(p[0] - r[i - 1][0], p[1] - r[i - 1][1]) : 0, 0);
+
+  // Buitenrand van (het grootste deel van) een perceel d meter naar binnen; negatief = naar buiten
+  function verschuif(geometry, d) {
+    const polys = polygonen(geometry);
+    if (!polys.length) return null;
+    const groot = polys.reduce((a, b) => oppervlakteM2({ type: "Polygon", coordinates: [b[0]] }) > oppervlakteM2({ type: "Polygon", coordinates: [a[0]] }) ? b : a);
+    const lat0 = groot[0][0][1], lon0 = groot[0][0][0], f = lat0 * Math.PI / 180;
+    const ky = 111132.92 - 559.82 * Math.cos(2 * f), kx = 111412.84 * Math.cos(f) - 93.5 * Math.cos(3 * f);
+    const r = binnenrand(groot[0].map(c => [(c[0] - lon0) * kx, (c[1] - lat0) * ky]), d);
+    return r ? { type: "Polygon", coordinates: [r.map(p => [lon0 + p[0] / kx, lat0 + p[1] / ky])] } : null;
+  }
 
   /* ---------- Spuit- of strooisporen langs de lange kant ---------- */
   // Sporen evenwijdig aan de langste rechte zijde (AB-lijn), om de `breedte` meter.
@@ -409,5 +421,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, sporen, wisCache, aantalOpgeslagen, API };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, sporen, verschuif, wisCache, aantalOpgeslagen, API };
 });

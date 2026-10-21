@@ -119,7 +119,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 5</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 6</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -288,7 +288,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   }
   // Spuituitleg voor een perceel of kavel; tekent ook de sporen
   function spuitBlok(geom, obj, opslaan, sb) {
-    const s = Perceel.sporen(geom, sb, { andereKant: !!obj.spuitAnders, buitenronde });
+    const s = Perceel.sporen(geom, sb, { andereKant: !!obj.spuitAnders, buitenronde, clip: window.polygonClipping });
     if (!s) return null;
     tekenSporen(obj, s);
     const d = document.createElement("div"); d.className = "sp";
@@ -304,6 +304,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         ? "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt over de buitenronde (die secties uit, anders dubbel)."
         : "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt buiten de kant (sectie uit). Of leg hem tegen de kant: dan " + mDec(s.buitenKant) + " overlap.");
     d.append(r1, r2);
+    if (s.ronde && !s.ronde.exact) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "De buitenronde kon bij deze vorm niet precies berekend worden. Kijk de tekening na."; d.appendChild(x); }
     if (s.gangen) {
       const kb = document.createElement("button"); kb.type = "button"; kb.className = "btn klein";
       kb.textContent = obj.spuitAnders ? "Begin weer aan kant A" : "Begin aan andere kant";
@@ -317,10 +318,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   function tekenSporen(q, s) {
     if (s.ronde) {
       const ll = r => r.map(c => [c[1], c[0]]);
-      spoorLaag.addLayer(L.polygon(s.ronde.band.map(ll), { stroke: false, fillColor: "#4cae5a", fillOpacity: .3, interactive: false }));
-      spoorLaag.addLayer(L.polyline(ll(s.ronde.spoor), { color: "#fff", weight: 2, dashArray: "8 6", opacity: .9, interactive: false }));
-      const r0 = s.ronde.spoor[0];
-      spoorLaag.addLayer(L.marker([r0[1], r0[0]], { icon: L.divIcon({ className: "", html: '<div class="spnr">R</div>', iconSize: [20, 18] }), interactive: false, keyboard: false }));
+      // Niet exact berekend: geen baan tekenen, die kan dan buiten het perceel vallen
+      if (s.ronde.exact) s.ronde.banden.forEach(poly => spoorLaag.addLayer(L.polygon(poly.map(ll), { stroke: false, fillColor: "#4cae5a", fillOpacity: .3, interactive: false })));
+      s.ronde.sporen.forEach(r => spoorLaag.addLayer(L.polyline(ll(r), { color: "#fff", weight: 2, dashArray: "8 6", opacity: .9, interactive: false })));
+      const r0 = s.ronde.sporen.length && s.ronde.sporen[0][0];
+      if (r0) spoorLaag.addLayer(L.marker([r0[1], r0[0]], { icon: L.divIcon({ className: "", html: '<div class="spnr">R</div>', iconSize: [20, 18] }), interactive: false, keyboard: false }));
     }
     s.sporen.forEach(sp => {
       const kleur = sp.nr % 2 ? "#e8b400" : "#3a8fd8";

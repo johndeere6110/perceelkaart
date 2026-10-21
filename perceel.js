@@ -1,4 +1,4 @@
-// perceel.js versie 4 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 5 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -7,7 +7,8 @@
 //   Perceel.oppervlakteHa(geometry), Perceel.bevatPunt(geometry, lon, lat)
 //   Perceel.zijden(geometry), Perceel.rechteZijde(zijden, key)   // randstukjes en lengtes, voor bufferstroken
 //   Perceel.zoekWater(geometry) + Perceel.waterLangsZijden(geometry, water)   // randen langs BGT-water
-//   Perceel.sporen(geometry, breedte, { andereKant, buitenronde })   // spuit-/strooisporen langs de langste zijde
+//   Perceel.sporen(geometry, breedte, { andereKant, buitenronde, clip })   // spuit-/strooisporen langs de langste zijde
+//     clip = polygon-clipping (optioneel): maakt de buitenronde exact, ook bij smalle armen en inhammen
 //   Perceel.verschuif(geometry, d)   // buitenrand d meter naar binnen (negatief: naar buiten)
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
@@ -202,6 +203,62 @@
     uit.push(uit[0]);
     return uit;
   }
+  // Douglas-Peucker voor een gesloten ring in meters: minder punten, zelfde vorm (binnen tol)
+  function vereenvoudig(r, tol) {
+    if (r.length < 5) return r;
+    const houd = r.map(() => false); houd[0] = houd[r.length - 1] = true;
+    let ver = 1, vd = -1;
+    r.forEach((p, i) => { const dd = Math.hypot(p[0] - r[0][0], p[1] - r[0][1]); if (dd > vd) { vd = dd; ver = i; } });
+    houd[ver] = true;
+    const stap = (i, j) => {
+      const a = r[i], b = r[j], dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+      let md = 0, mi = -1;
+      for (let k = i + 1; k < j; k++) {
+        const p = r[k], t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
+        const dd = Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
+        if (dd > md) { md = dd; mi = k; }
+      }
+      if (md > tol) { houd[mi] = true; stap(i, mi); stap(mi, j); }
+    };
+    stap(0, ver); stap(ver, r.length - 1);
+    return r.filter((p, i) => houd[i]);
+  }
+  // Deel van het perceel dat verder dan d meter van elke rand ligt (MultiPolygon in meters).
+  // Exact: perceel min een strook van d rond elke rand. Smalle armen vallen weg, inhammen kloppen.
+  function binnenGebied(polyM, d, clip) {
+    // De rekenbibliotheek struikelt soms over punten die (bijna) samenvallen: dan opnieuw met een iets grovere rand
+    const pogingen = [0.3, 0.5, 1, 2];
+    for (let i = 0; i < pogingen.length; i++) {
+      try { return binnenGebiedEen(polyM, d, clip, pogingen[i], i); } catch (e) { if (i === pogingen.length - 1) throw e; }
+    }
+  }
+  function binnenGebiedEen(polyM, d, clip, tol, poging) {
+    const rand = [], sch = poging * 1e-3;
+    // Hoekcirkels een fractie groter en gedraaid, zodat hun punten niet op de hoeken van de randstroken vallen
+    const rc = d * (1 + 5e-4), hoek0 = 0.137 + poging * 0.29, e = 0.02;
+    polyM.forEach(rings => rings.forEach((ring, ri) => {
+      const r = vereenvoudig(ring, tol).map(p => [p[0] + sch, p[1] - sch * 0.7]);
+      const n = r.length - 1;
+      let opp = 0; for (let j = 0; j < n; j++) opp += r[j][0] * r[j + 1][1] - r[j + 1][0] * r[j][1];
+      for (let j = 0; j < n; j++) {
+        const a = r[j], b = r[j + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (l < 0.01) continue;
+        const ux = (b[0] - a[0]) / l, uy = (b[1] - a[1]) / l, nx = -uy * d, ny = ux * d;
+        // Strook langs de rand, aan beide uiteinden een paar cm langer zodat buren overlappen
+        const a2 = [a[0] - ux * e, a[1] - uy * e], b2 = [b[0] + ux * e, b[1] + uy * e];
+        rand.push([[[a2[0] + nx, a2[1] + ny], [b2[0] + nx, b2[1] + ny], [b2[0] - nx, b2[1] - ny], [a2[0] - nx, a2[1] - ny], [a2[0] + nx, a2[1] + ny]]]);
+        // Cirkel alleen bij een inspringende hoek (daar zou anders een gat aan de binnenkant blijven); bij gaten overal
+        const v = r[(j - 1 + n) % n], kruis = (a[0] - v[0]) * (b[1] - a[1]) - (a[1] - v[1]) * (b[0] - a[0]);
+        if (ri > 0 || kruis * opp < 0) {
+          const schijf = [];
+          for (let k = 0; k < 16; k++) { const t = hoek0 + k / 16 * 2 * Math.PI; schijf.push([a[0] + rc * Math.cos(t), a[1] + rc * Math.sin(t)]); }
+          schijf.push(schijf[0]);
+          rand.push([schijf]);
+        }
+      }
+    }));
+    return clip.difference(polyM, clip.union(...rand));
+  }
   const ringLengte = r => r.reduce((t, p, i) => i ? t + Math.hypot(p[0] - r[i - 1][0], p[1] - r[i - 1][1]) : 0, 0);
 
   // Buitenrand van (het grootste deel van) een perceel d meter naar binnen; negatief = naar buiten
@@ -248,7 +305,8 @@
     const anker = naarM(ab.delen[0].a);
     const rot = p => [(p[0] - anker[0]) * ux + (p[1] - anker[1]) * uy, -(p[0] - anker[0]) * uy + (p[1] - anker[1]) * ux];
     const terug = (x, y) => naarLL([anker[0] + x * ux - y * uy, anker[1] + x * uy + y * ux]);
-    const ringen = polys.flatMap(rings => rings.map(r => r.map(c => rot(naarM(c)))));
+    const polyM = polys.map(rings => rings.map(r => r.map(c => rot(naarM(c)))));
+    const ringen = polyM.flatMap(rings => rings);
     let ymin = Infinity, ymax = -Infinity, xmin = Infinity, xmax = -Infinity;
     ringen[0].forEach(p => { ymin = Math.min(ymin, p[1]); ymax = Math.max(ymax, p[1]); xmin = Math.min(xmin, p[0]); xmax = Math.max(xmax, p[0]); });
     // Het perceel ligt aan één kant van de AB-zijde: vanaf die zijde naar binnen tellen
@@ -259,21 +317,31 @@
     // Buitenronde: eerst een baan langs de hele rand; de gangen doen alleen het midden,
     // en de spuit gaat uit bij het bandenspoor van de buitenronde (halve breedte van de rand)
     const ronde = opts.buitenronde ? (() => {
+      if (opts.clip) {
+        try {
+          // Bandenspoor: rand van het gebied op een halve breedte van de kant; baan: alles binnen één breedte van de kant
+          const spoorG = binnenGebied(polyM, breedte / 2, opts.clip), binnenG = binnenGebied(polyM, breedte, opts.clip);
+          const banden = binnenG.length ? opts.clip.difference(polyM, binnenG) : polyM;
+          const sporen = spoorG.flatMap(p => p);
+          return { sporen, banden, knip: sporen, exact: true };
+        } catch (e) { /* lukt het niet, dan de eenvoudige manier hieronder (exact: false) */ }
+      }
       const spoor = binnenrand(ringen[0], breedte / 2);
       if (!spoor) return null;
       const binnen = W > 2 * breedte + 0.5 ? binnenrand(ringen[0], breedte) : null;
-      return { spoor, binnen };
+      return { sporen: [spoor], banden: [[ringen[0]].concat(binnen ? [binnen] : [])], knip: [spoor], exact: false };
     })() : null;
     const marge = ronde ? breedte : 0;      // strook langs de lange kanten die de buitenronde al doet
     const midden = W - 2 * marge;           // breedte die de gangen nog moeten doen
     // Rest onder 0,5 m telt niet: de perceelgrens zelf is ongeveer een meter nauwkeurig
-    const n = ronde ? (midden > 0.5 ? Math.ceil((midden - 0.5) / breedte) : 0) : Math.max(1, Math.ceil((W - 0.5) / breedte));
+    const n = ronde ? (midden > 0.5 && ronde.knip.length ? Math.ceil((midden - 0.5) / breedte) : 0) : Math.max(1, Math.ceil((W - 0.5) / breedte));
     const rest = n ? midden - (n - 1) * breedte : 0; // wat de laatste gang nog moet doen
-    const knipRingen = ronde ? [ronde.spoor] : ringen;
+    const knipRingen = ronde ? ronde.knip : ringen;
     // Stukken van de lijn y binnen het perceel (snijpunten met alle randen, paarsgewijs)
     const snij = y => {
       const xs = [];
-      knipRingen.forEach(r => { for (let j = 0; j < r.length - 1; j++) { const p = r[j], q = r[j + 1]; if ((p[1] - y) * (q[1] - y) < 0) xs.push(p[0] + (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1])); } });
+      // Half-open regel: een hoekpunt precies op de lijn telt maar aan één kant, anders klapt binnen/buiten om
+      knipRingen.forEach(r => { for (let j = 0; j < r.length - 1; j++) { const p = r[j], q = r[j + 1]; if ((p[1] > y) !== (q[1] > y)) xs.push(p[0] + (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1])); } });
       xs.sort((a, b) => a - b);
       const d = [];
       for (let j = 0; j + 1 < xs.length; j += 2) if (xs[j + 1] - xs[j] > 0.5) d.push({ van: xs[j], tot: xs[j + 1] });
@@ -282,28 +350,32 @@
     const half = breedte / 2, uit = [];
     for (let i = 0; i < n; i++) {
       const y = startY + richtingY * (marge + (i + 0.5) * breedte);
-      // Valt het spoor zelf buiten het perceel (smalle rest), dan de lengte meten langs de rand
       let delen = snij(y);
-      if (!delen.length) delen = snij(startY + richtingY * (W - marge - Math.min(0.5, W / 2)));
+      // Zonder buitenronde kan het spoor van de laatste gang net buiten het perceel vallen (smalle rest):
+      // dan de lengte meten langs de rand. Een gang zonder rijdbaar stuk (smalle plek, buitenronde doet het) vervalt.
+      if (!delen.length && !ronde && i === n - 1) delen = snij(startY + richtingY * (W - Math.min(0.5, W / 2)));
+      if (!delen.length) continue;
+      const nr = uit.length + 1;
       uit.push({
-        nr: i + 1,
-        heen: i % 2 === 0, // heen en weer: oneven gangen van A naar B
+        nr,
+        heen: nr % 2 === 1, // heen en weer: oneven gangen van A naar B
         lengte: delen.reduce((t, d) => t + d.tot - d.van, 0),
         lijnen: delen.map(d => [terug(d.van, y), terug(d.tot, y)]),
         banen: delen.map(d => [terug(d.van, y - half), terug(d.tot, y - half), terug(d.tot, y + half), terug(d.van, y + half), terug(d.van, y - half)])
       });
     }
     const rondeUit = ronde ? {
-      lengte: ringLengte(ronde.spoor),
-      spoor: ronde.spoor.map(p => terug(p[0], p[1])),
-      // Baan van de buitenronde: buitenrand met (als het perceel breed genoeg is) de binnenrand als gat
-      band: [ringen[0].map(p => terug(p[0], p[1]))].concat(ronde.binnen ? [ronde.binnen.map(p => terug(p[0], p[1]))] : []),
+      lengte: ronde.sporen.reduce((t, r) => t + ringLengte(r), 0),
+      sporen: ronde.sporen.map(r => r.map(p => terug(p[0], p[1]))),
+      // Baan van de buitenronde, per deel: buitenrand met gaten
+      banden: ronde.banden.map(poly => poly.map(r => r.map(p => terug(p[0], p[1])))),
+      exact: ronde.exact,
       // Smal perceel: de buitenronde overlapt zichzelf in het midden
       dubbel: W < 2 * breedte ? 2 * breedte - W : 0
     } : null;
     return {
-      breedte, gangen: n, perceelBreedte: W, perceelLengte: xmax - xmin, rest, ronde: rondeUit,
-      buitenKant: n && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
+      breedte, gangen: uit.length, perceelBreedte: W, perceelLengte: xmax - xmin, rest, ronde: rondeUit,
+      buitenKant: uit.length && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
       abLengte: ab.m, a: terug(xmin, startY), b: terug(xmax, startY), sporen: uit,
       totaalM: uit.reduce((t, s) => t + s.lengte, 0) + (rondeUit ? rondeUit.lengte : 0)
     };

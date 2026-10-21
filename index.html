@@ -121,7 +121,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 13</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 14</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -416,7 +416,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const nm = document.createElement("div"); nm.className = "name"; nm.textContent = q.gewas || "Onbekend gewas";
       const mt = document.createElement("div"); mt.className = "meta";
       const bf = buffer(q);
-      mt.textContent = [q.ref ? "referentieperceel" : q.jaar ? "BRP " + q.jaar : "", q.bron === "opgeslagen" ? "uit opgeslagen percelen" : ""].filter(Boolean).join(", ");
+      mt.textContent = [q.ref ? "referentieperceel" : q.jaar ? "BRP " + q.jaar + (/voorlopig/i.test(q.status || "") ? " (voorlopig)" : "") : "", q.bron === "opgeslagen" ? "uit opgeslagen percelen" : ""].filter(Boolean).join(", ");
       // Bufferstrook- en spuituitleg onder de regel, over de volle breedte
       let detail = null;
       const maakDetail = () => detail || (detail = Object.assign(document.createElement("div"), { className: "detail" }));
@@ -511,7 +511,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const p = r.perceel, key = sleutel(p);
       if (punt) { punt.remove(); punt = null; }
       if (!sel.some(q => q.key === key)) {
-        sel.push({ key, gewas: p.gewas || (p.ref ? "Referentieperceel" : ""), jaar: p.jaar, ha: p.ha, bron: p.bron, ref: !!p.ref, geometry: p.geometry, oever: {} });
+        sel.push({ key, gewas: p.gewas || (p.ref ? "Referentieperceel" : ""), jaar: p.jaar, status: p.status || "", ha: p.ha, bron: p.bron, ref: !!p.ref, geometry: p.geometry, oever: {} });
         bewaar(); teken();
       }
       say((p.gewas || "Perceel") + " (" + haTxt(p.ha) + " ha) toegevoegd." + (p.bron === "opgeslagen" ? " Geen verbinding: uit opgeslagen percelen." : ""), p.bron === "opgeslagen");

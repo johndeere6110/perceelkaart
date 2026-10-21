@@ -1,4 +1,4 @@
-// perceel.js versie 10 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 11 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -515,7 +515,7 @@
     const f = o.fetch || (typeof fetch !== "undefined" ? fetch : null);
     if (!f) throw fout("offline", "Geen internet beschikbaar in deze omgeving.");
     const d = o.marge;
-    const url = (o.api || API) + "?f=json&limit=" + o.limit + "&bbox=" + [lon - d, lat - d, lon + d, lat + d].map(v => v.toFixed(6)).join(",");
+    const url = (o.api || API) + "?f=json&limit=" + o.limit + "&bbox=" + [lon - d, lat - d, lon + d, lat + d].map(v => v.toFixed(6)).join(",") + (o.extra || "");
     const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
     const t = ac ? setTimeout(() => ac.abort(), o.timeout) : null;
     let res;
@@ -531,6 +531,16 @@
   // Zoek het perceel op een punt: eerst online, bij geen verbinding uit de opgeslagen percelen
   async function zoekOpPunt(lon, lat, o) {
     o = opts(o);
+    // BRP: eerst expliciet het lopende jaar vragen (opts.jaar), want de nieuwste intekening staat er soms
+    // nog niet als standaard in. Kent PDOK die vraag niet of staat het jaar er nog niet in: gewoon verder.
+    if (!o.api || o.api === API) {
+      const jaar = o.jaar || new Date().getFullYear();
+      try {
+        const fj = await haalOp(lon, lat, Object.assign({}, o, { extra: "&jaar=" + jaar, timeout: Math.round(o.timeout / 2) }));
+        const hit = kies(fj.filter(f => String((f.properties || {}).jaar) === String(jaar)), lon, lat);
+        if (hit) { schrijfCache(o, fj.filter(f => !isLandschap(f))); return { perceel: perceelVan(hit, "online"), lon, lat }; }
+      } catch (e) { /* jaarvraag niet gelukt: hieronder de gewone vraag */ }
+    }
     let features = null, netFout = null;
     try { features = await haalOp(lon, lat, o); } catch (e) { netFout = e; }
     if (features) {

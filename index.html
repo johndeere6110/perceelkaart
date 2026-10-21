@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Perceelkaart</title>
 <meta name="theme-color" content="#2F5A2B">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Perceelkaart">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <style>
 /* Lettertypen staan in de app zelf (Barlow, SIL OFL; zie fonts/OFL.txt): geen verzoeken naar Google */
@@ -115,7 +119,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 4</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 5</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -592,6 +596,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     finally { btn.disabled = false; btn.textContent = old; }
   });
 })();
+</script>
+<script>
+if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+}
 </script>
 </body>
 </html>

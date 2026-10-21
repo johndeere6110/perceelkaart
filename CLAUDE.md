@@ -6,5 +6,6 @@ Web-app om percelen te kiezen op de kaart (PDOK BRP gewaspercelen), het totaal i
 - Taal in de app: Nederlands, komma als decimaalteken.
 - Gegevens staan in localStorage (sleutels kaartTest*, perceelCache). Verander bestaande sleutels niet. Let op: deze app deelt de opslag met de Zaaihulp (zelfde github.io-domein).
 - Gebruik geen alert() of confirm(); gebruik armed() en een hint-tekst.
-- Bij elke wijziging: verhoog het versienummer in de kop van index.html (versie 1 -> 2 enz.).
+- Bij elke wijziging: verhoog het versienummer in de kop van index.html (versie 1 -> 2 enz.) én in sw.js (perceelkaart-v1 -> v2), anders krijgen geïnstalleerde apps de update niet.
+- Eigen app-identiteit: manifest.webmanifest met "id": "/perceelkaart/". Niet veranderen, anders ziet de telefoon hem als een andere app. De Zaaihulp heeft "/zaaihulp/".
 - Push direct naar main, zonder pull request.

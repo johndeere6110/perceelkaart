@@ -1,4 +1,4 @@
-// perceel.js versie 8 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 9 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -23,6 +23,9 @@
   "use strict";
 
   const API = "https://api.pdok.nl/rvo/gewaspercelen/ogc/v1/collections/brpgewas/items";
+  // Referentiepercelen (RVO, afgeleid van de BGT): de topografische kavel, vaak nauwkeuriger dan het ingetekende gewasperceel.
+  // Gebruik: zoekOpPunt(lon, lat, { api: Perceel.API_REF, cacheKey: "perceelCacheRef" })
+  const API_REF = "https://api.pdok.nl/rvo/referentiepercelen/ogc/v1/collections/referentiepercelen/items";
   const R = 6378137; // WGS84-straal, zelfde als turf.area
   const DEF = {
     cacheKey: "perceelCache",
@@ -456,14 +459,15 @@
     };
   }
 
-  const isLandschap = f => String((f.properties || {}).category || "").toLowerCase() === "landschapselement";
+  // Landschapselement (sloot, houtwal)? Veldnaam verschilt per dataset, dus alle tekstwaarden bekijken
+  const isLandschap = f => Object.values(f.properties || {}).some(v => typeof v === "string" && v.trim().toLowerCase() === "landschapselement");
 
   // Vertaal een feature naar wat de app nodig heeft
   function perceelVan(f, bron) {
     const p = f.properties || {};
     return {
       id: f.id != null ? f.id : null,
-      gewas: p.gewas || "", gewascode: p.gewascode != null ? p.gewascode : null,
+      gewas: p.gewas || p.gewasomschrijving || p.category || p.categorie || p.gebruik || "", gewascode: p.gewascode != null ? p.gewascode : null,
       category: p.category || "", jaar: p.jaar != null ? p.jaar : null, status: p.status || "",
       ha: oppervlakteHa(f.geometry), bron: bron, opgehaald: f._ts || Date.now(),
       geometry: f.geometry, eigenschappen: p
@@ -510,7 +514,7 @@
     const f = o.fetch || (typeof fetch !== "undefined" ? fetch : null);
     if (!f) throw fout("offline", "Geen internet beschikbaar in deze omgeving.");
     const d = o.marge;
-    const url = API + "?f=json&limit=" + o.limit + "&bbox=" + [lon - d, lat - d, lon + d, lat + d].map(v => v.toFixed(6)).join(",");
+    const url = (o.api || API) + "?f=json&limit=" + o.limit + "&bbox=" + [lon - d, lat - d, lon + d, lat + d].map(v => v.toFixed(6)).join(",");
     const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
     const t = ac ? setTimeout(() => ac.abort(), o.timeout) : null;
     let res;
@@ -568,5 +572,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, sporen, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, sporen, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
 });

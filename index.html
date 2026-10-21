@@ -120,7 +120,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 10</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 11</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -146,6 +146,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       <label for="spuitB">Spuitbreedte (m)</label>
       <input id="spuitB" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="27">
       <button type="button" class="btn" id="bSpuit" aria-pressed="false">Sporen</button>
+      <label for="sectieB">Sectiebreedte (m)</label>
+      <input id="sectieB" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="3">
+      <span></span>
       <button type="button" class="btn ronde" id="bRonde" aria-pressed="true">Buitenronde eerst: aan</button>
       <button type="button" class="btn ronde" id="bAB" aria-pressed="false">AB-kant kiezen</button>
       <button type="button" class="btn ronde" id="bPijl" aria-pressed="false">Pijlen: uit</button>
@@ -268,6 +271,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const kmTxt = m => (m / 1000).toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " km";
   const mDec = v => v.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + " m";
   spuitEl.addEventListener("input", () => { store.set("kaartSpuitBreedte", spuitEl.value); teken(); });
+  const sectieEl = $("sectieB");
+  sectieEl.value = store.get("kaartSectie", "3");
+  sectieEl.addEventListener("input", () => { store.set("kaartSectie", sectieEl.value); teken(); });
   $("bSpuit").addEventListener("click", () => { spuitAan = !spuitAan; store.set("kaartSpuitAan", spuitAan); teken(); });
   // Kavels: percelen die tegen elkaar liggen en samen gespoten worden
   let kavels = store.get("kaartKavels", []);
@@ -291,7 +297,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   }
   // Spuituitleg voor een perceel of kavel; tekent ook de sporen
   function spuitBlok(geom, obj, opslaan, sb) {
-    const s = Perceel.sporen(geom, sb, { andereKant: !!obj.spuitAnders, buitenronde, clip: window.polygonClipping, abPunt: obj.abPunt || null });
+    const s = Perceel.sporen(geom, sb, { andereKant: !!obj.spuitAnders, buitenronde, clip: window.polygonClipping, abPunt: obj.abPunt || null, sectie: parse(sectieEl.value) || 0 });
     if (!s) return null;
     tekenSporen(obj, s);
     const d = document.createElement("div"); d.className = "sp";
@@ -303,7 +309,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const r2 = document.createElement("div");
     r2.textContent = s.ronde && !s.gangen ? (s.ronde.dubbel >= 0.5 ? "Daarmee ben je klaar. Smal perceel: in het midden spuit je " + mDec(s.ronde.dubbel) + " dubbel." : "Daarmee ben je klaar, het komt precies uit.") :
       s.buitenKant < 0.5 ? "Komt precies uit." :
-      (s.ronde
+      s.secties && s.secties.aan < s.secties.totaal
+        ? "Laatste gang: nog " + mDec(s.rest) + " te spuiten = " + s.secties.aan + " van de " + s.secties.totaal + " secties aan (" + mDec(s.secties.aan * s.secties.breedte) + ")" +
+          (s.ronde ? ", de rest uit boven de buitenronde." : ", de rest uit buiten de kant.") +
+          (s.secties.aan <= 2 ? " Smal restje: een extra gang van " + kmTxt(s.secties.laatsteLengte) + " voor " + (s.secties.aan === 1 ? "1 sectie." : "2 secties.") : "")
+        : (s.ronde
         ? "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt over de buitenronde (die secties uit, anders dubbel)."
         : "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt buiten de kant (sectie uit). Of leg hem tegen de kant: dan " + mDec(s.buitenKant) + " overlap.");
     // AB-lijn voor de GPS: koers in graden en de coördinaten van A

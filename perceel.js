@@ -1,4 +1,4 @@
-// perceel.js versie 7 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 8 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -12,6 +12,7 @@
 //   Perceel.verschuif(geometry, d)   // buitenrand d meter naar binnen (negatief: naar buiten), eenvoudig
 //   Perceel.samenvoegen(geometries, clip, naad)   // percelen tot één vorm, naden tot 2×naad m dicht; null als los
 //   opts.abPunt [lon, lat] bij sporen(): de AB-lijn langs de kant die het dichtst bij dat punt ligt
+//   opts.sectie (m) bij sporen(): laatste gang in hele secties; de baan toont alleen wat aan staat
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
 // "offline" (geen verbinding en niks opgeslagen op deze plek), "server", "geen-perceel". De .message is Nederlands.
@@ -402,6 +403,10 @@
       return d;
     };
     const half = breedte / 2, uit = [];
+    // Secties: de laatste gang hoeft maar een deel te doen; zet zoveel hele secties aan als nodig
+    const sectie = opts.sectie > 0 && opts.sectie <= breedte ? opts.sectie : 0;
+    const sectiesTotaal = sectie ? Math.round(breedte / sectie) : 0;
+    const sectiesAan = sectie && n && rest < breedte - 0.05 ? Math.min(sectiesTotaal, Math.max(1, Math.ceil((rest - 0.05) / sectie))) : sectiesTotaal;
     for (let i = 0; i < n; i++) {
       const y = startY + richtingY * (marge + (i + 0.5) * breedte);
       let delen = snij(y);
@@ -417,7 +422,13 @@
         lijnen: delen.map(d => [terug(d.van, y), terug(d.tot, y)]),
         // Baan die de spuitboom raakt, afgeknipt op het perceel (de spuit gaat niet buiten de kant)
         banen: delen.flatMap(d => {
-          const rh = [[d.van, y - half], [d.tot, y - half], [d.tot, y + half], [d.van, y + half], [d.van, y - half]];
+          // Laatste gang met secties: alleen het deel dat aan staat, gerekend vanaf de kant van de vorige gang
+          let y1 = y - half, y2 = y + half;
+          if (sectie && i === n - 1 && sectiesAan < sectiesTotaal) {
+            const nabij = y - richtingY * half, ver = nabij + richtingY * sectiesAan * sectie;
+            y1 = Math.min(nabij, ver); y2 = Math.max(nabij, ver);
+          }
+          const rh = [[d.van, y1], [d.tot, y1], [d.tot, y2], [d.van, y2], [d.van, y1]];
           let delenM = [[rh]];
           if (opts.clip) { try { delenM = opts.clip.intersection([[rh]], polyM); } catch (e) { /* dan de hele rechthoek */ } }
           return delenM.map(poly => poly.map(r => r.map(p => terug(p[0], p[1]))));
@@ -436,6 +447,7 @@
     return {
       breedte, gangen: uit.length, perceelBreedte: W, perceelLengte: xmax - xmin, rest, ronde: rondeUit,
       buitenKant: uit.length && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
+      secties: sectie ? { breedte: sectie, totaal: sectiesTotaal, aan: sectiesAan, laatsteLengte: uit.length ? uit[uit.length - 1].lengte : 0 } : null,
       abLengte: ab.m, a: terug(0, 0), b: terug(len, 0), sporen: uit,
       // Koers van de AB-lijn in graden t.o.v. het ware noorden, met de klok mee (zoals op een GPS-terminal)
       // (uit de richting in meters oost/noord op de WGS84-ellipsoïde, zoals een GPS-terminal rekent)

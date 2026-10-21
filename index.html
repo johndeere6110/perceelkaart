@@ -108,6 +108,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .spuit .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .sp { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); }
 .sp strong { color: var(--ink); font-weight: 600; }
+.sp .ab { margin-top: 4px; }
 .sp .klein { min-height: 40px; font-size: 15px; margin-top: 6px; width: auto; padding: 0 12px; display: inline-flex; }
 .spnr { background: #1C2318; color: #fff; font: 700 13px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 999px; padding: 0 6px; line-height: 18px; text-align: center; white-space: nowrap; }
 .spijl { color: #fff; font-size: 18px; line-height: 20px; text-align: center; text-shadow: 0 0 3px #000; }
@@ -119,7 +120,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 6</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 7</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -303,7 +304,12 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       (s.ronde
         ? "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt over de buitenronde (die secties uit, anders dubbel)."
         : "Laatste gang: nog " + mDec(s.rest) + " te spuiten, " + mDec(s.buitenKant) + " valt buiten de kant (sectie uit). Of leg hem tegen de kant: dan " + mDec(s.buitenKant) + " overlap.");
-    d.append(r1, r2);
+    // AB-lijn voor de GPS: koers in graden en de coördinaten van A
+    const gr = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "°";
+    const r3 = document.createElement("div"); r3.className = "ab";
+    r3.innerHTML = "<strong>AB-lijn:</strong> koers " + esc(gr(s.koers)) + " (van A naar B), terug " + esc(gr((s.koers + 180) % 360)) +
+      ". A ligt op " + esc(s.a[1].toFixed(6)) + ", " + esc(s.a[0].toFixed(6)) + ".";
+    d.append(r1, r2, r3);
     if (s.ronde && !s.ronde.exact) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "De buitenronde kon bij deze vorm niet precies berekend worden. Kijk de tekening na."; d.appendChild(x); }
     if (s.gangen) {
       const kb = document.createElement("button"); kb.type = "button"; kb.className = "btn klein";
@@ -326,7 +332,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     }
     s.sporen.forEach(sp => {
       const kleur = sp.nr % 2 ? "#e8b400" : "#3a8fd8";
-      sp.banen.forEach(bn => spoorLaag.addLayer(L.polygon(bn.map(c => [c[1], c[0]]), { stroke: false, fillColor: kleur, fillOpacity: .22, interactive: false })));
+      sp.banen.forEach(poly => spoorLaag.addLayer(L.polygon(poly.map(r => r.map(c => [c[1], c[0]])), { stroke: false, fillColor: kleur, fillOpacity: .22, interactive: false })));
       sp.lijnen.forEach(ln => {
         const [a, b] = sp.heen ? ln : [ln[1], ln[0]];
         spoorLaag.addLayer(L.polyline([[a[1], a[0]], [b[1], b[0]]], { color: "#fff", weight: 2, dashArray: "8 6", opacity: .9, interactive: false }));

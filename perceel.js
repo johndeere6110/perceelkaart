@@ -1,4 +1,4 @@
-// perceel.js versie 5 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 6 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -361,7 +361,13 @@
         heen: nr % 2 === 1, // heen en weer: oneven gangen van A naar B
         lengte: delen.reduce((t, d) => t + d.tot - d.van, 0),
         lijnen: delen.map(d => [terug(d.van, y), terug(d.tot, y)]),
-        banen: delen.map(d => [terug(d.van, y - half), terug(d.tot, y - half), terug(d.tot, y + half), terug(d.van, y + half), terug(d.van, y - half)])
+        // Baan die de spuitboom raakt, afgeknipt op het perceel (de spuit gaat niet buiten de kant)
+        banen: delen.flatMap(d => {
+          const rh = [[d.van, y - half], [d.tot, y - half], [d.tot, y + half], [d.van, y + half], [d.van, y - half]];
+          let delenM = [[rh]];
+          if (opts.clip) { try { delenM = opts.clip.intersection([[rh]], polyM); } catch (e) { /* dan de hele rechthoek */ } }
+          return delenM.map(poly => poly.map(r => r.map(p => terug(p[0], p[1]))));
+        })
       });
     }
     const rondeUit = ronde ? {
@@ -377,6 +383,9 @@
       breedte, gangen: uit.length, perceelBreedte: W, perceelLengte: xmax - xmin, rest, ronde: rondeUit,
       buitenKant: uit.length && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
       abLengte: ab.m, a: terug(xmin, startY), b: terug(xmax, startY), sporen: uit,
+      // Koers van de AB-lijn in graden t.o.v. het ware noorden, met de klok mee (zoals op een GPS-terminal)
+      // (uit de richting in meters oost/noord op de WGS84-ellipsoïde, zoals een GPS-terminal rekent)
+      koers: (Math.atan2(ux, uy) * 180 / Math.PI + 360) % 360,
       totaalM: uit.reduce((t, s) => t + s.lengte, 0) + (rondeUit ? rondeUit.lengte : 0)
     };
   }

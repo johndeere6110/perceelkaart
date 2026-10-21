@@ -120,7 +120,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 9</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 10</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -148,6 +148,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       <button type="button" class="btn" id="bSpuit" aria-pressed="false">Sporen</button>
       <button type="button" class="btn ronde" id="bRonde" aria-pressed="true">Buitenronde eerst: aan</button>
       <button type="button" class="btn ronde" id="bAB" aria-pressed="false">AB-kant kiezen</button>
+      <button type="button" class="btn ronde" id="bPijl" aria-pressed="false">Pijlen: uit</button>
     </div>
     <div id="kavelBox"></div>
     <ul class="log" id="lijst"></ul>
@@ -259,6 +260,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   spuitEl.value = store.get("kaartSpuitBreedte", "27");
   let spuitAan = store.get("kaartSpuitAan", false);
   let buitenronde = store.get("kaartBuitenronde", true);
+  // Rijrichtingspijlen op de sporen: standaard uit, want het wordt al snel druk op de kaart
+  let pijlenAan = store.get("kaartPijlen", false);
+  $("bPijl").addEventListener("click", () => { pijlenAan = !pijlenAan; store.set("kaartPijlen", pijlenAan); teken(); });
   $("bRonde").addEventListener("click", () => { buitenronde = !buitenronde; store.set("kaartBuitenronde", buitenronde); teken(); });
   const spuitBreedte = () => { const b = parse(spuitEl.value); return b >= 1 && b <= 100 ? b : null; };
   const kmTxt = m => (m / 1000).toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " km";
@@ -346,7 +350,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         const nrp = [a[0] + (b[0] - a[0]) * 0.12, a[1] + (b[1] - a[1]) * 0.12];
         spoorLaag.addLayer(L.marker([nrp[1], nrp[0]], { icon: L.divIcon({ className: "", html: '<div class="spnr">' + sp.nr + '</div>', iconSize: [24, 18] }), interactive: false, keyboard: false }));
         const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-        spoorLaag.addLayer(L.marker([mid[1], mid[0]], { icon: L.divIcon({ className: "", html: '<div class="spijl" style="transform:rotate(' + hoek(a, b).toFixed(0) + 'deg)">➜</div>', iconSize: [20, 20] }), interactive: false, keyboard: false }));
+        if (pijlenAan) spoorLaag.addLayer(L.marker([mid[1], mid[0]], { icon: L.divIcon({ className: "", html: '<div class="spijl" style="transform:rotate(' + hoek(a, b).toFixed(0) + 'deg)">➜</div>', iconSize: [20, 20] }), interactive: false, keyboard: false }));
       });
     });
     [["A", s.a], ["B", s.b]].forEach(([t, c]) => spoorLaag.addLayer(L.marker([c[1], c[0]], { icon: L.divIcon({ className: "", html: '<div class="abl">' + t + '</div>', iconSize: [20, 20] }), interactive: false, keyboard: false })));
@@ -359,6 +363,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("bSpuit").textContent = spuitAan ? "Sporen uit" : "Sporen";
     $("bRonde").hidden = !spuitAan;
     $("bAB").hidden = !spuitAan;
+    $("bPijl").hidden = !spuitAan;
+    $("bPijl").setAttribute("aria-pressed", pijlenAan);
+    $("bPijl").textContent = "Pijlen: " + (pijlenAan ? "aan" : "uit");
     $("bRonde").setAttribute("aria-pressed", buitenronde);
     $("bRonde").textContent = "Buitenronde eerst: " + (buitenronde ? "aan" : "uit");
     // Kavels opschonen: weggehaalde percelen eruit, kavel met minder dan 2 percelen vervalt

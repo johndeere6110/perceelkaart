@@ -121,7 +121,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 21</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 22</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -419,14 +419,16 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const koppelSet = new Set();
   const kavelVan = q => kavels.find(k => k.leden.includes(q.key));
   const kavelCache = new Map();
-  // Samengevoegde vorm: elk perceel 1 m groter (naden dicht), samenvoegen, weer 1 m kleiner. null = ligt niet tegen elkaar.
+  // Samengevoegde vorm: elk perceel 1,75 m groter, samenvoegen, weer 1,75 m kleiner: naden en paden tot 3,5 m dicht.
+  // null = ligt niet tegen elkaar. De oppervlakte van de kavel blijft de som van de percelen (het pad telt niet mee).
+  const NAAD = 1.75;
   function kavelVorm(kv) {
     const id = kv.leden.slice().sort().join("|");
     if (kavelCache.has(id)) return kavelCache.get(id);
     let vorm = null;
     try {
       const gs = kv.leden.map(k => sel.find(q => q.key === k)).filter(Boolean).map(q => q.geometry);
-      if (window.polygonClipping && gs.length >= 2) vorm = Perceel.samenvoegen(gs, polygonClipping, 1);
+      if (window.polygonClipping && gs.length >= 2) vorm = Perceel.samenvoegen(gs, polygonClipping, NAAD);
     } catch (e) { vorm = null; }
     kavelCache.set(id, vorm);
     return vorm;
@@ -648,6 +650,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       nm.append(n1, n2);
       const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(leden.reduce((t, q) => t + q.ha, 0)) + " ha";
       kop.append(nm, w); box.appendChild(kop);
+      // Pad of naad tussen de percelen: zit in de vorm voor de sporen, niet in de ha
+      if (vorm) {
+        const pad = (Perceel.oppervlakteM2(vorm) - leden.reduce((t, q) => t + Perceel.oppervlakteM2(q.geometry), 0));
+        if (pad >= 20) { const x = document.createElement("div"); x.className = "meta"; x.textContent = "Pad of naad ertussen: ca. " + m2Txt(Math.round(pad / 10) * 10) + ", telt niet mee in de ha."; box.appendChild(x); }
+      }
       if (!vorm) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Deze percelen liggen niet tegen elkaar aan."; box.appendChild(x); }
       if (spuitAan && sb && vorm) { const d = spuitBlok(vorm, kv, bewaarK, sb); if (d) box.appendChild(d); }
       const los = document.createElement("button"); los.type = "button"; los.className = "btn klein"; los.textContent = "Ontkoppelen";
@@ -787,7 +794,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (leden.length < 2) { setKoppel(false); say("Kies minstens 2 percelen om te koppelen.", true); return; }
     const nr = Math.max(0, ...kavels.map(k => parseInt(String(k.naam).replace(/\D/g, ""), 10) || 0)) + 1;
     const kv = { naam: "Kavel " + nr, leden };
-    if (!kavelVorm(kv)) { setKoppel(false); say("Deze percelen liggen niet tegen elkaar aan (meer dan ongeveer 2 m ertussen, bijvoorbeeld een sloot). Niet gekoppeld.", true); return; }
+    if (!kavelVorm(kv)) { setKoppel(false); say("Deze percelen liggen niet tegen elkaar aan (meer dan ongeveer 3,5 m ertussen, bijvoorbeeld een sloot). Niet gekoppeld.", true); return; }
     kavels.forEach(k => k.leden = k.leden.filter(x => !leden.includes(x)));
     kavels = kavels.filter(k => k.leden.length >= 2);
     kavels.push(kv); bewaarK();

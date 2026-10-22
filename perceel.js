@@ -1,4 +1,4 @@
-// perceel.js versie 18 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 19 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -656,7 +656,8 @@
   // de laatste gang overlapt de rondes (die elementen gaan dan uit). Rijen geteld van links in de rijrichting.
   // Sporen van de spuit-buitenronde ("R") liggen langs de lange kanten; in de zaairondes ligt dat spoor rondom op dezelfde
   // afstand van de rand, dus dezelfde rijen. Kopakkers zonder zaairondes niet meegenomen.
-  // Geeft { rijen, rondes, aantalGangen, ritme, gangen: [{ soort: "ronde"|"gang", gang, kant, heen, dicht, sporen, buiten }] }.
+  // Geeft { rijen, rondes, aantalGangen, ritme, gangen: [{ soort: "ronde"|"gang", gang, kant, heen, midden, dicht, sporen, buiten }] }.
+  // midden = hart van de zaaigang, afstand tot de AB-kant (m).
   // ritme: { gangen, sporen } = in het binnenveld herhaalt het patroon elke `gangen` gangen met `sporen` spuitsporen.
   // buiten: spoor in het binnenveld buiten het vaste ritme. Rondes regelt de computer niet met het ritme.
   function zaaiPlan(s, o) {
@@ -700,14 +701,14 @@
           const pos = p.lo + (k + 0.5) * ra;
           if (pos < p.min - 0.01 || pos > p.max + 0.01 || Math.abs(pos - wd) > band / 2 + 0.03) continue;
           const id = p.soort + p.gang + (p.kant || "");
-          if (!per.has(id)) per.set(id, { soort: p.soort, gang: p.gang, kant: p.kant || null, heen: p.heen, dicht: new Set(), sporen: new Set(), buiten: false });
+          if (!per.has(id)) per.set(id, { soort: p.soort, gang: p.gang, kant: p.kant || null, heen: p.heen, midden: (p.lo + p.hi) / 2, dicht: new Set(), sporen: new Set(), buiten: false });
           const x = per.get(id);
           x.dicht.add(naarLinks ? n - k : k + 1); x.sporen.add(b.label);
           if (p.soort === "gang" && b.buiten) x.buiten = true;
         }
       });
     }));
-    let gangen = [...per.values()].map(x => ({ soort: x.soort, gang: x.gang, kant: x.kant, heen: x.heen, dicht: [...x.dicht].sort((a, b) => a - b), sporen: [...x.sporen], buiten: x.buiten }));
+    let gangen = [...per.values()].map(x => ({ soort: x.soort, gang: x.gang, kant: x.kant, heen: x.heen, midden: x.midden, dicht: [...x.dicht].sort((a, b) => a - b), sporen: [...x.sporen], buiten: x.buiten }));
     // Rondes: zelfde rijen aan beide kanten = rondom
     gangen = gangen.filter(g => {
       if (g.soort !== "ronde" || g.kant !== "over") return true;

@@ -103,6 +103,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .sp .zaai { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .sp .zaai .btab td:nth-child(3) { font-weight: 600; color: var(--ink); }
 .sp .zaai .btab tr.buiten td { color: var(--warn); }
+.sp .zaai .start { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--bg); color: var(--ink); }
 .kavel { margin-top: 10px; border: 2px solid #e8590c; border-radius: 10px; padding: 10px 12px; }
 .kavel .kop { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; }
 .kavel .naam { font-weight: 600; }
@@ -127,7 +128,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 25</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 26</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -527,30 +528,43 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const k = document.createElement("div");
     k.innerHTML = "<strong>Zaaien " + esc(mDec(zi.b)) + "</strong> (" + z.rijen + " rijen op " + esc(cm(zi.r)) + "): " + esc(
       (z.rondes ? "eerst " + z.rondes + (z.rondes === 1 ? " ronde" : " rondes") + " (" + mDec(z.rondes * zi.b) + ") " + klok + ", dan " : "") +
-      z.aantalGangen + " gangen" + (z.rondes ? " in het binnenveld" : "") + " op dezelfde AB-lijn: gang 1 " + (andere ? "aan de overkant" : "aan de AB-kant") +
-      (z.rondes ? " tegen de rondes" : "") + ", van A naar B, daarna heen en weer" + (z.rondes ? "; de laatste gang overlapt de rondes" : "") +
+      z.aantalGangen + " gangen" + (z.rondes ? " in het binnenveld" : "") + " op dezelfde AB-lijn, geteld vanaf " + (andere ? "de overkant" : "de AB-kant") +
+      ", rijrichting om en om (" + (z.rondes ? "binnen" : "") + "gang 1 van A naar B)" + (z.rondes ? "; de laatste gang overlapt de rondes" : "") +
       ". Rijen geteld van links, gezien in de rijrichting.");
     d.appendChild(k);
     const binnen = z.gangen.filter(g => g.soort === "gang");
+    // Gangnummer zoals je telt vanaf de rand: rondes + binnengang
+    const totaal = g => g.soort === "gang" ? g.gang + z.rondes : g.gang;
+    const gNaam = g => z.rondes ? totaal(g) + " (binnen " + g.gang + ")" : String(g.gang);
+    const kantVan = rijen => rijen.every(x => x <= z.rijen / 2) ? "links" : rijen.every(x => x > z.rijen / 2) ? "rechts" : "in het midden";
+    // Startadvies: begin het binnenveld in het eerste spuitpad, dan zit het pad aan de goede kant
+    const eerste = zi.sp && binnen.find(g => !g.buiten && g.dicht.length);
+    if (eerste) {
+      const x = document.createElement("div"); x.className = "start";
+      const om = eerste.heen ? "B → A" : "A → B", ander = kantVan(eerste.dicht.map(r => z.rijen + 1 - r));
+      x.innerHTML = "<strong>Start binnenveld:</strong> " + esc("begin in het spuitpad, gang " + gNaam(eerste) + " (hart " + mDec(Math.round(eerste.midden * 10) / 10) + " van de AB-kant), en rij hem van " +
+        (eerste.heen ? "A → B" : "B → A") + ". Het spuitpad zit dan " + kantVan(eerste.dicht) + " op de zaaier (rij " + eerste.dicht.join(" en ") + " van links). Rij je hem " + om + ", dan zit het " + ander + ": verkeerde kant. Daarna heen en weer; de gangen tussen de rondes en dit pad zaai je zonder spuitpad.");
+      d.appendChild(x);
+    }
     // Ritme voor de zaaicomputer: welke binnengangen een spuitspoor krijgen
     if (zi.sp && binnen.length) {
       const n = document.createElement("div"), vast = binnen.filter(g => !g.buiten), r = z.ritme;
       let t = r ? (r.sporen === 1 ? "spuitspoor elke " + r.gangen + " gangen" : "ritme van " + r.gangen + " gangen met " + r.sporen + " spuitsporen (" + mDec(sb) + " is geen veelvoud van " + mDec(zi.b) + ")")
         : "geen vast ritme (" + mDec(sb) + " en " + mDec(zi.b) + " gaan niet op)";
-      t += ". Spuitspoor in " + (z.rondes ? "binnengang " : "gang ") + vast.slice(0, 6).map(g => g.gang).join(", ") + (vast.length > 6 ? " …" : "") + ".";
+      t += ". Spuitspoor in gang " + vast.slice(0, 6).map(g => totaal(g)).join(", ") + (vast.length > 6 ? " …" : "") + (z.rondes ? " (geteld vanaf de rand, rondes meegeteld)" : "") + ".";
       if (r) {
-        const pos = [...new Set(vast.map(g => (g.gang - 1) % r.gangen + 1))].sort((x, y) => x - y);
-        t += " In elk blok van " + r.gangen + ": gang " + pos.join(" en ") + " (blok 1 begint bij " + (z.rondes ? "binnengang" : "gang") + " 1).";
+        const stap = vast.slice(1, 4).map((g, i) => g.gang - vast[i].gang);
+        if (stap.length) t += " Vanaf het eerste pad steeds " + stap.join(", ") + " … gangen verder.";
         // Oneven ritme: het volgende blok rijdt andersom, dan spiegelen de rijnummers
         const spiegel = r.gangen % 2 === 1 && vast.some(g => vast.some(h => (h.gang - g.gang) % r.gangen === 0 && h.dicht.join() !== g.dicht.join()));
-        if (spiegel) t += " " + r.gangen + " is oneven: elk volgend blok rijdt andersom, dus de rijnummers spiegelen (zie de tabel). Kijk of je terminal dat zelf bijhoudt.";
+        if (spiegel) t += " " + r.gangen + " is oneven: elk volgend blok rijdt andersom, dus de rijnummers spiegelen (zie de tabel). Begin je met de computer in het eerste spuitpad, dan houdt het ritme dat bij.";
       }
       n.innerHTML = "<strong>Ritme zaaicomputer:</strong> " + esc(t);
       d.appendChild(n);
       const los = binnen.filter(g => g.buiten);
       if (los.length) {
         const x = document.createElement("div"); x.className = "warn4";
-        x.textContent = "Buiten het ritme: " + (z.rondes ? "binnengang " : "gang ") + los.map(g => g.gang).join(", ") + (los.some(g => g.sporen.includes("R")) ? " (buitenronde van de spuit)" : "") + ". Daar regelt het ritme het niet: zelf de rijen dichtzetten.";
+        x.textContent = "Buiten het ritme: gang " + los.map(g => gNaam(g)).join(", ") + (los.some(g => g.sporen.includes("R")) ? " (buitenronde van de spuit)" : "") + ". Daar regelt het ritme het niet: zelf de rijen dichtzetten.";
         d.appendChild(x);
       }
     }
@@ -568,7 +582,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const kantTxt = { rondom: "rondom", ab: "AB-kant", over: "overkant" };
       z.gangen.forEach(g => {
         const tr = document.createElement("tr"); if (g.buiten) tr.className = "buiten";
-        const naam = g.soort === "ronde" ? "Ronde " + g.gang + " " + kantTxt[g.kant] : String(g.gang) + (g.buiten ? " *" : "");
+        const naam = g.soort === "ronde" ? "Ronde " + g.gang + " " + kantTxt[g.kant] : gNaam(g) + (g.buiten ? " *" : "");
         const rijdt = g.soort === "ronde" && g.kant === "rondom" ? (zi.metDeKlok ? "met klok" : "tegen klok") : g.heen ? "A → B" : "B → A";
         [naam, rijdt, g.dicht.join(", "), g.sporen.map(x => x === "R" ? "buitenronde" : x).join(", ")].forEach(t => {
           const td = document.createElement("td"); td.textContent = t; tr.appendChild(td);

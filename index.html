@@ -112,6 +112,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .zl { background: #f2c200; color: #1C2318; font: 700 15px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 6px; padding: 1px 6px; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; box-shadow: 0 0 0 2px #1C2318; }
 .zl.st { background: #e8590c; color: #fff; font-size: 17px; }
 .zl.rd { background: #9c36b5; color: #fff; }
+.zb { background: #fff; color: #1C2318; font: 700 14px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 999px; min-width: 20px; line-height: 20px; text-align: center; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; box-shadow: 0 0 0 1px #1C2318; }
 .zpijl { color: #fff; font-size: 24px; line-height: 28px; text-align: center; text-shadow: 0 0 3px #000, 0 0 3px #000; }
 .zpijl.st { color: #ffd8a8; font-size: 30px; }
 .sp .zaai .start { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--bg); color: var(--ink); }
@@ -139,7 +140,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 31</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 32</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -187,6 +188,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       <button type="button" class="btn ronde" id="bRonde" aria-pressed="true">Buitenronde eerst: aan</button>
       <button type="button" class="btn ronde" id="bAB" aria-pressed="false">AB-kant kiezen</button>
       <button type="button" class="btn ronde" id="bPijl" aria-pressed="false">Pijlen: uit</button>
+      <button type="button" class="btn ronde" id="bGang" aria-pressed="true">Zaaigangen: aan</button>
     </div>
     <div id="kavelBox"></div>
     <ul class="log" id="lijst"></ul>
@@ -435,6 +437,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // Rijrichtingspijlen op de sporen: standaard uit, want het wordt al snel druk op de kaart
   let pijlenAan = store.get("kaartPijlen", false);
   $("bPijl").addEventListener("click", () => { pijlenAan = !pijlenAan; store.set("kaartPijlen", pijlenAan); teken(); });
+  // Zaaigangen op de kaart: hartlijn van elke gang en hoeveel banen er tussen de spuitpaden zitten
+  let gangLijnen = store.get("kaartZaaiLijnen", true);
+  $("bGang").addEventListener("click", () => { gangLijnen = !gangLijnen; store.set("kaartZaaiLijnen", gangLijnen); teken(); });
   $("bRonde").addEventListener("click", () => { buitenronde = !buitenronde; store.set("kaartBuitenronde", buitenronde); teken(); });
   const spuitBreedte = () => { const b = parse(spuitEl.value); return b >= 1 && b <= 100 ? b : null; };
   const kmTxt = m => (m / 1000).toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " km";
@@ -569,6 +574,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       regel("Spuitpaden", "kast vast op teller " + teller(eerste) + " · " + (zelfde ? "altijd rij " + eerste.dicht.join(" + ") + " (" + kantVan(eerste.dicht) + ")" : "rijen wisselen per pad (zie Uitleg)"));
       regel("Rondjes", "lijn " + lijn(paden[0]) + " " + pijl(paden[0]) + ", dan " + paden.slice(1, 7).map(lijn).join(" · ") + (paden.length > 7 ? " …" : "") + " om en om");
       if (vrij) regel("Daarna", "kast vast op teller " + vrij + ", rest zaaien");
+      if (gangLijnen) regel("Kaart", "wit rondje = aantal banen tussen de paden");
     } else if (eerste) {
       regel("Start", "lijn " + lijn(eerste) + (R ? " · teller " + teller(eerste) : "") + " · " + pijl(eerste) + " · rij " + eerste.dicht.join(" + ") + " (" + kantVan(eerste.dicht) + ")");
       regel("Paden", "lijn " + vast.slice(1, 8).map(lijn).join(" · ") + (vast.length > 8 ? " …" : ""));
@@ -633,8 +639,29 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     // Op de kaart: gangen met een spuitpad als strook met het lijnnummer, de startgang met een pijl
     if (window.polygonClipping) {
       const key = JSON.stringify([s.a, s.b, s.koers, zi, andere, sb, buitenronde]);
-      if (!zaaiKaartCache.has(key)) { let v = []; try { v = Perceel.zaaiVlakken(s, z, polygonClipping); } catch (e) {} zaaiKaartCache.set(key, v); if (zaaiKaartCache.size > 30) zaaiKaartCache.delete(zaaiKaartCache.keys().next().value); }
-      zaaiKaartCache.get(key).forEach((v, i) => {
+      if (!zaaiKaartCache.has(key)) {
+        let v = [], lj = [];
+        try { v = Perceel.zaaiVlakken(s, z, polygonClipping); } catch (e) {}
+        try { lj = Perceel.zaaiLijnen(s, z, polygonClipping); } catch (e) {}
+        zaaiKaartCache.set(key, { vlakken: v, lijnen: lj });
+        if (zaaiKaartCache.size > 30) zaaiKaartCache.delete(zaaiKaartCache.keys().next().value);
+      }
+      const kaart = zaaiKaartCache.get(key);
+      if (gangLijnen) {
+        kaart.lijnen.forEach(g => g.lijnen.forEach(ln => spoorLaag.addLayer(L.polyline(ln.map(c => [c[1], c[0]]), { color: "#fff", weight: 1.5, opacity: .85, dashArray: "3 6", interactive: false }))));
+        // Aantal banen tussen de spuitpaden (en tussen de rondes en het eerste pad, en na het laatste)
+        const padNr = [...new Set(binnen.filter(g => g.dicht.length).map(g => g.gang))].sort((a, b) => a - b);
+        const grenzen = [0].concat(padNr, [z.aantalGangen + 1]);
+        grenzen.slice(1).forEach((b, i) => {
+          const a = grenzen[i], tal = b - a - 1;
+          if (tal < 1) return;
+          const m = kaart.lijnen.find(g => g.gang === Math.floor((a + b) / 2)), ln = m && m.lijnen[0];
+          if (!ln) return;
+          const t = i % 2 ? 0.72 : 0.88, pt = [ln[0][0] + (ln[1][0] - ln[0][0]) * t, ln[0][1] + (ln[1][1] - ln[0][1]) * t];
+          spoorLaag.addLayer(L.marker([pt[1], pt[0]], { icon: L.divIcon({ className: "", html: '<div class="zb" title="' + tal + (tal === 1 ? " baan" : " banen") + ' ertussen">' + tal + "</div>", iconSize: null }), interactive: false, keyboard: false }));
+        });
+      }
+      kaart.vlakken.forEach((v, i) => {
         const isStart = v.g === eerste || (eerste && v.g.soort === eerste.soort && v.g.gang === eerste.gang && v.g.kant === eerste.kant);
         const kleur = v.g.soort === "ronde" ? "#9c36b5" : isStart ? "#e8590c" : v.g.buiten ? "#868e96" : "#f2c200";
         spoorLaag.addLayer(L.geoJSON(v.geometry, { style: { color: "#1C2318", weight: 1, opacity: .8, fillColor: kleur, fillOpacity: isStart ? .8 : .65 }, interactive: false }));
@@ -687,6 +714,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("bRonde").hidden = !spuitAan;
     $("bAB").hidden = !spuitAan;
     $("bPijl").hidden = !spuitAan;
+    $("bGang").hidden = !spuitAan || !parse($("zaaiB").value);
+    $("bGang").setAttribute("aria-pressed", gangLijnen);
+    $("bGang").textContent = "Zaaigangen: " + (gangLijnen ? "aan" : "uit");
     const zaaiAan = !!parse($("zaaiB").value);
     document.querySelectorAll(".spuit .zx").forEach(el => el.hidden = !zaaiAan);
     $("bKlok").textContent = metDeKlok ? "met de klok" : "tegen de klok";

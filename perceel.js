@@ -1,4 +1,4 @@
-// perceel.js versie 21 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 22 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -17,7 +17,8 @@
 //   opts.abPunt [lon, lat] bij sporen(): de AB-lijn langs de kant die het dichtst bij dat punt ligt
 //   opts.sectie (m) bij sporen(): laatste gang in hele secties; de baan toont alleen wat aan staat
 //   Perceel.zaaiPlan(sporen, { breedte, rij, spoor, band, rondes, metDeKlok, andereKant, padenEerst, padLinks })
-//   Perceel.zaaiVlakken(sporen, plan, clip)   // stroken op de kaart voor de gangen met een spuitpad   // welke zaai-elementen dicht voor de spuitsporen
+//   Perceel.zaaiVlakken(sporen, plan, clip)   // stroken op de kaart voor de gangen met een spuitpad
+//   Perceel.zaaiLijnen(sporen, plan, clip)    // hartlijn van elke binnengang, binnen de rondes   // welke zaai-elementen dicht voor de spuitsporen
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
 // "offline" (geen verbinding en niks opgeslagen op deze plek), "server", "geen-perceel". De .message is Nederlands.
@@ -731,7 +732,24 @@
         paden.forEach((g, i) => { if (i && g.heen === paden[i - 1].heen) spiegel(g); });
       }
     }
-    return { rijen: n, rondes: r, breedte: zb, aantalGangen: aantal, ritme, gangen };
+    const alle = passen.filter(p => p.soort === "gang").map(p => ({ gang: p.gang, midden: (p.lo + p.hi) / 2 }));
+    return { rijen: n, rondes: r, breedte: zb, aantalGangen: aantal, ritme, gangen, alle };
+  }
+  // Hartlijn van elke binnengang (plan.alle), afgeknipt binnen de rondes: [{ gang, midden, lijnen: [[lonlat, lonlat], ...] }]
+  function zaaiLijnen(s, plan, clip) {
+    if (!s || !s.vlak || !plan || !plan.alle) return [];
+    const { polyM, terug } = s.vlak, f = s.zijde || 1;
+    let kern = polyM;
+    if (plan.rondes && clip) { try { kern = binnenGebied(polyM, plan.rondes * plan.breedte, clip); } catch (e) { kern = polyM; } }
+    const ringen = kern.flatMap(rings => rings);
+    return plan.alle.map(g => {
+      const y = f * g.midden, xs = [];
+      ringen.forEach(r => { for (let j = 0; j < r.length - 1; j++) { const p = r[j], q = r[j + 1]; if ((p[1] > y) !== (q[1] > y)) xs.push(p[0] + (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1])); } });
+      xs.sort((a, b) => a - b);
+      const lijnen = [];
+      for (let j = 0; j + 1 < xs.length; j += 2) if (xs[j + 1] - xs[j] > 1) lijnen.push([terug(xs[j], y), terug(xs[j + 1], y)]);
+      return { gang: g.gang, midden: g.midden, lijnen };
+    });
   }
   // Stroken op de kaart voor de gangen uit een zaaiPlan: binnengang = strook van één zaaibreedte binnen de rondes,
   // ronde = ring op die afstand van de rand. Geeft [{ g, geometry (MultiPolygon), label [lon, lat], pijl: [van, naar] | null,
@@ -900,5 +918,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, zaaiPlan, zaaiVlakken, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
 });

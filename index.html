@@ -99,7 +99,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .spuit input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .spuit .btn { min-height: 48px; padding: 0 14px; flex: none; }
 .spuit .ronde { grid-column: 1 / -1; }
-.spuit [hidden] { display: none; }
+.spuit [hidden] { display: none !important; } /* ook knoppen met een eigen display (1,50/1,80, klok) */
 .spuit .aanuit { grid-column: 1 / -1; display: flex; gap: 8px; }
 .spuit .aanuit .btn { flex: 1; }
 .spuit .spoorKeus { display: flex; gap: 4px; }
@@ -147,7 +147,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 37</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 38</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">

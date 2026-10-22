@@ -112,11 +112,12 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .zl { background: #f2c200; color: #1C2318; font: 700 12px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 4px; padding: 0 4px; line-height: 15px; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; box-shadow: 0 0 0 2px #1C2318; }
 .zl.st { background: #e8590c; color: #fff; font-size: 13px; }
 .zl.rd { background: #9c36b5; color: #fff; }
+.zl.rk { background: #e5dbff; color: #1C2318; }
 .zb { background: #fff; color: #1C2318; font: 700 11px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 999px; min-width: 15px; line-height: 15px; text-align: center; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; box-shadow: 0 0 0 1px #1C2318; }
 .zpijl { color: #fff; font-size: 16px; line-height: 28px; text-align: center; text-shadow: 0 0 3px #000, 0 0 3px #000; }
 .zpijl.st { color: #ffd8a8; font-size: 20px; }
 /* Uitgezoomd: alleen START en de ronde, anders staan de nummers op elkaar */
-#map.ver .zb, #map.ver .zl:not(.st):not(.rd), #map.ver .zpijl:not(.st) { display: none; }
+#map.ver .zb, #map.ver .zl:not(.st):not(.rd), #map.ver .zl.rk, #map.ver .zpijl:not(.st) { display: none; }
 .sp .zaai .start { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--bg); color: var(--ink); }
 .kavel { margin-top: 10px; border: 2px solid #e8590c; border-radius: 10px; padding: 10px 12px; }
 .kavel .kop { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; }
@@ -142,7 +143,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 33</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 34</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -653,14 +654,20 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       }
       const kaart = zaaiKaartCache.get(key);
       if (gangLijnen) {
-        kaart.lijnen.forEach(g => g.lijnen.forEach(ln => spoorLaag.addLayer(L.polyline(ln.map(c => [c[1], c[0]]), { color: "#fff", weight: 1.5, opacity: .85, dashArray: "3 6", interactive: false }))));
+        kaart.lijnen.forEach(g => g.lijnen.forEach(ln => spoorLaag.addLayer(L.polyline(ln.map(c => [c[1], c[0]]), { color: g.ronde ? "#e5dbff" : "#fff", weight: g.ronde ? 2 : 1.5, opacity: .9, dashArray: g.ronde ? "6 5" : "3 6", interactive: false }))));
+        // Labels R1, R2 … bij de rondes zonder spuitpad (R met pad staat al bij de paarse ring)
+        const metPad = new Set(rondes.map(g => g.gang));
+        kaart.lijnen.filter(g => g.ronde && !metPad.has(g.ronde) && g.lijnen[0]).forEach(g => {
+          const r = g.lijnen[0], c = r[Math.floor(r.length * (0.1 + 0.07 * g.ronde)) % r.length];
+          spoorLaag.addLayer(L.marker([c[1], c[0]], { icon: L.divIcon({ className: "", html: '<div class="zl rk">R' + g.ronde + "</div>", iconSize: null }), interactive: false, keyboard: false }));
+        });
         // Aantal banen tussen de spuitpaden (en tussen de rondes en het eerste pad, en na het laatste)
-        const padNr = [...new Set(binnen.filter(g => g.dicht.length).map(g => g.gang))].sort((a, b) => a - b);
+        const padNr = [...new Set(binnen.filter(g => g.dicht.length).map(g => g.gang))].sort((a, b) => a - b), gangL = kaart.lijnen.filter(g => !g.ronde);
         const grenzen = [0].concat(padNr, [z.aantalGangen + 1]);
         grenzen.slice(1).forEach((b, i) => {
           const a = grenzen[i], tal = b - a - 1;
           if (tal < 1) return;
-          const m = kaart.lijnen.find(g => g.gang === Math.floor((a + b) / 2)), ln = m && m.lijnen[0];
+          const m = gangL.find(g => g.gang === Math.floor((a + b) / 2)), ln = m && m.lijnen[0];
           if (!ln) return;
           const t = i % 2 ? 0.72 : 0.88, pt = [ln[0][0] + (ln[1][0] - ln[0][0]) * t, ln[0][1] + (ln[1][1] - ln[0][1]) * t];
           spoorLaag.addLayer(L.marker([pt[1], pt[0]], { icon: L.divIcon({ className: "", html: '<div class="zb" title="' + tal + (tal === 1 ? " baan" : " banen") + ' ertussen">' + tal + "</div>", iconSize: null }), interactive: false, keyboard: false }));

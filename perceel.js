@@ -1,4 +1,4 @@
-// perceel.js versie 23 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 24 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -735,21 +735,26 @@
     const alle = passen.filter(p => p.soort === "gang").map(p => ({ gang: p.gang, midden: (p.lo + p.hi) / 2 }));
     return { rijen: n, rondes: r, breedte: zb, aantalGangen: aantal, ritme, gangen, alle };
   }
-  // Hartlijn van elke binnengang (plan.alle), afgeknipt binnen de rondes: [{ gang, midden, lijnen: [[lonlat, lonlat], ...] }]
+  // Hartlijn van elke binnengang (plan.alle), afgeknipt binnen de rondes: [{ gang, midden, lijnen: [[lonlat, lonlat], ...] }],
+  // en van elke zaaironde: [{ ronde, lijnen: [ring van lonlat, ...] }] (gesloten lijn op een halve zaaibreedte binnen de ronde)
   function zaaiLijnen(s, plan, clip) {
     if (!s || !s.vlak || !plan || !plan.alle) return [];
     const { polyM, terug } = s.vlak, f = s.zijde || 1;
     let kern = polyM;
     if (plan.rondes && clip) { try { kern = binnenGebied(polyM, plan.rondes * plan.breedte, clip); } catch (e) { kern = polyM; } }
     const ringen = kern.flatMap(rings => rings);
-    return plan.alle.map(g => {
+    const rondes = [];
+    for (let k = 1; k <= (plan.rondes || 0) && clip; k++) {
+      try { rondes.push({ ronde: k, lijnen: binnenGebied(polyM, (k - 0.5) * plan.breedte, clip).flatMap(p => p).map(r => r.map(q => terug(q[0], q[1]))) }); } catch (e) { /* ronde overslaan */ }
+    }
+    return rondes.concat(plan.alle.map(g => {
       const y = f * g.midden, xs = [];
       ringen.forEach(r => { for (let j = 0; j < r.length - 1; j++) { const p = r[j], q = r[j + 1]; if ((p[1] > y) !== (q[1] > y)) xs.push(p[0] + (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1])); } });
       xs.sort((a, b) => a - b);
       const lijnen = [];
       for (let j = 0; j + 1 < xs.length; j += 2) if (xs[j + 1] - xs[j] > 1) lijnen.push([terug(xs[j], y), terug(xs[j + 1], y)]);
       return { gang: g.gang, midden: g.midden, lijnen };
-    });
+    }));
   }
   // Stroken op de kaart voor de gangen uit een zaaiPlan: binnengang = strook van één zaaibreedte binnen de rondes,
   // ronde = ring op die afstand van de rand. Geeft [{ g, geometry (MultiPolygon), label [lon, lat], pijl: [van, naar] | null,

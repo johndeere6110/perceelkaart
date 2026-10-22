@@ -97,6 +97,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .spuit input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .spuit .btn { min-height: 48px; padding: 0 14px; flex: none; }
 .spuit .ronde { grid-column: 1 / -1; }
+.spuit [hidden] { display: none; }
+.sp .zaai { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.sp .zaai .btab td:nth-child(3) { font-weight: 600; color: var(--ink); }
 .kavel { margin-top: 10px; border: 2px solid #e8590c; border-radius: 10px; padding: 10px 12px; }
 .kavel .kop { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; }
 .kavel .naam { font-weight: 600; }
@@ -121,7 +124,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 22</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 23</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -151,6 +154,18 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       <label for="sectieB">Sectiebreedte (m)</label>
       <input id="sectieB" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="3">
       <span></span>
+      <label for="zaaiB">Zaaibreedte (m)</label>
+      <input id="zaaiB" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="uit">
+      <span></span>
+      <label for="rijB" class="zx">Rijafstand (cm)</label>
+      <input id="rijB" class="num zx" type="text" inputmode="decimal" autocomplete="off" placeholder="37,5">
+      <span class="zx"></span>
+      <label for="spoorB" class="zx">Spoorbreedte spuit (m)</label>
+      <input id="spoorB" class="num zx" type="text" inputmode="decimal" autocomplete="off" placeholder="1,8">
+      <span class="zx"></span>
+      <label for="bandB" class="zx">Bandbreedte (cm)</label>
+      <input id="bandB" class="num zx" type="text" inputmode="decimal" autocomplete="off" placeholder="40">
+      <span class="zx"></span>
       <button type="button" class="btn ronde" id="bRonde" aria-pressed="true">Buitenronde eerst: aan</button>
       <button type="button" class="btn ronde" id="bAB" aria-pressed="false">AB-kant kiezen</button>
       <button type="button" class="btn ronde" id="bPijl" aria-pressed="false">Pijlen: uit</button>
@@ -410,6 +425,15 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const sectieEl = $("sectieB");
   sectieEl.value = store.get("kaartSectie", "3");
   sectieEl.addEventListener("input", () => { store.set("kaartSectie", sectieEl.value); teken(); });
+  // Zaaien (mais): welke zaai-elementen dicht voor de spuitsporen. Leeg = uit.
+  [["zaaiB", "kaartZaaiBreedte", ""], ["rijB", "kaartRijAfstand", "37,5"], ["spoorB", "kaartSpoorBreedte", "1,8"], ["bandB", "kaartBandBreedte", "40"]].forEach(([id, k, d]) => {
+    const el = $(id); el.value = store.get(k, d);
+    el.addEventListener("input", () => { store.set(k, el.value); teken(); });
+  });
+  const zaaiInst = () => {
+    const b = parse($("zaaiB").value), r = parse($("rijB").value) / 100, sp = parse($("spoorB").value), band = parse($("bandB").value) / 100;
+    return b >= 1 && b <= 60 && r > 0.05 && r <= b ? { b, r, sp: sp > 0 && sp < 5 ? sp : 0, band: band > 0.05 && band < 1.5 ? band : 0.4 } : null;
+  };
   $("bSpuit").addEventListener("click", () => { spuitAan = !spuitAan; store.set("kaartSpuitAan", spuitAan); teken(); });
   // Kavels: percelen die tegen elkaar liggen en samen gespoten worden
   let kavels = store.get("kaartKavels", []);
@@ -475,6 +499,47 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       ak.addEventListener("click", () => { delete obj.abPunt; opslaan(); teken(); });
       d.appendChild(ak);
     }
+    const zi = zaaiInst();
+    if (zi) d.appendChild(zaaiBlok(s, obj, opslaan, zi, sb));
+    return d;
+  }
+  // Zaaiplan onder de spuituitleg: per zaaigang welke rijen dicht voor de spuitsporen
+  function zaaiBlok(s, obj, opslaan, zi, sb) {
+    const andere = typeof obj.zaaiAnders === "boolean" ? obj.zaaiAnders : !!obj.spuitAnders;
+    const z = Perceel.zaaiPlan(s, { breedte: zi.b, rij: zi.r, spoor: zi.sp, band: zi.band, andereKant: andere });
+    const d = document.createElement("div"); d.className = "zaai";
+    if (!z) return d;
+    const cm = v => (v * 100).toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + " cm";
+    const k = document.createElement("div");
+    k.innerHTML = "<strong>Zaaien " + esc(mDec(zi.b)) + "</strong> (" + z.rijen + " rijen op " + esc(cm(zi.r)) + ", " + z.aantalGangen + " gangen), op dezelfde AB-lijn: gang 1 " +
+      (andere ? "aan de overkant" : "tegen de AB-kant") + ", van A naar B, daarna heen en weer. Rijen geteld van links, gezien in de rijrichting.";
+    d.appendChild(k);
+    if (Math.abs(sb / zi.b - Math.round(sb / zi.b)) > 0.01) {
+      const n = document.createElement("div");
+      n.textContent = mDec(sb) + " spuiten is geen veelvoud van " + mDec(zi.b) + " zaaien: de spuitsporen vallen steeds in andere rijen.";
+      d.appendChild(n);
+    }
+    if (!zi.sp) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Vul de spoorbreedte van de spuit in."; d.appendChild(x); }
+    else if (!z.gangen.length) { const x = document.createElement("div"); x.textContent = "Geen spuitspoor in de zaaigangen."; d.appendChild(x); }
+    else {
+      const tb = document.createElement("table"); tb.className = "btab";
+      tb.innerHTML = '<tr><th>Gang</th><th>Rijdt</th><th>Rijen dicht</th><th>Spoor</th></tr>';
+      z.gangen.forEach(g => {
+        const tr = document.createElement("tr");
+        [String(g.gang), g.heen ? "A → B" : "B → A", g.dicht.join(", "), g.sporen.map(x => x === "R" ? "buitenronde" : x).join(", ")].forEach(t => {
+          const td = document.createElement("td"); td.textContent = t; tr.appendChild(td);
+        });
+        tb.appendChild(tr);
+      });
+      d.appendChild(tb);
+      const n = document.createElement("div");
+      n.textContent = "Spoorbreedte " + mDec(zi.sp) + ", band " + cm(zi.band) + ": een rij gaat dicht als de band hem raakt. Kopakkers niet meegenomen.";
+      d.appendChild(n);
+    }
+    const bt = document.createElement("button"); bt.type = "button"; bt.className = "btn klein";
+    bt.textContent = andere ? "Zaaien begint tegen de AB-kant" : "Zaaien begint aan de overkant";
+    bt.addEventListener("click", () => { obj.zaaiAnders = !andere; opslaan(); teken(); });
+    d.appendChild(bt);
     return d;
   }
   // Draaiing op het scherm van punt a naar b (Mercator is hoekgetrouw, dus los van de zoom)
@@ -512,6 +577,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("bRonde").hidden = !spuitAan;
     $("bAB").hidden = !spuitAan;
     $("bPijl").hidden = !spuitAan;
+    const zaaiAan = !!parse($("zaaiB").value);
+    document.querySelectorAll(".spuit .zx").forEach(el => el.hidden = !zaaiAan);
     $("bPijl").setAttribute("aria-pressed", pijlenAan);
     $("bPijl").textContent = "Pijlen: " + (pijlenAan ? "aan" : "uit");
     $("bRonde").setAttribute("aria-pressed", buitenronde);

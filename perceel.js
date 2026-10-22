@@ -1,4 +1,4 @@
-// perceel.js versie 15 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 16 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -16,6 +16,7 @@
 //   Perceel.samenvoegen(geometries, clip, naad)   // percelen tot één vorm, naden tot 2×naad m dicht; null als los
 //   opts.abPunt [lon, lat] bij sporen(): de AB-lijn langs de kant die het dichtst bij dat punt ligt
 //   opts.sectie (m) bij sporen(): laatste gang in hele secties; de baan toont alleen wat aan staat
+//   Perceel.zaaiPlan(sporen, { breedte, rij, spoor, band, andereKant })   // welke zaai-elementen dicht voor de spuitsporen
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
 // "offline" (geen verbinding en niks opgeslagen op deze plek), "server", "geen-perceel". De .message is Nederlands.
@@ -556,6 +557,7 @@
     for (let k = 0; k < ringen[0].length - 1; k++) { const p = ringen[0][k], q = ringen[0][k + 1], c = p[0] * q[1] - q[0] * p[1]; ca += c; cy += (p[1] + q[1]) * c; }
     // Gangen tellen vanaf de AB-kant zelf, zodat ze op beide uiteinden even ver van de kant liggen
     let richtingY = cy / ca >= 0 ? 1 : -1;
+    const zijde = richtingY; // kant van de AB-lijn waar het perceel ligt (links van A->B = 1)
     const W = richtingY === 1 ? ymax : -ymin;
     let startY = 0;
     if (opts.andereKant) { startY = richtingY === 1 ? ymax : ymin; richtingY = -richtingY; }
@@ -606,7 +608,7 @@
       if (!delen.length) continue;
       const nr = uit.length + 1;
       uit.push({
-        nr,
+        nr, y, // y: afstand tot de AB-lijn, met teken (positief = links van A->B)
         heen: nr % 2 === 1, // heen en weer: oneven gangen van A naar B
         lengte: delen.reduce((t, d) => t + d.tot - d.van, 0),
         lijnen: delen.map(d => [terug(d.van, y), terug(d.tot, y)]),
@@ -635,7 +637,7 @@
       dubbel: W < 2 * breedte ? 2 * breedte - W : 0
     } : null;
     return {
-      breedte, gangen: uit.length, perceelBreedte: W, perceelLengte: xmax - xmin, rest, ronde: rondeUit,
+      breedte, gangen: uit.length, perceelBreedte: W, zijde, perceelLengte: xmax - xmin, rest, ronde: rondeUit,
       buitenKant: uit.length && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
       secties: sectie ? { breedte: sectie, totaal: sectiesTotaal, aan: sectiesAan, laatsteLengte: uit.length ? uit[uit.length - 1].lengte : 0 } : null,
       abLengte: ab.m, a: terug(0, 0), b: terug(len, 0), sporen: uit,
@@ -644,6 +646,47 @@
       koers: (Math.atan2(ux, uy) * 180 / Math.PI + 360) % 360,
       totaalM: uit.reduce((t, s) => t + s.lengte, 0) + (rondeUit ? rondeUit.lengte : 0)
     };
+  }
+
+  /* ---------- Zaaien: welke zaai-elementen dicht voor de spuitsporen ---------- */
+  // s = uitkomst van sporen(). o.breedte = zaaibreedte (m), o.rij = rijafstand (m), o.spoor = spoorbreedte van de spuit (m),
+  // o.band = bandbreedte (m), o.andereKant = zaaien begint aan de overkant van de AB-lijn.
+  // Zaaigang 1 ligt tegen de startkant en rijdt van A naar B, daarna heen en weer, op dezelfde AB-lijn als de spuit.
+  // Rijen geteld van links in de rijrichting (zoals vanaf de trekker). Sporen van de buitenronde ("R") lopen langs
+  // de lange kanten; op de kopakkers niet meegenomen.
+  // Geeft { rijen, gangen: [{ gang, heen, dicht: [rijnr], sporen: [label] }] } of null.
+  function zaaiPlan(s, o) {
+    o = o || {};
+    const zb = o.breedte, ra = o.rij, sp = o.spoor || 0, band = o.band || 0.4;
+    if (!s || !(zb > 0) || !(ra > 0) || ra > zb) return null;
+    const n = Math.round(zb / ra), W = s.perceelBreedte, f = s.zijde || 1;
+    // Afstand tot de zaai-startkant
+    const vanStart = y => { const d = Math.abs(y); return o.andereKant ? W - d : d; };
+    // Richting waarin de afstand tot de startkant groeit, in het stelsel waar links van A->B positief is
+    const dd = f * (o.andereKant ? -1 : 1);
+    const banen = s.sporen.map(x => ({ label: String(x.nr), y: x.y }));
+    if (s.ronde && W > s.breedte) banen.unshift({ label: "R", y: f * s.breedte / 2 }, { label: "R", y: f * (W - s.breedte / 2) });
+    const per = new Map();
+    banen.forEach(b => [-sp / 2, sp / 2].forEach(off => {
+      const d = vanStart(b.y + off);
+      if (d < -band || d > W + band) return;
+      const g1 = Math.max(1, Math.floor((d - band) / zb) + 1), g2 = Math.floor((d + band) / zb) + 1;
+      for (let g = g1; g <= g2; g++) {
+        const heen = g % 2 === 1;
+        for (let k = 0; k < n; k++) {
+          const pos = (g - 1) * zb + (k + 0.5) * ra;
+          if (pos > W + 0.01 || Math.abs(pos - d) > band / 2 + 0.03) continue;
+          // Links in de rijrichting: heen (A->B) is links positief; groeit de afstand naar links, dan rij 1 aan de verre kant
+          const naarLinks = (heen ? 1 : -1) * dd > 0;
+          const nr = naarLinks ? n - k : k + 1;
+          if (!per.has(g)) per.set(g, { gang: g, heen, dicht: new Set(), sporen: new Set() });
+          per.get(g).dicht.add(nr); per.get(g).sporen.add(b.label);
+        }
+      }
+    }));
+    const gangen = [...per.values()].sort((a, b) => a.gang - b.gang)
+      .map(x => ({ gang: x.gang, heen: x.heen, dicht: [...x.dicht].sort((a, b) => a - b), sporen: [...x.sporen] }));
+    return { rijen: n, aantalGangen: Math.ceil(W / zb - 0.01), gangen };
   }
 
   // Landschapselement (sloot, houtwal)? Veldnaam verschilt per dataset, dus alle tekstwaarden bekijken
@@ -769,5 +812,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, zaaiPlan, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
 });

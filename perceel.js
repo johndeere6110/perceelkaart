@@ -1,4 +1,4 @@
-// perceel.js versie 14 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 15 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -47,7 +47,7 @@
   // Polygon -> [ringen], MultiPolygon -> [[ringen], ...]
   const polygonen = g => !g ? [] : g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
 
-  // Sferische ringoppervlakte in m² (Chamberlain & Duquette, zoals turf.area)
+  // Sferische ringoppervlakte in m² (Chamberlain & Duquette, zoals turf.area); alleen buiten NL en om te vergelijken
   function ringM2(ring) {
     const n = ring.length;
     if (n < 3) return 0;
@@ -59,9 +59,26 @@
     }
     return Math.abs(s * R * R / 2);
   }
+  // WGS84 -> Rijksdriehoeksstelsel (RD New), benadering van Schreutelkamp & Strang van Hees (~1 m nauwkeurig)
+  function rd(c) {
+    const p = 0.36 * (c[1] - 52.15517440), q = 0.36 * (c[0] - 5.38720621);
+    return [
+      155000 + 190094.945 * q - 11832.228 * p * q - 114.221 * p * p * q - 32.391 * q ** 3 - 0.705 * p - 2.340 * p ** 3 * q - 0.608 * p * q ** 3 - 0.008 * q * q + 0.148 * p * p * q ** 3,
+      463000 + 309056.544 * p + 3638.893 * q * q + 73.077 * p * p - 157.984 * p * q * q + 59.788 * p ** 3 + 0.433 * q - 6.439 * p * p * q * q - 0.032 * p * q + 0.092 * q ** 4 - 0.054 * p * q ** 4
+    ];
+  }
+  const inNL = ring => ring.every(c => c[0] > 3 && c[0] < 7.6 && c[1] > 50.6 && c[1] < 53.8);
+  // Vlakke oppervlakte in RD, zoals RVO (BRP) en Kadaster rekenen. De bol hierboven komt in NL ~0,16 % te laag uit.
+  function ringRD(ring) {
+    let s = 0;
+    for (let i = 0, n = ring.length; i < n; i++) { const a = rd(ring[i]), b = rd(ring[(i + 1) % n]); s += a[0] * b[1] - b[0] * a[1]; }
+    return Math.abs(s / 2);
+  }
+  // In Nederland in RD (gelijk aan RVO), daarbuiten over de bol
+  const ringOpp = ring => inNL(ring) ? ringRD(ring) : ringM2(ring);
   function oppervlakteM2(geometry) {
     return polygonen(geometry).reduce((t, rings) =>
-      t + rings.reduce((a, ring, i) => i === 0 ? a + ringM2(ring) : a - ringM2(ring), 0), 0);
+      t + rings.reduce((a, ring, i) => i === 0 ? a + ringOpp(ring) : a - ringOpp(ring), 0), 0);
   }
   // In ha op 3 decimalen (10 m²)
   const oppervlakteHa = geometry => Math.round(oppervlakteM2(geometry) / 10) / 1000;

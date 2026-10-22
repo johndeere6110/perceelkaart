@@ -128,7 +128,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 28</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 29</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -554,6 +554,18 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       x.innerHTML = "<strong>Start binnenveld:</strong> " + esc("begin in het spuitpad, gang " + gNaam(eerste) + " = GPS-lijn " + lijn(eerste) + (R ? ", zaaicomputer op teller " + teller(eerste) : "") + ". " +
         "Zet de computer het pad " + kantVan(eerste.dicht) + " (rij " + eerste.dicht.join(" en ") + " van links): rij hem " + (eerste.heen ? "A → B" : "B → A") +
         ". Zet hij het " + ander + " (rij " + spiegel.join(" en ") + "): rij hem " + om + ". Andersom zit het pad aan de verkeerde kant. De tabel hieronder gaat uit van de eerste keuze; bij de tweede draaien alle richtingen en kanten om. Daarna heen en weer; de gangen tussen de rondes en dit pad zaai je zonder spuitpad.");
+      // Gangen zonder spuitpad (tussen de rondes en het eerste pad, en na het laatste): kast vast op een teller zonder pad
+      if (R) {
+        const pos = new Set(inRitme.map(teller)), vrij = Array.from({ length: R }, (_, i) => i + 1).find(t => !pos.has(t));
+        const laatste = binnen.filter(g => !g.buiten && g.dicht.length).pop(), eind = z.rondes + z.aantalGangen;
+        const stuk = (a, b) => a > b ? null : a === b ? String(a) : a + "–" + b;
+        const vrijG = [stuk(z.rondes + 1, totaal(eerste) - 1), laatste && stuk(totaal(laatste) + 1, eind)].filter(Boolean);
+        if (vrij && vrijG.length) {
+          const y = document.createElement("div");
+          y.textContent = "Laatste spuitpad: gang " + totaal(laatste) + " (lijn " + lijn(laatste) + "). Gang " + vrijG.join(" en ") + " zonder spuitpad: zet de kast daar vast op teller " + vrij + " (geen pad).";
+          x.appendChild(y);
+        }
+      }
       d.appendChild(x);
     }
     // Ritme voor de zaaicomputer: welke binnengangen een spuitspoor krijgen

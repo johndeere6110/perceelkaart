@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Perceelkaart</title>
 <meta name="theme-color" content="#2F5A2B">
 <link rel="manifest" href="manifest.webmanifest">
@@ -36,6 +36,8 @@
 }
 *, *::before, *::after { box-sizing: inherit; }
 html, body { height: 100%; }
+/* Alleen de kaart zoomt, niet de hele pagina (anders worden de labels op de kaart mee groter) */
+html { touch-action: pan-x pan-y; }
 body {
   margin: 0; background: var(--bg); color: var(--ink); display: flex; flex-direction: column;
   font-family: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -143,7 +145,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 34</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 35</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -234,6 +236,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   $("bNL").addEventListener("click", () => map.fitBounds(NL));
   map.on("moveend", () => { const c = map.getCenter(); store.set("kaartTestView", { lat: c.lat, lon: c.lng, z: map.getZoom() }); });
   // Uitgezoomd (onder 17) de kleine zaailabels verbergen
+  // iPhone negeert user-scalable=no: knijpen buiten de kaart tegenhouden
+  ["gesturestart", "gesturechange"].forEach(t => document.addEventListener(t, e => { if (!e.target.closest || !e.target.closest("#map")) e.preventDefault(); }, { passive: false }));
   const zoomKlasse = () => $("map").classList.toggle("ver", map.getZoom() < 17);
   map.on("zoomend", zoomKlasse); zoomKlasse();
 

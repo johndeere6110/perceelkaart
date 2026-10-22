@@ -1,4 +1,4 @@
-// perceel.js versie 12 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 13 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -6,9 +6,9 @@
 //   Perceel.zoekOpPunt(lon, lat)                                // zelfde, met een bekende positie
 //   Perceel.oppervlakteHa(geometry), Perceel.bevatPunt(geometry, lon, lat)
 //   Perceel.zijden(geometry), Perceel.rechteZijde(zijden, key)   // randstukjes en lengtes, voor bufferstroken
-//   Perceel.zoekWater(geometry) + Perceel.waterLangsZijden(geometry, water)   // randen langs BGT-water
+//   Perceel.zoekWater(geometry) + Perceel.waterLangsZijden(geometry, water)   // randen langs BGT-water (taluds: .talud)
 //   Perceel.waterBijPerceel(geometry, water, clip)   // waterdelen bijgeknipt rond het perceel, om te bewaren
-//   Perceel.waterStrook(geometry, water, breedte, clip, { zijden })   // strook vanaf de waterkant, deel binnen het perceel (m²)
+//   Perceel.waterStrook(geometry, water, breedte, clip, { zijden })   // strook vanaf de insteek (talud), deel binnen het perceel (m²)
 //   Perceel.sporen(geometry, breedte, { andereKant, buitenronde, clip })   // spuit-/strooisporen langs de langste zijde
 //     clip = polygon-clipping (optioneel): maakt de buitenronde exact, ook bij smalle armen en inhammen
 //   Perceel.verschuif(geometry, d)   // buitenrand d meter naar binnen (negatief: naar buiten), eenvoudig
@@ -116,36 +116,50 @@
     return uit;
   }
 
-  /* ---------- Water langs het perceel (BGT waterdeel) ---------- */
+  /* ---------- Water langs het perceel (BGT waterdeel + ondersteunend waterdeel) ---------- */
   const BGT_WATER = "https://api.pdok.nl/lv/bgt/ogc/v1/collections/waterdeel/items";
+  // Ondersteunend waterdeel: het talud (oever, slootkant) naast het water. De buitenrand ervan is de insteek.
+  const BGT_TALUD = "https://api.pdok.nl/lv/bgt/ogc/v1/collections/ondersteunendwaterdeel/items";
   // Greppel of droge sloot? BGT-veldnamen staan niet vast, dus alle tekstwaarden doorzoeken
   const isDroog = f => Object.values(f.properties || {}).some(v => typeof v === "string" && /greppel|droge sloot/i.test(v));
 
-  // Haal de BGT-waterdelen op rond een perceel (bbox + marge in graden, ~25 m)
-  async function zoekWater(geometry, o) {
-    o = opts(o);
+  async function haalBgt(basis, bbox, o, naam) {
     const f = o.fetch || (typeof fetch !== "undefined" ? fetch : null);
     if (!f) throw fout("offline", "Geen internet beschikbaar in deze omgeving.");
-    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-    polygonen(geometry).forEach(rings => rings[0].forEach(c => { x1 = Math.min(x1, c[0]); y1 = Math.min(y1, c[1]); x2 = Math.max(x2, c[0]); y2 = Math.max(y2, c[1]); }));
-    const m = 0.0004;
-    const url = BGT_WATER + "?f=json&limit=1000&bbox=" + [x1 - m, y1 - m, x2 + m, y2 + m].map(v => v.toFixed(6)).join(",");
+    const url = basis + "?f=json&limit=1000&bbox=" + bbox;
     const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
     const t = ac ? setTimeout(() => ac.abort(), o.timeout * 2) : null;
     let res;
     try { res = await f(url, { signal: ac ? ac.signal : undefined, headers: { Accept: "application/geo+json, application/json" } }); }
-    catch (e) { throw fout("offline", "Geen verbinding met PDOK (BGT)."); }
+    catch (e) { throw fout("offline", "Geen verbinding met PDOK (" + naam + ")."); }
     finally { if (t) clearTimeout(t); }
-    if (!res.ok) throw fout("server", "PDOK (BGT) gaf een fout (" + res.status + ").");
+    if (!res.ok) throw fout("server", "PDOK (" + naam + ") gaf een fout (" + res.status + ").");
     let data;
-    try { data = await res.json(); } catch (e) { throw fout("server", "Onverwacht antwoord van PDOK (BGT)."); }
+    try { data = await res.json(); } catch (e) { throw fout("server", "Onverwacht antwoord van PDOK (" + naam + ")."); }
     return Array.isArray(data && data.features) ? data.features.filter(x => x && x.geometry && polygonen(x.geometry).length) : [];
+  }
+  // Haal de BGT-waterdelen en taluds op rond een perceel (bbox + marge in graden, ~25 m).
+  // Taluds krijgen .talud = true. Lukt het talud niet (o.talud: false = niet vragen), dan alleen water
+  // en staat de foutmelding in .taludFout van de lijst.
+  async function zoekWater(geometry, o) {
+    o = opts(o);
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    polygonen(geometry).forEach(rings => rings[0].forEach(c => { x1 = Math.min(x1, c[0]); y1 = Math.min(y1, c[1]); x2 = Math.max(x2, c[0]); y2 = Math.max(y2, c[1]); }));
+    const m = 0.0004, bbox = [x1 - m, y1 - m, x2 + m, y2 + m].map(v => v.toFixed(6)).join(",");
+    const [water, talud] = await Promise.all([
+      haalBgt(BGT_WATER, bbox, o, "BGT"),
+      o.talud === false ? Promise.resolve([]) : haalBgt(BGT_TALUD, bbox, o, "BGT talud").catch(e => e)
+    ]);
+    const uit = water.concat(Array.isArray(talud) ? talud.map(x => Object.assign({}, x, { talud: true })) : []);
+    if (talud instanceof Error) uit.taludFout = talud.message;
+    return uit;
   }
 
   // Welke randstukjes lopen langs water? Geeft { key: { droog: bool } } voor elk stukje waarvan
   // het grootste deel binnen `tol` meter van een waterdeel ligt.
   function waterLangsZijden(geometry, water, tol) {
     tol = tol == null ? 6 : tol;
+    water = water.filter(w => !w.talud); // het water zelf bepaalt welke randen langs water lopen
     const alle = zijden(geometry), uit = {};
     if (!alle.length || !water.length) return uit;
     // Lokaal vlak in meters rond het perceel
@@ -242,7 +256,8 @@
     }
   }
   // Stroken (en hoekcirkels) van d meter rond elke rand. alleHoeken: ook bij uitstekende hoeken (voor dikker maken).
-  function randVormen(polyM, d, tol, poging, alleHoeken) {
+  // kies(a, b): alleen de randstukjes waarvoor dit waar is (optioneel)
+  function randVormen(polyM, d, tol, poging, alleHoeken, kies) {
     const rand = [], sch = poging * 1e-3;
     // Hoekcirkels een fractie groter en gedraaid, zodat hun punten niet op de hoeken van de randstroken vallen
     const rc = d * (1 + 5e-4), hoek0 = 0.137 + poging * 0.29, e = 0.02;
@@ -252,7 +267,7 @@
       let opp = 0; for (let j = 0; j < n; j++) opp += r[j][0] * r[j + 1][1] - r[j + 1][0] * r[j][1];
       for (let j = 0; j < n; j++) {
         const a = r[j], b = r[j + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        if (l < 0.01) continue;
+        if (l < 0.01 || (kies && !kies(a, b))) continue;
         const ux = (b[0] - a[0]) / l, uy = (b[1] - a[1]) / l, nx = -uy * d, ny = ux * d;
         // Strook langs de rand, aan beide uiteinden een paar cm langer zodat buren overlappen
         const a2 = [a[0] - ux * e, a[1] - uy * e], b2 = [b[0] + ux * e, b[1] + uy * e];
@@ -303,7 +318,7 @@
     const ky = 111132.92 - 559.82 * Math.cos(2 * f) + 1.175 * Math.cos(4 * f), kx = 111412.84 * Math.cos(f) - 93.5 * Math.cos(3 * f);
     return { m: c => [(c[0] - lon0) * kx, (c[1] - lat0) * ky], ll: q => [lon0 + q[0] / kx, lat0 + q[1] / ky] };
   }
-  // Waterdelen rond een perceel, bijgeknipt tot het perceel + marge m, om te bewaren: [{ droog, geometry }]
+  // Waterdelen (en taluds) rond een perceel, bijgeknipt tot het perceel + marge m, om te bewaren: [{ droog, talud, geometry }]
   function waterBijPerceel(geometry, water, clip, marge) {
     marge = marge == null ? 15 : marge;
     if (!polygonen(geometry).length || !clip) return [];
@@ -315,23 +330,49 @@
     return water.flatMap(w => {
       let delen;
       try { delen = clip.intersection(polygonen(w.geometry).map(rings => rings.map(r => r.map(v.m))), rh); } catch (e) { return []; }
-      return delen.length ? [{ droog: isDroog(w), geometry: { type: "MultiPolygon", coordinates: rond(delen.map(poly => poly.map(r => r.map(v.ll)))) } }] : [];
+      return delen.length ? [Object.assign(w.talud ? { droog: false, talud: true } : { droog: isDroog(w) }, { geometry: { type: "MultiPolygon", coordinates: rond(delen.map(poly => poly.map(r => r.map(v.ll)))) } })] : [];
     });
   }
-  // Strook van `breedte` m vanaf de rand van elk nat waterdeel (het water zelf niet), alleen het deel binnen het perceel.
-  // water: features of { droog, geometry } (droge sloten tellen niet). o.zijden: alleen langs deze randstukjes
-  // van het perceel (keys), tot breedte + o.tol m ervan. Geeft { m2, geometry } (MultiPolygon); gooit als het niet lukt.
+  // Afstand van punt p tot de randen van een lijst polygonen (meters)
+  function totRanden(p, polys) {
+    let best = Infinity;
+    polys.forEach(rings => rings.forEach(r => {
+      for (let i = 0; i < r.length - 1; i++) {
+        const a = r[i], b = r[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+        const t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
+        best = Math.min(best, Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy));
+      }
+    }));
+    return best;
+  }
+  // Raken twee lijsten polygonen elkaar (binnen tol m)? BGT-vlakken delen hun randen, dus de hoekpunten volstaan.
+  function raakt(A, B, tol) {
+    const kader = P => { const k = [Infinity, Infinity, -Infinity, -Infinity]; P.forEach(rings => rings[0].forEach(c => { k[0] = Math.min(k[0], c[0]); k[1] = Math.min(k[1], c[1]); k[2] = Math.max(k[2], c[0]); k[3] = Math.max(k[3], c[1]); })); return k; };
+    const ka = kader(A), kb = kader(B);
+    if (ka[0] > kb[2] + tol || kb[0] > ka[2] + tol || ka[1] > kb[3] + tol || kb[1] > ka[3] + tol) return false;
+    const binnenTol = (X, Y) => X.some(rings => rings.some(r => r.some(p => totRanden(p, Y) <= tol)));
+    return binnenTol(A, B) || binnenTol(B, A);
+  }
+  // Strook van `breedte` m vanaf de insteek: de buitenrand van elk nat waterdeel samen met het talud ernaast
+  // (BGT ondersteunend waterdeel, .talud = true). Staat er geen talud bij, dan vanaf de waterlijn.
+  // Het water en het talud zelf tellen niet mee; alleen het deel binnen het perceel.
+  // water: features of { droog, talud, geometry } (droge sloten tellen niet). o.zijden: alleen langs deze randstukjes
+  // van het perceel (keys), tot breedte + o.tol m ervan. Geeft { m2, vanTalud, vanLijn, geometry } (MultiPolygon):
+  // vanTalud = m² vanaf de insteek van een talud, vanLijn = m² vanaf de waterlijn (geen talud in BGT). Gooit als het niet lukt.
   function waterStrook(geometry, water, breedte, clip, o) {
     o = o || {};
     const tol = o.tol == null ? 6 : o.tol;
-    const leeg = { m2: 0, geometry: { type: "MultiPolygon", coordinates: [] } };
+    const leeg = { m2: 0, vanTalud: 0, vanLijn: 0, geometry: { type: "MultiPolygon", coordinates: [] } };
     if (!(breedte > 0) || !polygonen(geometry).length) return leeg;
     const v = vlak(geometry);
     const inM = w => polygonen(w.geometry).map(rings => rings.map(r => r.map(v.m)));
     const perceel = polygonen(geometry).map(rings => rings.map(r => r.map(v.m)));
     const alleWater = water.flatMap(inM);
-    const nat = water.filter(w => !(typeof w.droog === "boolean" ? w.droog : isDroog(w))).flatMap(inM);
+    const natW = water.filter(w => !w.talud && !(typeof w.droog === "boolean" ? w.droog : isDroog(w))).map(inM);
+    const nat = natW.flat();
     if (!nat.length) return leeg;
+    // Taluds die tegen nat water liggen (die van een droge sloot doen niet mee)
+    const taluds = water.filter(w => w.talud).map(inM).filter(t => natW.some(n => raakt(n, t, 0.5))).flat();
     // Alleen bij de gekozen randstukjes: per stukje een band van breedte + tol aan weerskanten. Naast een stukje
     // dat ook een strook heeft (gekozen, of in o.hand: zelf aangewezen) afgeknipt op de bissectrice, zodat de
     // strook langs een zelf aangewezen buurrand niet dubbel telt; anders een strookbreedte recht door.
@@ -363,10 +404,24 @@
     const pogingen = [0.3, 0.5, 1, 2];
     for (let i = 0; i < pogingen.length; i++) {
       try {
-        let strook = clip.difference(clip.union(...randVormen(nat, breedte, pogingen[i], i, true)), ...alleWater);
-        if (strook.length) strook = clip.intersection(strook, perceel);
-        if (strook.length && gang) strook = clip.intersection(strook, clip.union(...gang));
-        return { m2: strook.reduce((t, p) => t + oppM(p), 0), geometry: { type: "MultiPolygon", coordinates: strook.map(poly => poly.map(r => r.map(v.ll))) } };
+        // Water en talud samen: de buitenrand is de insteek. Piepkleine gaatjes (naad tussen twee vlakken) dicht.
+        const insteek = taluds.length ? clip.union(...nat, ...taluds).map(poly => [poly[0]].concat(poly.slice(1).filter(h => oppM([h]) >= 1))) : nat;
+        const binnen = s => {
+          if (s.length) s = clip.intersection(s, perceel);
+          if (s.length && gang) s = clip.intersection(s, clip.union(...gang));
+          return s;
+        };
+        const strook = binnen(clip.difference(clip.union(...randVormen(insteek, breedte, pogingen[i], i, true)), ...alleWater));
+        const m2 = strook.reduce((t, p) => t + oppM(p), 0);
+        // Welk deel komt van een talud: stroken langs randstukjes van de insteek die dichter bij een talud liggen dan bij open water
+        let vanTalud = 0;
+        if (taluds.length && strook.length) {
+          const opTalud = (a, b) => { const p = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; return totRanden(p, taluds) < totRanden(p, nat); };
+          const vormen = randVormen(insteek, breedte, pogingen[i], i, true, opTalud);
+          const st = vormen.length ? binnen(clip.difference(clip.union(...vormen), ...alleWater)) : [];
+          vanTalud = Math.min(m2, st.reduce((t, p) => t + oppM(p), 0));
+        }
+        return { m2, vanTalud, vanLijn: m2 - vanTalud, geometry: { type: "MultiPolygon", coordinates: strook.map(poly => poly.map(r => r.map(v.ll))) } };
       } catch (e) { if (i === pogingen.length - 1) throw e; }
     }
   }

@@ -121,7 +121,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 17</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 18</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -257,9 +257,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (!q.oever || typeof q.oever !== "object") q.oever = {};
     Object.keys(q.oever).forEach(k => q.oever[k] = naarType(q.oever[k]));
   });
-  // Strook vanaf de waterkant (BGT) langs de randen die Water zoeken vond (q.wauto), per stap; null = niet te berekenen
+  // Strook vanaf de insteek (BGT water + talud) langs de randen die Water zoeken vond (q.wauto), per stap; null = niet te berekenen
   const strookCache = new Map();
-  // hand: zelf aangewezen randen met een strook; daar telt de strook vanaf de waterkant niet nog eens
+  // hand: zelf aangewezen randen met een strook; daar telt de strook vanaf de insteek niet nog eens
   function waterStrook(q, keys, hand, i) {
     if (!keys.length || !Array.isArray(q.water) || !window.polygonClipping) return null;
     const id = q.key + "|" + i + "|" + (q.waterTs || 0) + "|" + keys.join(",") + "|" + hand.join(",");
@@ -271,7 +271,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     return strookCache.get(id);
   }
   // Per perceel: lengte per type, en de stap waarop het onder 4 % komt (of de laatste stap).
-  // Zelf aangewezen oevers: lengte × breedte vanaf de perceelrand. Gevonden water: strook vanaf de waterkant, deel binnen het perceel.
+  // Zelf aangewezen oevers: lengte × breedte vanaf de perceelrand. Gevonden water: strook vanaf de insteek van het talud, deel binnen het perceel.
   function buffer(q) {
     const per = {}, hand = {}, autoNat = [];
     let autoM = 0;
@@ -289,8 +289,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const stappen = [{ i: 0, af: opp(0) }];
     while (stappen.length < 3 && stappen[stappen.length - 1].af > max) stappen.push({ i: stappen.length, af: opp(stappen.length) });
     const stap = stappen.length - 1;
-    // Vergelijking voor de stap die telt: gevonden water vanaf de waterkant tegenover vanaf de perceelrand
-    const water = autoNat.length ? { m: autoM, breedte: typeVan("nat").st[stap], kant: wsOk ? ws(stap) : null, rand: autoM * typeVan("nat").st[stap] } : null;
+    // Vergelijking voor de stap die telt: gevonden water vanaf de insteek tegenover vanaf de perceelrand (en bij 3 m)
+    const water = autoNat.length ? { m: autoM, breedte: typeVan("nat").st[stap], kant: wsOk ? ws(stap) : null, hoofd: wsOk && stap ? ws(0) : null, rand: autoM * typeVan("nat").st[stap] } : null;
     return { per, lengte, hoofd: stappen[0].af, af: Math.min(stappen[stap].af, q.ha), stap, stappen, max, water };
   }
   const m2Txt = v => Math.round(v).toLocaleString("nl-NL") + " m²";
@@ -472,9 +472,20 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         if (bf.water) {
           const n = document.createElement("div"), w = bf.water;
           n.textContent = w.kant
-            ? "Gevonden water (" + mTxt(w.m) + " rand): strook van " + nlM(w.breedte) + " vanaf de waterkant, daarvan " + m2Txt(w.kant.m2) + " binnen het perceel. Vanaf de perceelrand zou het " + m2Txt(w.rand) + " zijn."
-            : "Gevonden water (" + mTxt(w.m) + " rand): de strook vanaf de waterkant kon niet berekend worden, gerekend vanaf de perceelrand (" + m2Txt(w.rand) + "). Zoek het water opnieuw.";
+            ? "Gevonden water (" + mTxt(w.m) + " rand): strook van " + nlM(w.breedte) + ", binnen het perceel " + m2Txt(w.kant.m2) + (w.hoofd ? " (bij " + nlM(typeVan("nat").st[0]) + ": " + m2Txt(w.hoofd.m2) + ")" : "") + ". Vanaf de perceelrand zou het " + m2Txt(w.rand) + " zijn."
+            : "Gevonden water (" + mTxt(w.m) + " rand): de strook vanaf de insteek kon niet berekend worden, gerekend vanaf de perceelrand (" + m2Txt(w.rand) + "). Zoek het water opnieuw.";
           detail.appendChild(n);
+          if (w.kant && w.kant.m2 > 0) {
+            // Vanaf de insteek van het talud, of (geen talud in BGT) vanaf de waterlijn
+            const k = w.kant, t = document.createElement("div"), lijn = Math.round(k.vanLijn || 0), talud = Math.round(k.vanTalud || 0);
+            const waarom = q.taludStatus === "ok" ? "geen talud in BGT" : q.taludStatus === "fout" ? "talud niet opgehaald (PDOK)" : "gezocht met een oudere versie";
+            t.textContent = !lijn ? "Gerekend vanaf de insteek van het talud (BGT)."
+              : !talud ? waarom[0].toUpperCase() + waarom.slice(1) + ", gerekend vanaf de waterlijn." + (q.taludStatus === "ok" ? "" : " Zoek het water opnieuw.")
+              : "Deels " + waarom + ": " + m2Txt(talud) + " vanaf de insteek van het talud, " + m2Txt(lijn) + " vanaf de waterlijn.";
+            detail.appendChild(t);
+          }
+          // Talud (BGT ondersteunend waterdeel) licht bruin, de strook blauw
+          if (Array.isArray(q.water)) q.water.filter(x => x.talud).forEach(x => laag.addLayer(L.geoJSON(x.geometry, { style: { stroke: false, fillColor: "#a0784a", fillOpacity: .4 }, interactive: false })));
           if (w.kant) laag.addLayer(L.geoJSON(w.kant.geometry, { style: { stroke: false, fillColor: "#2f7fd8", fillOpacity: .45 }, interactive: false }));
         }
       }
@@ -676,16 +687,19 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
           if (!nieuw) return;
           const m = alle.find(z => z.key === k).m; if (h.droog) droog += m; else nat += m;
         });
-        // Waterdelen bewaren (bijgeknipt): de strook wordt vanaf de waterkant gerekend
+        // Waterdelen en taluds bewaren (bijgeknipt): de strook wordt vanaf de insteek gerekend
         q.water = window.polygonClipping ? Perceel.waterBijPerceel(q.geometry, water, polygonClipping) : [];
+        q.taludStatus = water.taludFout ? "fout" : "ok";
         q.waterTs = Date.now();
+        if (water.taludFout) regels.push("Perceel " + (i + 1) + ": " + water.taludFout + " Gerekend vanaf de waterlijn.");
         regels.push("Perceel " + (i + 1) + ": " + (nat || droog ? [nat ? mTxt(nat) + " water" : "", droog ? mTxt(droog) + " greppel/droge sloot" : ""].filter(Boolean).join(", ") : "geen (nieuw) water langs de rand"));
-        ruwData.push({ perceel: i + 1, waterdelen: water.length, voorbeeld: water.slice(0, 3).map(w => w.properties) });
+        const wd = water.filter(w => !w.talud), td = water.filter(w => w.talud);
+        ruwData.push({ perceel: i + 1, waterdelen: wd.length, taluds: td.length, voorbeeld: wd.slice(0, 3).map(w => w.properties), voorbeeldTalud: td.slice(0, 3).map(w => w.properties) });
       } catch (er) { fout = er; regels.push("Perceel " + (i + 1) + ": " + er.message); }
     }
     bewaar(); teken();
     btn.disabled = false; btn.textContent = old;
-    say(regels.join(" · ") + (fout ? "" : ". Water staat op 'nat of kort droog' (3 m, vanaf de waterkant): zet lang droogvallend en droge sloten zelf om via Oevers aanwijzen."), !!fout);
+    say(regels.join(" · ") + (fout ? "" : ". Water staat op 'nat of kort droog' (3 m, vanaf de insteek van het talud): zet lang droogvallend en droge sloten zelf om via Oevers aanwijzen."), !!fout);
     ruw.textContent = JSON.stringify(ruwData, null, 2);
   });
   // Keuze type waterloop

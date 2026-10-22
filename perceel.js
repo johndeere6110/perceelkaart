@@ -1,4 +1,4 @@
-// perceel.js versie 19 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 20 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -16,7 +16,8 @@
 //   Perceel.samenvoegen(geometries, clip, naad)   // percelen tot één vorm, naden tot 2×naad m dicht; null als los
 //   opts.abPunt [lon, lat] bij sporen(): de AB-lijn langs de kant die het dichtst bij dat punt ligt
 //   opts.sectie (m) bij sporen(): laatste gang in hele secties; de baan toont alleen wat aan staat
-//   Perceel.zaaiPlan(sporen, { breedte, rij, spoor, band, rondes, metDeKlok, andereKant })   // welke zaai-elementen dicht voor de spuitsporen
+//   Perceel.zaaiPlan(sporen, { breedte, rij, spoor, band, rondes, metDeKlok, andereKant })
+//   Perceel.zaaiVlakken(sporen, plan, clip)   // stroken op de kaart voor de gangen met een spuitpad   // welke zaai-elementen dicht voor de spuitsporen
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
 // "offline" (geen verbinding en niks opgeslagen op deze plek), "server", "geen-perceel". De .message is Nederlands.
@@ -641,6 +642,7 @@
       buitenKant: uit.length && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
       secties: sectie ? { breedte: sectie, totaal: sectiesTotaal, aan: sectiesAan, laatsteLengte: uit.length ? uit[uit.length - 1].lengte : 0 } : null,
       abLengte: ab.m, a: terug(0, 0), b: terug(len, 0), sporen: uit,
+      vlak: { polyM, terug }, // perceel in het gedraaide stelsel (x langs AB, y loodrecht, links positief), voor zaaiVlakken
       // Koers van de AB-lijn in graden t.o.v. het ware noorden, met de klok mee (zoals op een GPS-terminal)
       // (uit de richting in meters oost/noord op de WGS84-ellipsoïde, zoals een GPS-terminal rekent)
       koers: (Math.atan2(ux, uy) * 180 / Math.PI + 360) % 360,
@@ -717,7 +719,50 @@
       return true;
     });
     gangen.sort((a, b) => (a.soort === b.soort ? 0 : a.soort === "ronde" ? -1 : 1) || a.gang - b.gang || String(a.kant).localeCompare(String(b.kant)));
-    return { rijen: n, rondes: r, aantalGangen: aantal, ritme, gangen };
+    return { rijen: n, rondes: r, breedte: zb, aantalGangen: aantal, ritme, gangen };
+  }
+  // Stroken op de kaart voor de gangen uit een zaaiPlan: binnengang = strook van één zaaibreedte binnen de rondes,
+  // ronde = ring op die afstand van de rand. Geeft [{ g, geometry (MultiPolygon), label [lon, lat], pijl: [van, naar] | null,
+  // lijn: [begin, eind] van het hart van de strook | null }].
+  function zaaiVlakken(s, plan, clip) {
+    if (!s || !s.vlak || !plan || !clip) return [];
+    const { polyM, terug } = s.vlak, f = s.zijde || 1, zb = plan.breedte, uit = [];
+    const binnen = d => d > 0 ? binnenGebied(polyM, d, clip) : polyM;
+    const naarLL = poly => poly.map(rings => rings.map(r => r.map(p => terug(p[0], p[1]))));
+    let kern = null;
+    plan.gangen.forEach(g => {
+      let vorm;
+      try {
+        if (g.soort === "ronde") {
+          const buiten = binnen((g.gang - 1) * zb), bin = binnen(g.gang * zb);
+          vorm = bin.length ? clip.difference(buiten, bin) : buiten;
+        } else {
+          if (!kern) kern = binnen(plan.rondes * zb);
+          const y1 = f * (g.midden - zb / 2), y2 = f * (g.midden + zb / 2), lo = Math.min(y1, y2), hi = Math.max(y1, y2);
+          let x1 = Infinity, x2 = -Infinity;
+          polyM.forEach(rings => rings[0].forEach(p => { x1 = Math.min(x1, p[0]); x2 = Math.max(x2, p[0]); }));
+          vorm = clip.intersection([[[x1 - 1, lo], [x2 + 1, lo], [x2 + 1, hi], [x1 - 1, hi], [x1 - 1, lo]]], kern);
+        }
+      } catch (e) { return; }
+      if (!vorm || !vorm.length) return;
+      // Label en pijl aan het begin van de gang, in de rijrichting (heen = A->B = x oplopend)
+      let label, pijl = null, lijn = null;
+      if (g.soort === "gang") {
+        let a = Infinity, b = -Infinity;
+        vorm.forEach(poly => poly[0].forEach(p => { a = Math.min(a, p[0]); b = Math.max(b, p[0]); }));
+        // Label midden in de strook, pijl aan het begin in de rijrichting
+        const y = f * g.midden, x0 = g.heen ? a + 15 : b - 15, x1 = g.heen ? x0 + 30 : x0 - 30;
+        label = terug((a + b) / 2, y); pijl = [terug(x0, y), terug(x1, y)];
+        lijn = [terug(a, y), terug(b, y)];
+      } else {
+        // Ronde: label aan de AB-kant, halverwege
+        let a = Infinity, b = -Infinity;
+        polyM.forEach(rings => rings[0].forEach(p => { a = Math.min(a, p[0]); b = Math.max(b, p[0]); }));
+        label = terug((a + b) / 2, f * (g.gang - 0.5) * zb);
+      }
+      uit.push({ g, geometry: { type: "MultiPolygon", coordinates: naarLL(vorm) }, label, pijl, lijn });
+    });
+    return uit;
   }
 
   // Landschapselement (sloot, houtwal)? Veldnaam verschilt per dataset, dus alle tekstwaarden bekijken
@@ -843,5 +888,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, zaaiPlan, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, zaaiPlan, zaaiVlakken, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
 });

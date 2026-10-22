@@ -145,7 +145,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 35</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 36</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -431,7 +431,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const stap = stappen.length - 1;
     // Vergelijking voor de stap die telt: gevonden water vanaf de insteek tegenover vanaf de perceelrand (en bij 3 m)
     const water = autoNat.length ? { m: autoM, breedte: typeVan("nat").st[stap], kant: wsOk ? ws(stap) : null, hoofd: wsOk && stap ? ws(0) : null, rand: autoM * typeVan("nat").st[stap] } : null;
-    return { per, lengte, hoofd: stappen[0].af, af: Math.min(stappen[stap].af, q.ha), stap, stappen, max, water };
+    // Langs water erbij (q.extraWater m): BRP-grens al teruggelegd, maar er wordt dichter bij het water geteeld
+    const natM = Object.entries(per).reduce((a, [id, m]) => a + (typeVan(id).st[0] > 0 ? m : 0), 0);
+    const extra = natM * (q.extraWater || 0) / 10000;
+    return { per, lengte, hoofd: stappen[0].af, af: Math.min(stappen[stap].af, q.ha), stap, stappen, max, water, natM, extra };
   }
   const m2Txt = v => Math.round(v).toLocaleString("nl-NL") + " m²";
   const nlM = v => String(v).replace(".", ",") + " m";
@@ -825,6 +828,15 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
           tb.appendChild(tr);
         });
         detail.appendChild(tb);
+        // Langs water erbij: 0 -> 1 -> 2 -> 3 m (voor percelen waar de grens al op de bufferstrook ligt)
+        if (bf.natM) {
+          const r = document.createElement("div"), bt = document.createElement("button"), ew = q.extraWater || 0;
+          bt.type = "button"; bt.className = "btn klein"; bt.textContent = "Langs water erbij: " + nlM(ew);
+          bt.addEventListener("click", () => { q.extraWater = (ew + 1) % 4; bewaar(); teken(); });
+          r.appendChild(bt);
+          if (ew) { const t = document.createElement("span"); t.textContent = " + " + m2Txt(bf.extra * 10000) + " (" + mTxt(bf.natM) + " × " + nlM(ew) + "), perceel " + haTxt(q.ha) + " ha"; r.appendChild(t); }
+          detail.appendChild(r);
+        }
         if (bf.stap) { const n = document.createElement("div"); n.textContent = "Meer dan 4 % (" + haTxt(bf.max) + " ha) mag niet, dan wordt de strook smaller."; detail.appendChild(n); }
         if (bf.stap === 2 && bf.af > bf.max) { const n = document.createElement("div"); n.textContent = "Nog boven 4 %, maar smaller mag niet."; detail.appendChild(n); }
         if (bf.water) {
@@ -853,7 +865,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       if (spuitAan && sb && !kv) { const d = spuitBlok(q.geometry, q, bewaar, sb); if (d) maakDetail().appendChild(d); }
       go.append(nm, mt);
       go.addEventListener("click", () => map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
-      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha) + " ha";
+      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha + bf.extra) + " ha";
       const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "×";
       del.setAttribute("aria-label", "Haal perceel " + (i + 1) + " weg");
       del.addEventListener("click", () => { sel.splice(i, 1); bewaar(); teken(); });
@@ -873,7 +885,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const n1 = document.createElement("div"); n1.className = "naam"; n1.textContent = kv.naam;
       const n2 = document.createElement("div"); n2.className = "meta"; n2.textContent = "perceel " + leden.map(q => sel.indexOf(q) + 1).join(" + ");
       nm.append(n1, n2);
-      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(leden.reduce((t, q) => t + q.ha, 0)) + " ha";
+      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(leden.reduce((t, q) => t + q.ha + buffer(q).extra, 0)) + " ha";
       kop.append(nm, w); box.appendChild(kop);
       // Pad of naad tussen de percelen: zit in de vorm voor de sporen, niet in de ha
       if (vorm) {
@@ -888,10 +900,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       kb.appendChild(box);
     });
     const bfs = sel.map(buffer), tot = sel.reduce((a, q) => a + q.ha, 0), dubbel = sel.some(q => binnenAnder(q) >= 0);
-    const af = bfs.reduce((a, x) => a + x.af, 0), om = bfs.reduce((a, x) => a + x.lengte, 0);
+    const af = bfs.reduce((a, x) => a + x.af, 0), om = bfs.reduce((a, x) => a + x.lengte, 0), bij = bfs.reduce((a, x) => a + x.extra, 0);
     $("totLbl").textContent = (sel.length === 1 ? "1 perceel" : sel.length + " percelen samen") + (af ? ", zonder bufferstrook" : "");
-    $("totHa").textContent = haTxt(tot - af) + " ha";
-    $("totSub").textContent = (dubbel ? "Let op: percelen overlappen, het totaal telt dubbel. " : "") + (af ? "Bruto " + haTxt(tot) + " ha − bufferstroken " + haTxt(af) + " ha (" + mTxt(om) + " oever)"
+    $("totHa").textContent = haTxt(tot + bij - af) + " ha";
+    $("totSub").textContent = (dubbel ? "Let op: percelen overlappen, het totaal telt dubbel. " : "") + (af || bij ? "Bruto " + haTxt(tot) + " ha" + (bij ? " + langs water " + haTxt(bij) + " ha" : "") + (af ? " − bufferstroken " + haTxt(af) + " ha" : "") + " (" + mTxt(om) + " oever)"
       : om ? mTxt(om) + " oever, alleen droge sloten: geen bufferstrook." : "");
     $("info").hidden = !sel.length;
     if (!sel.length && oeverModus) setOever(false);

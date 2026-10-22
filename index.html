@@ -121,7 +121,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 18</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 19</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -224,9 +224,27 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("bBron").setAttribute("aria-pressed", bronRef);
     $("bBron").textContent = "Grenzen: " + (bronRef ? "referentieperceel (BGT)" : "BRP-gewasperceel");
   };
-  $("bBron").addEventListener("click", () => {
+  // Omzetten: nieuwe percelen uit de gekozen bron, en de gekozen percelen gaan mee (de andere grens blijft bewaard)
+  $("bBron").addEventListener("click", async () => {
     bronRef = !bronRef; store.set("kaartBronRef", bronRef); zetBron();
-    say(bronRef ? "Nieuwe percelen komen uit de referentiepercelen: de kavel volgens de topografische kaart, meestal tot de slootkant." : "Nieuwe percelen komen uit het BRP: het ingetekende gewasperceel.");
+    const uitleg = bronRef ? "Nieuwe percelen komen uit de referentiepercelen: de kavel volgens de topografische kaart, meestal tot de slootkant." : "Nieuwe percelen komen uit het BRP: het ingetekende gewasperceel.";
+    const om = sel.filter(q => q.ref !== bronRef);
+    if (!om.length) { say(uitleg); return; }
+    const naam = bronRef ? "referentieperceel" : "BRP-perceel", doel = bronRef;
+    say("Percelen omzetten naar " + naam + "…");
+    const mis = []; let n = 0;
+    for (const q of om) {
+      altGeprobeerd.delete(q.key);
+      await haalAlt(q);
+      if (bronRef !== doel) return; // intussen weer teruggezet
+      const nr = sel.indexOf(q) + 1;
+      if (!nr || q.ref === doel) continue;
+      const r = wissel(q);
+      if (r === true) n++;
+      else mis.push("perceel " + nr + (r === "dubbel" ? " heeft hetzelfde " + naam + " als een ander perceel" : q.alt && q.alt.geen ? ": geen " + naam + " op deze plek" : ": niet opgehaald (geen verbinding?)"));
+    }
+    bewaar(); teken();
+    say((n ? n + (n === 1 ? " perceel" : " percelen") + " omgezet naar " + naam + ". " : "") + (mis.length ? "Niet omgezet: " + mis.join("; ") + ". " : "") + uitleg, mis.length > 0);
   });
   zetBron();
   const sleutel = p => (p.ref ? "ref:" : "") + (p.id != null ? "id:" + p.id : "g:" + JSON.stringify(p.geometry.coordinates).slice(0, 120));
@@ -236,7 +254,47 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   if (!Array.isArray(sel)) sel = [];
   sel = sel.filter(q => q && q.geometry && typeof q.ha === "number");
   // Oppervlakte opnieuw uit de grens (eerder bewaard op 2 decimalen)
-  sel.forEach(q => { try { q.ha = Perceel.oppervlakteHa(q.geometry); } catch (e) {} });
+  sel.forEach(q => { try { q.ha = Perceel.oppervlakteHa(q.geometry); if (q.alt && q.alt.geometry) q.alt.ha = Perceel.oppervlakteHa(q.alt.geometry); } catch (e) {} });
+  const nieuwPerceel = p => ({ key: sleutel(p), gewas: p.gewas || (p.ref ? "Referentieperceel" : ""), jaar: p.jaar, status: p.status || "", ha: p.ha, bron: p.bron, ref: !!p.ref, geometry: p.geometry, oever: {} });
+  // Andere grens per perceel (BRP <-> referentieperceel), in q.alt. Alles wat bij een grens hoort wisselt mee,
+  // zodat terugwisselen de oevers, het gevonden water en de sleutel (kavels) terugzet.
+  const GRENS = ["key", "gewas", "jaar", "status", "ha", "bron", "ref", "geometry", "oever", "wauto", "water", "taludStatus", "waterTs"];
+  const altBezig = new Map(), altGeprobeerd = new Set();
+  // Overlap: ligt een gekozen perceel binnen een ander (bijv. referentieperceel over twee BRP-percelen)? Dan telt het dubbel.
+  const middenCache = new Map();
+  const midden = q => { if (!middenCache.has(q.key)) middenCache.set(q.key, Perceel.binnenPunt(q.geometry)); return middenCache.get(q.key); };
+  const binnenAnder = q => { const m = midden(q); return m ? sel.findIndex(x => x !== q && x.ha >= q.ha && Perceel.bevatPunt(x.geometry, m[0], m[1])) : -1; };
+  function haalAlt(q) {
+    if (q.alt) return Promise.resolve(q.alt);
+    if (altBezig.has(q.key)) return altBezig.get(q.key);
+    const key = q.key, ref = !q.ref, pt = Perceel.binnenPunt(q.geometry);
+    const pr = (pt ? Perceel.zoekOpPunt(pt[0], pt[1], ref ? { api: Perceel.API_REF, cacheKey: "perceelCacheRef" } : undefined) : Promise.reject(null))
+      .then(r => { r.perceel.ref = ref; return nieuwPerceel(r.perceel); })
+      .catch(e => e && e.code === "geen-perceel" ? { geen: true } : null)
+      .then(alt => {
+        altBezig.delete(key);
+        const h = sel.find(x => x.key === key);
+        if (!alt) { altGeprobeerd.add(key); if (h) teken(); }
+        else if (h && !h.alt) { h.alt = alt; bewaar(); teken(); }
+        return h ? h.alt : null;
+      });
+    altBezig.set(key, pr);
+    return pr;
+  }
+  // Wissel een perceel naar zijn andere grens: true, "dubbel" (die grens is al gekozen) of false (geen andere grens)
+  function wissel(q) {
+    const a = q.alt;
+    if (!a || a.geen) return false;
+    if (sel.some(x => x !== q && x.key === a.key)) return "dubbel";
+    const oud = {};
+    GRENS.forEach(k => { if (q[k] !== undefined) oud[k] = q[k]; delete q[k]; });
+    GRENS.forEach(k => { if (a[k] !== undefined) q[k] = a[k]; });
+    if (!q.oever || typeof q.oever !== "object") q.oever = {};
+    q.alt = oud;
+    kavels.forEach(kv => kv.leden = kv.leden.map(x => x === oud.key ? q.key : x));
+    bewaarK();
+    return true;
+  }
 
   // Bufferstroken per type waterloop (RVO): breedte bij hoofdregel, 1e en 2e herberekening (>4 % van het perceel)
   const TYPES = [
@@ -446,6 +504,26 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       // Bufferstrook- en spuituitleg onder de regel, over de volle breedte
       let detail = null;
       const maakDetail = () => detail || (detail = Object.assign(document.createElement("div"), { className: "detail" }));
+      // Andere grens: ophalen op de achtergrond, met één tik wisselen
+      if (!q.alt && !altGeprobeerd.has(q.key)) haalAlt(q);
+      {
+        const andere = q.ref ? "BRP-perceel" : "referentieperceel", g = document.createElement("div");
+        if (q.alt && !q.alt.geen) {
+          const bt = document.createElement("button"); bt.type = "button"; bt.className = "btn klein";
+          const vs = q.alt.ha - q.ha;
+          bt.textContent = "Wissel naar " + andere + ": " + haTxt(q.alt.ha) + " ha (" + (vs >= 0 ? "+" : "−") + haTxt(Math.abs(vs)) + ")";
+          bt.addEventListener("click", () => {
+            const r = wissel(q);
+            if (r === "dubbel") { say("Dat " + andere + " is al gekozen (perceel " + (sel.findIndex(x => x.key === q.alt.key) + 1) + "). Haal dat eerst weg.", true); return; }
+            bewaar(); teken();
+            say("Perceel " + (i + 1) + " is nu het " + (q.ref ? "referentieperceel" : "BRP-perceel") + ": " + haTxt(q.ha) + " ha." + (q.alt.wauto && Object.keys(q.alt.wauto).length && !(q.wauto && Object.keys(q.wauto).length) ? " Gevonden water hoort bij de grens: zoek het water opnieuw." : ""));
+          });
+          g.appendChild(bt);
+        } else g.textContent = q.alt ? "Geen " + andere + " op deze plek." : altBezig.has(q.key) ? andere[0].toUpperCase() + andere.slice(1) + " ophalen…" : andere[0].toUpperCase() + andere.slice(1) + " niet opgehaald (geen verbinding?).";
+        maakDetail().appendChild(g);
+        const ov = binnenAnder(q);
+        if (ov >= 0) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Ligt binnen perceel " + (ov + 1) + ": telt dubbel. Haal er één weg of wissel terug."; detail.appendChild(x); }
+      }
       if (bf.lengte) {
         maakDetail();
         const lijst = Object.entries(bf.per).sort((x, y) => typeVan(y[0]).st[0] - typeVan(x[0]).st[0]);
@@ -524,12 +602,12 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       box.appendChild(los);
       kb.appendChild(box);
     });
-    const bfs = sel.map(buffer), tot = sel.reduce((a, q) => a + q.ha, 0);
+    const bfs = sel.map(buffer), tot = sel.reduce((a, q) => a + q.ha, 0), dubbel = sel.some(q => binnenAnder(q) >= 0);
     const af = bfs.reduce((a, x) => a + x.af, 0), om = bfs.reduce((a, x) => a + x.lengte, 0);
     $("totLbl").textContent = (sel.length === 1 ? "1 perceel" : sel.length + " percelen samen") + (af ? ", zonder bufferstrook" : "");
     $("totHa").textContent = haTxt(tot - af) + " ha";
-    $("totSub").textContent = af ? "Bruto " + haTxt(tot) + " ha − bufferstroken " + haTxt(af) + " ha (" + mTxt(om) + " oever)"
-      : om ? mTxt(om) + " oever, alleen droge sloten: geen bufferstrook." : "";
+    $("totSub").textContent = (dubbel ? "Let op: percelen overlappen, het totaal telt dubbel. " : "") + (af ? "Bruto " + haTxt(tot) + " ha − bufferstroken " + haTxt(af) + " ha (" + mTxt(om) + " oever)"
+      : om ? mTxt(om) + " oever, alleen droge sloten: geen bufferstrook." : "");
     $("info").hidden = !sel.length;
     if (!sel.length && oeverModus) setOever(false);
     map.invalidateSize();

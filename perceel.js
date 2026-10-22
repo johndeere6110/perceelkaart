@@ -1,10 +1,11 @@
-// perceel.js versie 13 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 14 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
 //   Perceel.zoekOpMijnLocatie().then(r => r.perceel.ha)        // GPS + PDOK, valt terug op opgeslagen percelen
 //   Perceel.zoekOpPunt(lon, lat)                                // zelfde, met een bekende positie
 //   Perceel.oppervlakteHa(geometry), Perceel.bevatPunt(geometry, lon, lat)
+//   Perceel.binnenPunt(geometry)   // [lon, lat] ruim binnen het perceel (ook bij een L-vorm), om op te zoeken
 //   Perceel.zijden(geometry), Perceel.rechteZijde(zijden, key)   // randstukjes en lengtes, voor bufferstroken
 //   Perceel.zoekWater(geometry) + Perceel.waterLangsZijden(geometry, water)   // randen langs BGT-water (taluds: .talud)
 //   Perceel.waterBijPerceel(geometry, water, clip)   // waterdelen bijgeknipt rond het perceel, om te bewaren
@@ -76,6 +77,42 @@
   }
   const bevatPunt = (geometry, lon, lat) =>
     polygonen(geometry).some(rings => rings.length && inRing(rings[0], lon, lat) && !rings.slice(1).some(h => inRing(h, lon, lat)));
+
+  // Punt zo ver mogelijk van de rand, in het grootste deel (zwaartepunt valt bij een L-vorm of inham soms buiten)
+  function binnenPunt(geometry) {
+    const polys = polygonen(geometry);
+    if (!polys.length) return null;
+    const groot = polys.reduce((a, b) => ringM2(b[0]) > ringM2(a[0]) ? b : a);
+    const lat0 = groot[0][0][1], kx = 111320 * Math.cos(lat0 * Math.PI / 180), ky = 110540;
+    const rings = groot.map(r => r.map(c => [c[0] * kx, c[1] * ky]));
+    const rand = p => {
+      let d = Infinity;
+      rings.forEach(r => { for (let i = 0; i < r.length - 1; i++) {
+        const a = r[i], b = r[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+        const t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
+        d = Math.min(d, Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy));
+      } });
+      return d;
+    };
+    const binnen = p => inRing(rings[0], p[0], p[1]) && !rings.slice(1).some(h => inRing(h, p[0], p[1]));
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    rings[0].forEach(p => { x1 = Math.min(x1, p[0]); y1 = Math.min(y1, p[1]); x2 = Math.max(x2, p[0]); y2 = Math.max(y2, p[1]); });
+    let best = null, bd = -1, cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, hx = (x2 - x1) / 2, hy = (y2 - y1) / 2;
+    // Grof raster over het hele perceel, daarna twee keer fijner rond het beste punt
+    for (let ronde = 0; ronde < 3; ronde++) {
+      const N = 16;
+      for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+        const p = [cx - hx + 2 * hx * i / N, cy - hy + 2 * hy * j / N];
+        if (!binnen(p)) continue;
+        const d = rand(p);
+        if (d > bd) { bd = d; best = p; }
+      }
+      if (!best) break;
+      cx = best[0]; cy = best[1]; hx /= 6; hy /= 6;
+    }
+    if (!best) best = rings[0][0];
+    return [best[0] / kx, best[1] / ky];
+  }
 
   /* ---------- Zijden (voor bufferstroken langs water) ---------- */
   // Afstand in m over de bol (haversine, zelfde straal als de oppervlakte)
@@ -715,5 +752,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
 });

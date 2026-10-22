@@ -1,4 +1,4 @@
-// perceel.js versie 22 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 23 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -788,7 +788,7 @@
         // Ronde: label aan de AB-kant, halverwege
         let a = Infinity, b = -Infinity;
         polyM.forEach(rings => rings[0].forEach(p => { a = Math.min(a, p[0]); b = Math.max(b, p[0]); }));
-        label = terug((a + b) / 2, f * (g.gang - 0.5) * zb);
+        label = terug(a + (b - a) * 0.15, f * (g.gang - 0.5) * zb); // niet in het midden, daar staat START vaak
       }
       uit.push({ g, geometry: { type: "MultiPolygon", coordinates: naarLL(vorm) }, label, pijl, lijn });
     });

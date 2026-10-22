@@ -109,12 +109,14 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .sp .zaai .zdet summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
 .sp .zaai .zdet > div { margin-top: 4px; }
 .sp .zaai .knoppen { display: flex; flex-wrap: wrap; gap: 6px; }
-.zl { background: #f2c200; color: #1C2318; font: 700 15px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 6px; padding: 1px 6px; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; box-shadow: 0 0 0 2px #1C2318; }
-.zl.st { background: #e8590c; color: #fff; font-size: 17px; }
+.zl { background: #f2c200; color: #1C2318; font: 700 12px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 4px; padding: 0 4px; line-height: 15px; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; box-shadow: 0 0 0 2px #1C2318; }
+.zl.st { background: #e8590c; color: #fff; font-size: 13px; }
 .zl.rd { background: #9c36b5; color: #fff; }
-.zb { background: #fff; color: #1C2318; font: 700 14px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 999px; min-width: 20px; line-height: 20px; text-align: center; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; box-shadow: 0 0 0 1px #1C2318; }
-.zpijl { color: #fff; font-size: 24px; line-height: 28px; text-align: center; text-shadow: 0 0 3px #000, 0 0 3px #000; }
-.zpijl.st { color: #ffd8a8; font-size: 30px; }
+.zb { background: #fff; color: #1C2318; font: 700 11px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 999px; min-width: 15px; line-height: 15px; text-align: center; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; box-shadow: 0 0 0 1px #1C2318; }
+.zpijl { color: #fff; font-size: 16px; line-height: 28px; text-align: center; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+.zpijl.st { color: #ffd8a8; font-size: 20px; }
+/* Uitgezoomd: alleen START en de ronde, anders staan de nummers op elkaar */
+#map.ver .zb, #map.ver .zl:not(.st):not(.rd), #map.ver .zpijl:not(.st) { display: none; }
 .sp .zaai .start { margin: 6px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--bg); color: var(--ink); }
 .kavel { margin-top: 10px; border: 2px solid #e8590c; border-radius: 10px; padding: 10px 12px; }
 .kavel .kop { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; }
@@ -140,7 +142,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 32</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 33</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -230,6 +232,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   store.set("kaartTestView", view);
   $("bNL").addEventListener("click", () => map.fitBounds(NL));
   map.on("moveend", () => { const c = map.getCenter(); store.set("kaartTestView", { lat: c.lat, lon: c.lng, z: map.getZoom() }); });
+  // Uitgezoomd (onder 17) de kleine zaailabels verbergen
+  const zoomKlasse = () => $("map").classList.toggle("ver", map.getZoom() < 17);
+  map.on("zoomend", zoomKlasse); zoomKlasse();
 
   // PDOK-achtergronden (Web Mercator, geen key)
   const attr = 'Kaart: <a href="https://www.pdok.nl">PDOK</a>, Kadaster';

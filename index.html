@@ -121,7 +121,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 20</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 21</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -295,6 +295,43 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     bewaarK();
     return true;
   }
+  // Nieuwere BRP-intekening: bij het openen (met bereik) kijken of PDOK een nieuwer jaar heeft dan het bewaarde
+  // BRP-perceel (q zelf, of q.alt als het referentieperceel gekozen is). Gevonden: q.nieuwer, met een knop om over te stappen.
+  const brpVan = q => q.ref ? (q.alt && !q.alt.geen && !q.alt.ref ? q.alt : null) : q;
+  const jaarNu = new Date().getFullYear();
+  async function controleerJaar() {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    let iets = false;
+    for (const q of sel.slice()) {
+      const b = brpVan(q), oud = b && Number(b.jaar);
+      if (!oud || oud >= jaarNu || (q.nieuwer && Number(q.nieuwer.jaar) > oud)) continue;
+      const pt = Perceel.binnenPunt(b.geometry);
+      if (!pt) continue;
+      try {
+        const r = await Perceel.zoekOpPunt(pt[0], pt[1]);
+        if (r.perceel.bron !== "online" || !(Number(r.perceel.jaar) > oud) || !sel.includes(q) || brpVan(q) !== b) continue;
+        r.perceel.ref = false;
+        q.nieuwer = nieuwPerceel(r.perceel); iets = true;
+      } catch (e) { if (e && e.code === "offline") return; }
+    }
+    if (iets) { bewaar(); teken(); }
+  }
+  // Overstappen op de nieuwere intekening. Oevers en gevonden water horen bij de oude grens en vervallen.
+  function naarNieuwer(q) {
+    const n = q.nieuwer, b = brpVan(q);
+    if (!n || !b) return false;
+    if (sel.some(x => x !== q && x.key === n.key)) return "dubbel";
+    if (b === q) {
+      const oudKey = q.key;
+      ["wauto", "water", "taludStatus", "waterTs"].forEach(k => delete q[k]);
+      Object.assign(q, n, { oever: {} });
+      kavels.forEach(kv => kv.leden = kv.leden.map(x => x === oudKey ? q.key : x));
+      bewaarK();
+    } else q.alt = Object.assign({}, n, { oever: {} });
+    delete q.nieuwer;
+    return true;
+  }
+  setTimeout(controleerJaar, 1500);
 
   // Bufferstroken per type waterloop (RVO): breedte bij hoofdregel, 1e en 2e herberekening (>4 % van het perceel)
   const TYPES = [
@@ -522,6 +559,22 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         } else g.textContent = q.alt ? "Geen " + andere + " op deze plek." : altBezig.has(q.key) ? andere[0].toUpperCase() + andere.slice(1) + " ophalen…" : andere[0].toUpperCase() + andere.slice(1) + " niet opgehaald (geen verbinding?).";
         maakDetail().appendChild(g);
         const ov = binnenAnder(q);
+        // Nieuwere BRP-intekening gevonden bij het openen
+        const nw = q.nieuwer, bv = brpVan(q);
+        if (nw && bv) {
+          const box = document.createElement("div"), vs = nw.ha - bv.ha;
+          const t = document.createElement("div"); t.className = "warn4";
+          t.textContent = "BRP " + nw.jaar + " beschikbaar: " + haTxt(nw.ha) + " ha (" + (vs >= 0 ? "+" : "−") + haTxt(Math.abs(vs)) + " t.o.v. " + bv.jaar + ")" + (q.ref ? ", voor het BRP-perceel." : ".");
+          const bt = document.createElement("button"); bt.type = "button"; bt.className = "btn klein"; bt.textContent = "Overstappen op " + nw.jaar;
+          bt.addEventListener("click", () => {
+            const water = q.ref ? false : q.wauto && Object.keys(q.wauto).length || Object.keys(q.oever || {}).length;
+            const r = naarNieuwer(q);
+            if (r === "dubbel") { say("Het perceel van " + nw.jaar + " is al gekozen. Haal dat eerst weg.", true); return; }
+            bewaar(); teken();
+            say("Perceel " + (i + 1) + ": nu BRP " + nw.jaar + " (" + haTxt(nw.ha) + " ha)." + (water ? " Oevers en water horen bij de oude grens: zoek het water opnieuw." : ""));
+          });
+          box.append(t, bt); detail.appendChild(box);
+        }
         if (ov >= 0) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Ligt binnen perceel " + (ov + 1) + ": telt dubbel. Haal er één weg of wissel terug."; detail.appendChild(x); }
       }
       if (bf.lengte) {

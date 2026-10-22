@@ -128,7 +128,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 26</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 27</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -542,8 +542,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (eerste) {
       const x = document.createElement("div"); x.className = "start";
       const om = eerste.heen ? "B → A" : "A → B", ander = kantVan(eerste.dicht.map(r => z.rijen + 1 - r));
-      x.innerHTML = "<strong>Start binnenveld:</strong> " + esc("begin in het spuitpad, gang " + gNaam(eerste) + " (hart " + mDec(Math.round(eerste.midden * 10) / 10) + " van de AB-kant), en rij hem van " +
-        (eerste.heen ? "A → B" : "B → A") + ". Het spuitpad zit dan " + kantVan(eerste.dicht) + " op de zaaier (rij " + eerste.dicht.join(" en ") + " van links). Rij je hem " + om + ", dan zit het " + ander + ": verkeerde kant. Daarna heen en weer; de gangen tussen de rondes en dit pad zaai je zonder spuitpad.");
+      const spiegel = eerste.dicht.map(r => z.rijen + 1 - r).sort((p, q) => p - q);
+      x.innerHTML = "<strong>Start binnenveld:</strong> " + esc("begin in het spuitpad, gang " + gNaam(eerste) + " (hart " + mDec(Math.round(eerste.midden * 10) / 10) + " van de AB-kant). " +
+        "Zet de computer het pad " + kantVan(eerste.dicht) + " (rij " + eerste.dicht.join(" en ") + " van links): rij hem " + (eerste.heen ? "A → B" : "B → A") +
+        ". Zet hij het " + ander + " (rij " + spiegel.join(" en ") + "): rij hem " + om + ". Andersom zit het pad aan de verkeerde kant. De tabel hieronder gaat uit van de eerste keuze; bij de tweede draaien alle richtingen en kanten om. Daarna heen en weer; de gangen tussen de rondes en dit pad zaai je zonder spuitpad.");
       d.appendChild(x);
     }
     // Ritme voor de zaaicomputer: welke binnengangen een spuitspoor krijgen

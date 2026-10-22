@@ -1,4 +1,4 @@
-// perceel.js versie 17 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 18 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -16,7 +16,7 @@
 //   Perceel.samenvoegen(geometries, clip, naad)   // percelen tot één vorm, naden tot 2×naad m dicht; null als los
 //   opts.abPunt [lon, lat] bij sporen(): de AB-lijn langs de kant die het dichtst bij dat punt ligt
 //   opts.sectie (m) bij sporen(): laatste gang in hele secties; de baan toont alleen wat aan staat
-//   Perceel.zaaiPlan(sporen, { breedte, rij, spoor, band, andereKant })   // welke zaai-elementen dicht voor de spuitsporen
+//   Perceel.zaaiPlan(sporen, { breedte, rij, spoor, band, rondes, metDeKlok, andereKant })   // welke zaai-elementen dicht voor de spuitsporen
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
 // "offline" (geen verbinding en niks opgeslagen op deze plek), "server", "geen-perceel". De .message is Nederlands.
@@ -650,54 +650,73 @@
 
   /* ---------- Zaaien: welke zaai-elementen dicht voor de spuitsporen ---------- */
   // s = uitkomst van sporen(). o.breedte = zaaibreedte (m), o.rij = rijafstand (m), o.spoor = spoorbreedte van de spuit (m),
-  // o.band = bandbreedte (m), o.andereKant = zaaien begint aan de overkant van de AB-lijn.
-  // Zaaigang 1 ligt tegen de startkant en rijdt van A naar B, daarna heen en weer, op dezelfde AB-lijn als de spuit.
-  // Rijen geteld van links in de rijrichting (zoals vanaf de trekker). Sporen van de buitenronde ("R") lopen langs
-  // de lange kanten; op de kopakkers niet meegenomen.
-  // Geeft { rijen, aantalGangen, ritme, gangen: [{ gang, heen, dicht: [rijnr], sporen: [label], buiten }] } of null.
-  // ritme: { gangen, sporen } = het patroon herhaalt elke `gangen` zaaigangen met `sporen` spuitsporen (null als het niet opgaat).
-  // buiten: een spoor in deze gang valt buiten het vaste ritme (meestal de buitenronde aan de overkant).
+  // o.band = bandbreedte (m), o.rondes = aantal zaairondes langs de rand (eerst gezaaid), o.metDeKlok = rondes met de klok mee
+  // (anders tegen de klok in), o.andereKant = het binnenveld begint aan de overkant van de AB-lijn.
+  // Binnenveld: gang 1 tegen de rondes aan de startkant, van A naar B, daarna heen en weer, op dezelfde AB-lijn als de spuit;
+  // de laatste gang overlapt de rondes (die elementen gaan dan uit). Rijen geteld van links in de rijrichting.
+  // Sporen van de spuit-buitenronde ("R") liggen langs de lange kanten; in de zaairondes ligt dat spoor rondom op dezelfde
+  // afstand van de rand, dus dezelfde rijen. Kopakkers zonder zaairondes niet meegenomen.
+  // Geeft { rijen, rondes, aantalGangen, ritme, gangen: [{ soort: "ronde"|"gang", gang, kant, heen, dicht, sporen, buiten }] }.
+  // ritme: { gangen, sporen } = in het binnenveld herhaalt het patroon elke `gangen` gangen met `sporen` spuitsporen.
+  // buiten: spoor in het binnenveld buiten het vaste ritme. Rondes regelt de computer niet met het ritme.
   function zaaiPlan(s, o) {
     o = o || {};
     const zb = o.breedte, ra = o.rij, sp = o.spoor || 0, band = o.band || 0.4;
     if (!s || !(zb > 0) || !(ra > 0) || ra > zb) return null;
-    const n = Math.round(zb / ra), W = s.perceelBreedte, f = s.zijde || 1;
-    // Afstand tot de zaai-startkant
-    const vanStart = y => { const d = Math.abs(y); return o.andereKant ? W - d : d; };
-    // Richting waarin de afstand tot de startkant groeit, in het stelsel waar links van A->B positief is
-    const dd = f * (o.andereKant ? -1 : 1);
-    const banen = s.sporen.map(x => ({ label: String(x.nr), y: x.y }));
-    if (s.ronde && W > s.breedte) banen.unshift({ label: "R", y: f * s.breedte / 2 }, { label: "R", y: f * (W - s.breedte / 2) });
-    // Vast ritme: spuitsporen om de spuitbreedte vanaf het eerste spoor (vanaf de startkant)
-    banen.forEach(b => { b.d = vanStart(b.y); });
-    // Ankerpunt: het spoor waarmee de meeste andere sporen in het ritme vallen (bij gelijkspel het dichtst bij de start)
-    const sb = s.breedte, opRitme = (d, d0) => { const k = (d - d0) / sb; return Math.abs(k - Math.round(k)) * sb <= 0.05; };
-    const d0 = banen.map(b => b.d).sort((x, y) => x - y)
-      .reduce((best, d) => banen.filter(b => opRitme(b.d, d)).length > banen.filter(b => opRitme(b.d, best)).length ? d : best, Math.min(...banen.map(b => b.d)));
-    banen.forEach(b => { b.buiten = !opRitme(b.d, d0); });
+    const n = Math.round(zb / ra), W = s.perceelBreedte, f = s.zijde || 1, sb = s.breedte;
+    const r = Math.max(0, Math.min(Math.floor(o.rondes || 0), Math.floor(W / zb / 2)));
+    const lo0 = r * zb, hi0 = W - r * zb; // binnenveld, afstand tot de AB-kant
+    // Gangen in afstand tot de AB-kant (d). Tegen de klok in rijdt je met het veld links: aan de AB-kant A->B als f = 1.
+    const passen = [];
+    const abHeen = (f === 1) !== !!o.metDeKlok;
+    for (let k = 1; k <= r; k++) {
+      passen.push({ soort: "ronde", gang: k, kant: "ab", lo: (k - 1) * zb, hi: k * zb, heen: abHeen, min: 0, max: W });
+      passen.push({ soort: "ronde", gang: k, kant: "over", lo: W - k * zb, hi: W - (k - 1) * zb, heen: !abHeen, min: 0, max: W });
+    }
+    const aantal = hi0 - lo0 > 0.5 ? Math.ceil((hi0 - lo0 - 0.01) / zb) : 0;
+    for (let j = 1; j <= aantal; j++) {
+      const lo = o.andereKant ? hi0 - j * zb : lo0 + (j - 1) * zb;
+      passen.push({ soort: "gang", gang: j, lo, hi: lo + zb, heen: j % 2 === 1, min: lo0, max: hi0 });
+    }
+    const banen = s.sporen.map(x => ({ label: String(x.nr), d: Math.abs(x.y) }));
+    if (s.ronde && W > sb) banen.unshift({ label: "R", d: sb / 2 }, { label: "R", d: W - sb / 2 });
+    // Ritme in het binnenveld: anker = het spoor waarmee de meeste andere binnensporen in het ritme vallen
+    const opRitme = (d, d0) => { const k = (d - d0) / sb; return Math.abs(k - Math.round(k)) * sb <= 0.05; };
+    const binnen = banen.filter(b => b.d >= lo0 && b.d <= hi0);
+    const vanStart = d => o.andereKant ? hi0 - d : d - lo0;
+    const d0 = binnen.slice().sort((x, y) => vanStart(x.d) - vanStart(y.d))
+      .reduce((best, b) => best == null || binnen.filter(c => opRitme(c.d, b.d)).length > binnen.filter(c => opRitme(c.d, best)).length ? b.d : best, null);
+    banen.forEach(b => { b.buiten = d0 != null && !opRitme(b.d, d0); });
     let ritme = null;
     for (let m = 1; m <= 40 && !ritme; m++) { const k = m * zb / sb; if (Math.abs(k - Math.round(k)) * sb < 0.01) ritme = { gangen: m, sporen: Math.round(k) }; }
     const per = new Map();
     banen.forEach(b => [-sp / 2, sp / 2].forEach(off => {
-      const d = vanStart(b.y + off);
-      if (d < -band || d > W + band) return;
-      const g1 = Math.max(1, Math.floor((d - band) / zb) + 1), g2 = Math.floor((d + band) / zb) + 1;
-      for (let g = g1; g <= g2; g++) {
-        const heen = g % 2 === 1;
+      const wd = b.d + off;
+      passen.forEach(p => {
+        if (wd < p.lo - band || wd > p.hi + band) return;
+        // Links in de rijrichting: A->B is links de kant waar y groeit; d groeit in richting f
+        const naarLinks = (p.heen ? 1 : -1) * f > 0;
         for (let k = 0; k < n; k++) {
-          const pos = (g - 1) * zb + (k + 0.5) * ra;
-          if (pos > W + 0.01 || Math.abs(pos - d) > band / 2 + 0.03) continue;
-          // Links in de rijrichting: heen (A->B) is links positief; groeit de afstand naar links, dan rij 1 aan de verre kant
-          const naarLinks = (heen ? 1 : -1) * dd > 0;
-          const nr = naarLinks ? n - k : k + 1;
-          if (!per.has(g)) per.set(g, { gang: g, heen, dicht: new Set(), sporen: new Set(), buiten: false });
-          per.get(g).dicht.add(nr); per.get(g).sporen.add(b.label); if (b.buiten) per.get(g).buiten = true;
+          const pos = p.lo + (k + 0.5) * ra;
+          if (pos < p.min - 0.01 || pos > p.max + 0.01 || Math.abs(pos - wd) > band / 2 + 0.03) continue;
+          const id = p.soort + p.gang + (p.kant || "");
+          if (!per.has(id)) per.set(id, { soort: p.soort, gang: p.gang, kant: p.kant || null, heen: p.heen, dicht: new Set(), sporen: new Set(), buiten: false });
+          const x = per.get(id);
+          x.dicht.add(naarLinks ? n - k : k + 1); x.sporen.add(b.label);
+          if (p.soort === "gang" && b.buiten) x.buiten = true;
         }
-      }
+      });
     }));
-    const gangen = [...per.values()].sort((a, b) => a.gang - b.gang)
-      .map(x => ({ gang: x.gang, heen: x.heen, dicht: [...x.dicht].sort((a, b) => a - b), sporen: [...x.sporen], buiten: x.buiten }));
-    return { rijen: n, aantalGangen: Math.ceil(W / zb - 0.01), ritme, gangen };
+    let gangen = [...per.values()].map(x => ({ soort: x.soort, gang: x.gang, kant: x.kant, heen: x.heen, dicht: [...x.dicht].sort((a, b) => a - b), sporen: [...x.sporen], buiten: x.buiten }));
+    // Rondes: zelfde rijen aan beide kanten = rondom
+    gangen = gangen.filter(g => {
+      if (g.soort !== "ronde" || g.kant !== "over") return true;
+      const ab = gangen.find(h => h.soort === "ronde" && h.gang === g.gang && h.kant === "ab");
+      if (ab && ab.dicht.join() === g.dicht.join()) { ab.kant = "rondom"; return false; }
+      return true;
+    });
+    gangen.sort((a, b) => (a.soort === b.soort ? 0 : a.soort === "ronde" ? -1 : 1) || a.gang - b.gang || String(a.kant).localeCompare(String(b.kant)));
+    return { rijen: n, rondes: r, aantalGangen: aantal, ritme, gangen };
   }
 
   // Landschapselement (sloot, houtwal)? Veldnaam verschilt per dataset, dus alle tekstwaarden bekijken

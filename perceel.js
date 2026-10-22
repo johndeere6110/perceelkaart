@@ -1,4 +1,4 @@
-// perceel.js versie 16 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 17 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -654,7 +654,9 @@
   // Zaaigang 1 ligt tegen de startkant en rijdt van A naar B, daarna heen en weer, op dezelfde AB-lijn als de spuit.
   // Rijen geteld van links in de rijrichting (zoals vanaf de trekker). Sporen van de buitenronde ("R") lopen langs
   // de lange kanten; op de kopakkers niet meegenomen.
-  // Geeft { rijen, gangen: [{ gang, heen, dicht: [rijnr], sporen: [label] }] } of null.
+  // Geeft { rijen, aantalGangen, ritme, gangen: [{ gang, heen, dicht: [rijnr], sporen: [label], buiten }] } of null.
+  // ritme: { gangen, sporen } = het patroon herhaalt elke `gangen` zaaigangen met `sporen` spuitsporen (null als het niet opgaat).
+  // buiten: een spoor in deze gang valt buiten het vaste ritme (meestal de buitenronde aan de overkant).
   function zaaiPlan(s, o) {
     o = o || {};
     const zb = o.breedte, ra = o.rij, sp = o.spoor || 0, band = o.band || 0.4;
@@ -666,6 +668,15 @@
     const dd = f * (o.andereKant ? -1 : 1);
     const banen = s.sporen.map(x => ({ label: String(x.nr), y: x.y }));
     if (s.ronde && W > s.breedte) banen.unshift({ label: "R", y: f * s.breedte / 2 }, { label: "R", y: f * (W - s.breedte / 2) });
+    // Vast ritme: spuitsporen om de spuitbreedte vanaf het eerste spoor (vanaf de startkant)
+    banen.forEach(b => { b.d = vanStart(b.y); });
+    // Ankerpunt: het spoor waarmee de meeste andere sporen in het ritme vallen (bij gelijkspel het dichtst bij de start)
+    const sb = s.breedte, opRitme = (d, d0) => { const k = (d - d0) / sb; return Math.abs(k - Math.round(k)) * sb <= 0.05; };
+    const d0 = banen.map(b => b.d).sort((x, y) => x - y)
+      .reduce((best, d) => banen.filter(b => opRitme(b.d, d)).length > banen.filter(b => opRitme(b.d, best)).length ? d : best, Math.min(...banen.map(b => b.d)));
+    banen.forEach(b => { b.buiten = !opRitme(b.d, d0); });
+    let ritme = null;
+    for (let m = 1; m <= 40 && !ritme; m++) { const k = m * zb / sb; if (Math.abs(k - Math.round(k)) * sb < 0.01) ritme = { gangen: m, sporen: Math.round(k) }; }
     const per = new Map();
     banen.forEach(b => [-sp / 2, sp / 2].forEach(off => {
       const d = vanStart(b.y + off);
@@ -679,14 +690,14 @@
           // Links in de rijrichting: heen (A->B) is links positief; groeit de afstand naar links, dan rij 1 aan de verre kant
           const naarLinks = (heen ? 1 : -1) * dd > 0;
           const nr = naarLinks ? n - k : k + 1;
-          if (!per.has(g)) per.set(g, { gang: g, heen, dicht: new Set(), sporen: new Set() });
-          per.get(g).dicht.add(nr); per.get(g).sporen.add(b.label);
+          if (!per.has(g)) per.set(g, { gang: g, heen, dicht: new Set(), sporen: new Set(), buiten: false });
+          per.get(g).dicht.add(nr); per.get(g).sporen.add(b.label); if (b.buiten) per.get(g).buiten = true;
         }
       }
     }));
     const gangen = [...per.values()].sort((a, b) => a.gang - b.gang)
-      .map(x => ({ gang: x.gang, heen: x.heen, dicht: [...x.dicht].sort((a, b) => a - b), sporen: [...x.sporen] }));
-    return { rijen: n, aantalGangen: Math.ceil(W / zb - 0.01), gangen };
+      .map(x => ({ gang: x.gang, heen: x.heen, dicht: [...x.dicht].sort((a, b) => a - b), sporen: [...x.sporen], buiten: x.buiten }));
+    return { rijen: n, aantalGangen: Math.ceil(W / zb - 0.01), ritme, gangen };
   }
 
   // Landschapselement (sloot, houtwal)? Veldnaam verschilt per dataset, dus alle tekstwaarden bekijken

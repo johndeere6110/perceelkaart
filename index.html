@@ -98,8 +98,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .spuit .btn { min-height: 48px; padding: 0 14px; flex: none; }
 .spuit .ronde { grid-column: 1 / -1; }
 .spuit [hidden] { display: none; }
+.spuit .spoorKeus { display: flex; gap: 4px; }
+.spuit .spoorKeus .btn { min-height: 48px; padding: 0 8px; }
 .sp .zaai { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .sp .zaai .btab td:nth-child(3) { font-weight: 600; color: var(--ink); }
+.sp .zaai .btab tr.buiten td { color: var(--warn); }
 .kavel { margin-top: 10px; border: 2px solid #e8590c; border-radius: 10px; padding: 10px 12px; }
 .kavel .kop { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; }
 .kavel .naam { font-weight: 600; }
@@ -124,7 +127,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 23</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 24</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -162,7 +165,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       <span class="zx"></span>
       <label for="spoorB" class="zx">Spoorbreedte spuit (m)</label>
       <input id="spoorB" class="num zx" type="text" inputmode="decimal" autocomplete="off" placeholder="1,8">
-      <span class="zx"></span>
+      <span class="zx spoorKeus"><button type="button" class="btn klein" data-spoor="1,5">1,50</button><button type="button" class="btn klein" data-spoor="1,8">1,80</button></span>
       <label for="bandB" class="zx">Bandbreedte (cm)</label>
       <input id="bandB" class="num zx" type="text" inputmode="decimal" autocomplete="off" placeholder="40">
       <span class="zx"></span>
@@ -430,6 +433,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const el = $(id); el.value = store.get(k, d);
     el.addEventListener("input", () => { store.set(k, el.value); teken(); });
   });
+  document.querySelectorAll("[data-spoor]").forEach(bt => bt.addEventListener("click", () => {
+    $("spoorB").value = bt.dataset.spoor; store.set("kaartSpoorBreedte", bt.dataset.spoor); teken();
+  }));
   const zaaiInst = () => {
     const b = parse($("zaaiB").value), r = parse($("rijB").value) / 100, sp = parse($("spoorB").value), band = parse($("bandB").value) / 100;
     return b >= 1 && b <= 60 && r > 0.05 && r <= b ? { b, r, sp: sp > 0 && sp < 5 ? sp : 0, band: band > 0.05 && band < 1.5 ? band : 0.4 } : null;
@@ -514,10 +520,20 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     k.innerHTML = "<strong>Zaaien " + esc(mDec(zi.b)) + "</strong> (" + z.rijen + " rijen op " + esc(cm(zi.r)) + ", " + z.aantalGangen + " gangen), op dezelfde AB-lijn: gang 1 " +
       (andere ? "aan de overkant" : "tegen de AB-kant") + ", van A naar B, daarna heen en weer. Rijen geteld van links, gezien in de rijrichting.";
     d.appendChild(k);
-    if (Math.abs(sb / zi.b - Math.round(sb / zi.b)) > 0.01) {
-      const n = document.createElement("div");
-      n.textContent = mDec(sb) + " spuiten is geen veelvoud van " + mDec(zi.b) + " zaaien: de spuitsporen vallen steeds in andere rijen.";
+    // Ritme voor de zaaicomputer: welke gangen een spuitspoor krijgen
+    if (zi.sp && z.gangen.length) {
+      const n = document.createElement("div"), vast = z.gangen.filter(g => !g.buiten).map(g => g.gang);
+      const r = z.ritme, heel = r && r.sporen === 1;
+      n.innerHTML = "<strong>Ritme zaaicomputer:</strong> " + esc(
+        (heel ? "spuitspoor elke " + r.gangen + " gangen" : r ? "patroon van " + r.gangen + " gangen met " + r.sporen + " spuitsporen (" + mDec(sb) + " is geen veelvoud van " + mDec(zi.b) + ", dus om en om andere rijen)" : "geen vast ritme (" + mDec(sb) + " en " + mDec(zi.b) + " gaan niet op)") +
+        ". Spuitspoor in gang " + vast.slice(0, 6).join(", ") + (vast.length > 6 ? " …" : "") + ".");
       d.appendChild(n);
+      const los = z.gangen.filter(g => g.buiten);
+      if (los.length) {
+        const x = document.createElement("div"); x.className = "warn4";
+        x.textContent = "Buiten het ritme: gang " + los.map(g => g.gang).join(", ") + " (" + (los.some(g => g.sporen.includes("R")) ? "meestal de buitenronde" : "spoor") + "). Daar regelt de computer het niet vanzelf: zelf de rijen dichtzetten.";
+        d.appendChild(x);
+      }
     }
     if (!zi.sp) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Vul de spoorbreedte van de spuit in."; d.appendChild(x); }
     else if (!z.gangen.length) { const x = document.createElement("div"); x.textContent = "Geen spuitspoor in de zaaigangen."; d.appendChild(x); }
@@ -525,8 +541,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const tb = document.createElement("table"); tb.className = "btab";
       tb.innerHTML = '<tr><th>Gang</th><th>Rijdt</th><th>Rijen dicht</th><th>Spoor</th></tr>';
       z.gangen.forEach(g => {
-        const tr = document.createElement("tr");
-        [String(g.gang), g.heen ? "A → B" : "B → A", g.dicht.join(", "), g.sporen.map(x => x === "R" ? "buitenronde" : x).join(", ")].forEach(t => {
+        const tr = document.createElement("tr"); if (g.buiten) tr.className = "buiten";
+        [String(g.gang) + (g.buiten ? " *" : ""), g.heen ? "A → B" : "B → A", g.dicht.join(", "), g.sporen.map(x => x === "R" ? "buitenronde" : x).join(", ")].forEach(t => {
           const td = document.createElement("td"); td.textContent = t; tr.appendChild(td);
         });
         tb.appendChild(tr);
@@ -535,6 +551,16 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const n = document.createElement("div");
       n.textContent = "Spoorbreedte " + mDec(zi.sp) + ", band " + cm(zi.band) + ": een rij gaat dicht als de band hem raakt. Kopakkers niet meegenomen.";
       d.appendChild(n);
+    }
+    // Zou de andere startkant beter uitkomen (minder gangen met dichte rijen, minder buiten het ritme)?
+    if (zi.sp) {
+      const z2 = Perceel.zaaiPlan(s, { breedte: zi.b, rij: zi.r, spoor: zi.sp, band: zi.band, andereKant: !andere });
+      const score = p => p.gangen.length + 2 * p.gangen.filter(g => g.buiten).length;
+      if (z2 && score(z2) < score(z)) {
+        const x = document.createElement("div"); x.className = "warn4";
+        x.textContent = "Tip: begin " + (andere ? "tegen de AB-kant" : "aan de overkant") + ", dan " + (z2.gangen.length < z.gangen.length ? "zitten de banden vaker in één gang (" + z2.gangen.length + " gangen met dichte rijen in plaats van " + z.gangen.length + ")" : "valt minder buiten het ritme") + ".";
+        d.appendChild(x);
+      }
     }
     const bt = document.createElement("button"); bt.type = "button"; bt.className = "btn klein";
     bt.textContent = andere ? "Zaaien begint tegen de AB-kant" : "Zaaien begint aan de overkant";
@@ -579,6 +605,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("bPijl").hidden = !spuitAan;
     const zaaiAan = !!parse($("zaaiB").value);
     document.querySelectorAll(".spuit .zx").forEach(el => el.hidden = !zaaiAan);
+    document.querySelectorAll("[data-spoor]").forEach(bt => bt.setAttribute("aria-pressed", parse(bt.dataset.spoor) === parse($("spoorB").value)));
     $("bPijl").setAttribute("aria-pressed", pijlenAan);
     $("bPijl").textContent = "Pijlen: " + (pijlenAan ? "aan" : "uit");
     $("bRonde").setAttribute("aria-pressed", buitenronde);

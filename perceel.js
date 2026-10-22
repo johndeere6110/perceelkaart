@@ -1,4 +1,4 @@
-// perceel.js versie 20 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 21 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -16,7 +16,7 @@
 //   Perceel.samenvoegen(geometries, clip, naad)   // percelen tot één vorm, naden tot 2×naad m dicht; null als los
 //   opts.abPunt [lon, lat] bij sporen(): de AB-lijn langs de kant die het dichtst bij dat punt ligt
 //   opts.sectie (m) bij sporen(): laatste gang in hele secties; de baan toont alleen wat aan staat
-//   Perceel.zaaiPlan(sporen, { breedte, rij, spoor, band, rondes, metDeKlok, andereKant })
+//   Perceel.zaaiPlan(sporen, { breedte, rij, spoor, band, rondes, metDeKlok, andereKant, padenEerst, padLinks })
 //   Perceel.zaaiVlakken(sporen, plan, clip)   // stroken op de kaart voor de gangen met een spuitpad   // welke zaai-elementen dicht voor de spuitsporen
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
@@ -662,6 +662,8 @@
   // midden = hart van de zaaigang, afstand tot de AB-kant (m).
   // ritme: { gangen, sporen } = in het binnenveld herhaalt het patroon elke `gangen` gangen met `sporen` spuitsporen.
   // buiten: spoor in het binnenveld buiten het vaste ritme. Rondes regelt de computer niet met het ritme.
+  // o.padenEerst: de spuitpaden worden eerst achter elkaar gezaaid in rondjes (pad 1 heen, pad 2 terug, ...), daarna de rest
+  // met de kast vast zonder pad. Pad 1 rijdt zo dat het pad rechts op de zaaier zit (o.padLinks: links).
   function zaaiPlan(s, o) {
     o = o || {};
     const zb = o.breedte, ra = o.rij, sp = o.spoor || 0, band = o.band || 0.4;
@@ -719,6 +721,16 @@
       return true;
     });
     gangen.sort((a, b) => (a.soort === b.soort ? 0 : a.soort === "ronde" ? -1 : 1) || a.gang - b.gang || String(a.kant).localeCompare(String(b.kant)));
+    if (o.padenEerst) {
+      // Rondjes: de padgangen om en om heen en terug; andersom rijden = rijen gespiegeld
+      const paden = gangen.filter(g => g.soort === "gang" && g.dicht.length);
+      const spiegel = g => { g.heen = !g.heen; g.dicht = g.dicht.map(x => n + 1 - x).sort((a, b) => a - b); };
+      if (paden.length) {
+        const rechts = paden[0].dicht.every(x => x > n / 2), links = paden[0].dicht.every(x => x <= n / 2);
+        if (o.padLinks ? rechts : links) spiegel(paden[0]);
+        paden.forEach((g, i) => { if (i && g.heen === paden[i - 1].heen) spiegel(g); });
+      }
+    }
     return { rijen: n, rondes: r, breedte: zb, aantalGangen: aantal, ritme, gangen };
   }
   // Stroken op de kaart voor de gangen uit een zaaiPlan: binnengang = strook van één zaaibreedte binnen de rondes,

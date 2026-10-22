@@ -108,6 +108,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .sp .zaai .kort span { color: var(--muted); font-size: 14px; }
 .sp .zaai .zdet summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
 .sp .zaai .zdet > div { margin-top: 4px; }
+.sp .zaai .knoppen { display: flex; flex-wrap: wrap; gap: 6px; }
 .zl { background: #f2c200; color: #1C2318; font: 700 15px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; border-radius: 6px; padding: 1px 6px; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; box-shadow: 0 0 0 2px #1C2318; }
 .zl.st { background: #e8590c; color: #fff; font-size: 17px; }
 .zl.rd { background: #9c36b5; color: #fff; }
@@ -138,7 +139,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 30</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 31</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -452,6 +453,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   }));
   // Zaairondes: met of tegen de klok in (bepaalt welke kant links is in de rondes)
   let metDeKlok = store.get("kaartRondeKlok", false);
+  // Rijpatroon: spuitpaden eerst in rondjes (standaard) of heen en weer door alle gangen; pad links of rechts op de zaaier
+  let padenEerst = store.get("kaartPadenEerst", true), padLinks = store.get("kaartPadLinks", false);
   $("bKlok").addEventListener("click", () => { metDeKlok = !metDeKlok; store.set("kaartRondeKlok", metDeKlok); teken(); });
   const zaaiInst = () => {
     const b = parse($("zaaiB").value), r = parse($("rijB").value) / 100, sp = parse($("spoorB").value), band = parse($("bandB").value) / 100, rd = parse($("rondeB").value);
@@ -531,8 +534,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const zaaiKaartCache = new Map();
   function zaaiBlok(s, obj, opslaan, zi, sb) {
     const andere = typeof obj.zaaiAnders === "boolean" ? obj.zaaiAnders : !!obj.spuitAnders;
-    const plan = ak => Perceel.zaaiPlan(s, { breedte: zi.b, rij: zi.r, spoor: zi.sp, band: zi.band, rondes: zi.rondes, metDeKlok: zi.metDeKlok, andereKant: ak });
-    const z = plan(andere);
+    const plan = (ak, pe) => Perceel.zaaiPlan(s, { breedte: zi.b, rij: zi.r, spoor: zi.sp, band: zi.band, rondes: zi.rondes, metDeKlok: zi.metDeKlok, andereKant: ak, padenEerst: pe, padLinks });
+    const z = plan(andere, padenEerst), zH = padenEerst ? plan(andere, false) : z; // zH: heen en weer, voor het ritme van de computer
     const d = document.createElement("div"); d.className = "zaai";
     if (!z) return d;
     if (!zi.sp) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Zaaiplan: vul de spoorbreedte van de spuit in."; d.appendChild(x); return d; }
@@ -544,7 +547,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const kantVan = rijen => rijen.every(x => x <= z.rijen / 2) ? "links" : rijen.every(x => x > z.rijen / 2) ? "rechts" : "midden";
     // Ritme van de zaaicomputer: een oneven ritme dat spiegelt telt de computer dubbel (27 op 6 m: 18)
     const r9 = z.ritme, startKant = andere ? "over" : "ab";
-    const inRitme = z.gangen.filter(g => g.soort === "gang" ? !g.buiten : g.kant === startKant || g.kant === "rondom");
+    const inRitme = zH.gangen.filter(g => g.soort === "gang" ? !g.buiten : g.kant === startKant || g.kant === "rondom");
     const spiegelt = r9 && r9.gangen % 2 === 1 && inRitme.some(g => inRitme.some(h => h !== g && (totaal(h) - totaal(g)) % r9.gangen === 0 && h.dicht.join() !== g.dicht.join()));
     const R = r9 ? r9.gangen * (spiegelt ? 2 : 1) : 0;
     const teller = g => R ? (totaal(g) - 1) % R + 1 : totaal(g);
@@ -555,12 +558,18 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     // Kort: een paar regels, groot
     const kort = document.createElement("div"); kort.className = "kort";
     const regel = (l, v) => { const r = document.createElement("div"); const a = document.createElement("span"); a.textContent = l; const b = document.createElement("b"); b.textContent = v; r.append(a, b); kort.appendChild(r); };
-    regel("Zaaicomputer", R ? "ritme " + R + " · pad op " + pos.join(" · ") : "geen vast ritme");
+    if (!padenEerst) regel("Zaaicomputer", R ? "ritme " + R + " · pad op " + pos.join(" · ") : "geen vast ritme");
     if (z.rondes) {
       const rp = rondes.find(g => g.kant === "rondom") || rondes[0];
       regel("Rondes", z.rondes + "× " + (zi.metDeKlok ? "met de klok" : "tegen de klok") + (rp ? " · ronde " + rp.gang + ": rij " + rp.dicht.join(" + ") : ""));
     }
-    if (eerste) {
+    if (eerste && padenEerst) {
+      // Spuitpaden eerst, achter elkaar in rondjes; daarna de rest met de kast vast zonder pad
+      const paden = binnen.filter(g => g.dicht.length), zelfde = paden.every(g => g.dicht.join() === eerste.dicht.join());
+      regel("Spuitpaden", "kast vast op teller " + teller(eerste) + " · " + (zelfde ? "altijd rij " + eerste.dicht.join(" + ") + " (" + kantVan(eerste.dicht) + ")" : "rijen wisselen per pad (zie Uitleg)"));
+      regel("Rondjes", "lijn " + lijn(paden[0]) + " " + pijl(paden[0]) + ", dan " + paden.slice(1, 7).map(lijn).join(" · ") + (paden.length > 7 ? " …" : "") + " om en om");
+      if (vrij) regel("Daarna", "kast vast op teller " + vrij + ", rest zaaien");
+    } else if (eerste) {
       regel("Start", "lijn " + lijn(eerste) + (R ? " · teller " + teller(eerste) : "") + " · " + pijl(eerste) + " · rij " + eerste.dicht.join(" + ") + " (" + kantVan(eerste.dicht) + ")");
       regel("Paden", "lijn " + vast.slice(1, 8).map(lijn).join(" · ") + (vast.length > 8 ? " …" : ""));
       if (vrij) regel("Daarna", "kast vast op teller " + vrij);
@@ -575,16 +584,23 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const sum = document.createElement("summary"); sum.textContent = "Uitleg, alle gangen en AB-lijn zaaier"; det.appendChild(sum);
     const p = t => { const x = document.createElement("div"); x.textContent = t; det.appendChild(x); return x; };
     p("Zaaien " + mDec(zi.b) + " (" + z.rijen + " rijen op " + cm(zi.r) + ")" + (z.rondes ? ", eerst " + z.rondes + " rondes (" + mDec(z.rondes * zi.b) + ")" : "") +
-      ", daarna heen en weer op dezelfde AB-lijn. Lijn = GPS-lijn (lijn 0 = hart van gang 1), teller = gangnummer vanaf de rand. Rijen geteld van links in de rijrichting.");
+      (padenEerst ? ", dan de spuitpaden achter elkaar in rondjes (om en om heen en terug), daarna de rest." : ", daarna heen en weer door alle gangen.") +
+      " Lijn = GPS-lijn (lijn 0 = hart van gang 1), teller = gangnummer vanaf de rand. Rijen geteld van links in de rijrichting.");
+    {
+      const kn = (t, f) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn klein"; b.textContent = t; b.addEventListener("click", f); return b; };
+      const r = document.createElement("div"); r.className = "knoppen";
+      r.append(kn(padenEerst ? "Rijpatroon: spuitpaden eerst" : "Rijpatroon: heen en weer", () => { padenEerst = !padenEerst; store.set("kaartPadenEerst", padenEerst); teken(); }));
+      if (padenEerst) r.append(kn("Pad op de zaaier: " + (padLinks ? "links" : "rechts"), () => { padLinks = !padLinks; store.set("kaartPadLinks", padLinks); teken(); }));
+      det.appendChild(r);
+    }
     if (eerste) {
-      const sp = eerste.dicht.map(r => z.rijen + 1 - r).sort((x, y) => x - y);
-      p("Start: zet de computer het pad " + kantVan(sp) + " (rij " + sp.join(" + ") + "), rij de startgang dan " + (eerste.heen ? "B → A" : "A → B") + " en draai de tabel om. Andersom zit het pad aan de verkeerde kant.");
       const stuk = (a, b) => a > b ? null : a === b ? String(a) : a + "–" + b;
       const zonder = [stuk(z.rondes + 1, totaal(eerste) - 1), stuk(totaal(laatste) + 1, z.rondes + z.aantalGangen)].filter(Boolean);
-      if (zonder.length) p("Zonder spuitpad: gang " + zonder.join(" en ") + (vrij ? " (kast vast op teller " + vrij + ")." : "."));
+      if (padenEerst) p("Na de spuitpaden: alle andere gangen zaaien" + (vrij ? " met de kast vast op teller " + vrij : "") + " (geen pad).");
+      else if (zonder.length) p("Zonder spuitpad: gang " + zonder.join(" en ") + (vrij ? " (kast vast op teller " + vrij + ")." : "."));
     }
-    if (spiegelt) p(r9.gangen + " is oneven: elk volgend blok rijdt andersom, dus de computer telt " + R + " en spiegelt de rijen om en om.");
-    const z2 = plan(!andere), score = q => q.gangen.length + 2 * q.gangen.filter(g => g.buiten).length;
+    if (spiegelt && !padenEerst) p(r9.gangen + " is oneven: elk volgend blok rijdt andersom, dus de computer telt " + R + " en spiegelt de rijen om en om.");
+    const z2 = plan(!andere, padenEerst), score = q => q.gangen.length + 2 * q.gangen.filter(g => g.buiten).length;
     if (z2 && score(z2) < score(z)) p("Tip: begin het binnenveld " + (andere ? "aan de AB-kant" : "aan de overkant") + ", dat komt beter uit.").className = "warn4";
     const tb = document.createElement("table"); tb.className = "btab";
     tb.innerHTML = '<tr><th>Gang</th><th class="r">Lijn</th><th class="r">Teller</th><th>Rijdt</th><th>Rijen dicht</th></tr>';

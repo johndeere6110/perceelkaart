@@ -1,6 +1,6 @@
 // Perceelkaart service worker: nodig om als app te installeren, en de app zelf werkt ook zonder bereik.
 // Kaarttegels en PDOK-gegevens gaan er niet doorheen; percelen bewaart perceel.js zelf.
-const CACHE = "perceelkaart-v37";
+const CACHE = "perceelkaart-v38";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./perceel.js",
   "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css", "./vendor/polygon-clipping/polygon-clipping.umd.min.js",
   "./fonts/barlow-latin-400-normal.woff2", "./fonts/barlow-latin-500-normal.woff2", "./fonts/barlow-latin-600-normal.woff2",

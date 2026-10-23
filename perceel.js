@@ -1,4 +1,4 @@
-// perceel.js versie 26 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 27 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -695,7 +695,9 @@
       dubbel: W < 2 * breedte ? 2 * breedte - W : 0
     } : null;
     return {
-      breedte, gangen: uit.length, perceelBreedte: W, zijde, perceelLengte: xmax - xmin, rest, ronde: rondeUit,
+      breedte, gangen: uit.length, perceelBreedte: W, zijde,
+      perceelLengte: xmax - xmin, rest, ronde: rondeUit,
+      tMin: Math.min(0, zijde === 1 ? ylo : -yhi), // hoe ver het perceel voorbij de AB-lijn uitsteekt (negatief, m)
       buitenKant: uit.length && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
       secties: sectie ? { breedte: sectie, totaal: sectiesTotaal, aan: sectiesAan, laatsteLengte: uit.length ? uit[uit.length - 1].lengte : 0 } : null,
       abLengte: ab.m, a: terug(0, 0), b: terug(len, 0), sporen: uit,
@@ -740,8 +742,18 @@
       const lo = o.andereKant ? hi0 - j * zb : lo0 + (j - 1) * zb;
       passen.push({ soort: "gang", gang: j, lo, hi: lo + zb, heen: j % 2 === 1, min: lo0, max: hi0 });
     }
-    // Gangen aan de andere kant van de AB-lijn (uitstulping) vallen buiten dit plan
-    const banen = s.sporen.filter(x => !x.extra).map(x => ({ label: String(x.nr), d: Math.abs(x.y) }));
+    // Stuk voorbij de AB-lijn (uitstulping, of AB-lijn langs een pad midden in het perceel): het raster loopt door,
+    // gang 0, -1, ... (d negatief = aan de andere kant van de AB-lijn). Daar liggen de rondes langs de rand van dat stuk.
+    if (!o.andereKant && s.tMin < -0.5) {
+      const tLo = s.tMin + r * zb;
+      for (let j = 0; ; j--) {
+        const lo = lo0 + (j - 1) * zb;
+        if (lo + zb <= tLo + 0.5) break;
+        passen.push({ soort: "gang", gang: j, lo, hi: lo + zb, heen: ((j % 2) + 2) % 2 === 1, min: tLo, max: lo0, voorbij: true });
+      }
+    }
+    // d: afstand tot de AB-lijn, met teken (positief = de kant van het perceel, negatief = voorbij de AB-lijn)
+    const banen = s.sporen.map(x => ({ label: String(x.nr), d: f * x.y, extra: !!x.extra }));
     if (s.ronde && W > sb) banen.unshift({ label: "R", d: sb / 2 }, { label: "R", d: W - sb / 2 });
     // Ritme in het binnenveld: anker = het spoor waarmee de meeste andere binnensporen in het ritme vallen
     const opRitme = (d, d0) => { const k = (d - d0) / sb; return Math.abs(k - Math.round(k)) * sb <= 0.05; };
@@ -757,6 +769,8 @@
       const wd = b.d + off;
       passen.forEach(p => {
         if (wd < p.lo - band || wd > p.hi + band) return;
+        // Buitenronde en gewone gangen niet in het stuk voorbij de AB-lijn, de gangen daar niet in de rondes
+        if (p.voorbij ? !b.extra : b.extra && p.soort === "ronde") return;
         // Links in de rijrichting: A->B is links de kant waar y groeit; d groeit in richting f
         const naarLinks = (p.heen ? 1 : -1) * f > 0;
         for (let k = 0; k < n; k++) {

@@ -157,7 +157,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 41</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 42</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -601,7 +601,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const inRitme = zH.gangen.filter(g => g.soort === "gang" ? !g.buiten : g.kant === startKant || g.kant === "rondom");
     const spiegelt = r9 && r9.gangen % 2 === 1 && inRitme.some(g => inRitme.some(h => h !== g && (totaal(h) - totaal(g)) % r9.gangen === 0 && h.dicht.join() !== g.dicht.join()));
     const R = r9 ? r9.gangen * (spiegelt ? 2 : 1) : 0;
-    const teller = g => R ? (totaal(g) - 1) % R + 1 : totaal(g);
+    const teller = g => R ? (((totaal(g) - 1) % R) + R) % R + 1 : totaal(g);
     const pos = [...new Set(inRitme.map(teller))].sort((p, q) => p - q);
     const vast = binnen.filter(g => !g.buiten && g.dicht.length), eerste = vast[0], laatste = vast[vast.length - 1];
     const vrij = R ? Array.from({ length: R }, (_, i) => i + 1).find(t => !pos.includes(t)) : null;
@@ -629,7 +629,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     d.appendChild(kort);
     const los = binnen.filter(g => g.buiten);
     if (los.length) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Buiten het ritme, zelf dichtzetten: lijn " + los.map(lijn).join(", ") + "."; d.appendChild(x); }
-    if (s.sporen.some(x => x.extra)) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Het stuk aan de andere kant van de AB-lijn zit niet in het zaaiplan. Kies zo nodig een andere AB-kant."; d.appendChild(x); }
+
     // Uitleg, tabel en instellingen: uitklapbaar
     const det = document.createElement("details"); det.className = "zdet";
     if (obj._zaaiOpen) det.open = true;
@@ -660,7 +660,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const kantTxt = { rondom: "rondom", ab: "AB-kant", over: "overkant" };
     z.gangen.forEach(g => {
       const tr = document.createElement("tr"); if (g.buiten) tr.className = "buiten";
-      const naam = g.soort === "ronde" ? "Ronde " + g.gang + " " + kantTxt[g.kant] : totaal(g) + (g.buiten ? " *" : "");
+      const naam = g.soort === "ronde" ? "Ronde " + g.gang + " " + kantTxt[g.kant] : (g.gang <= 0 ? "voorbij AB" : totaal(g)) + (g.buiten ? " *" : "");
       const rijdt = g.soort === "ronde" && g.kant === "rondom" ? (zi.metDeKlok ? "met klok" : "tegen klok") : pijl(g);
       [naam, String(lijn(g)), String(teller(g)), rijdt, g.dicht.join(", ")].forEach((t, i) => {
         const td = document.createElement("td"); td.textContent = t; if (i === 1 || i === 2) td.className = "r"; tr.appendChild(td);
@@ -704,7 +704,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         });
         // Aantal banen tussen de spuitpaden (en tussen de rondes en het eerste pad, en na het laatste)
         const padNr = [...new Set(binnen.filter(g => g.dicht.length).map(g => g.gang))].sort((a, b) => a - b), gangL = kaart.lijnen.filter(g => !g.ronde);
-        const grenzen = [0].concat(padNr, [z.aantalGangen + 1]);
+        const grenzen = [Math.min(1, ...z.alle.map(g => g.gang)) - 1].concat(padNr, [z.aantalGangen + 1]);
         grenzen.slice(1).forEach((b, i) => {
           const a = grenzen[i], tal = b - a - 1;
           if (tal < 1) return;

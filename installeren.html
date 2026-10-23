@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Perceelkaart installeren</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2F5A2B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Perceelkaart">
+<style>
+/* Lettertypen staan in de app zelf (Barlow, SIL OFL; zie fonts/OFL.txt): geen verzoeken naar Google */
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/barlow-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/barlow-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/barlow-latin-600-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-style: normal; font-weight: 500; font-display: swap; src: url(fonts/barlow-semi-condensed-latin-500-normal.woff2) format("woff2"); }
+@font-face { font-family: "Barlow Semi Condensed"; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/barlow-semi-condensed-latin-700-normal.woff2) format("woff2"); }
+/* Zelfde kleuren en stijl als de Perceelkaart en de Zaaihulp */
+:root {
+  --bg: #E9EDE6; --surface: #F8FAF6; --ink: #1C2318; --muted: #5B6653; --line: #C9D1C2;
+  --accent: #2F5A2B; --accent-ink: #F3F7EF; --warn: #A3401F;
+  color-scheme: light; box-sizing: border-box;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141912; --surface: #1D241A; --ink: #E6ECE0; --muted: #9BA892; --line: #34402F;
+    --accent: #8DBA6A; --accent-ink: #12180F; --warn: #F08A5F; color-scheme: dark;
+  }
+}
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 18px; line-height: 1.45; -webkit-tap-highlight-color: transparent;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+main { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; }
+.top { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.top img { width: 64px; height: 64px; border-radius: 16px; flex: none; }
+h1 { font: 700 30px/1.1 "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; margin: 0; }
+.sub { color: var(--muted); font-size: 16px; margin-top: 2px; }
+h2 { font-size: 20px; font-weight: 600; margin: 0 0 10px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-top: 14px; }
+.card.main { border: 2px solid var(--accent); }
+.btn { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 58px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 19px "Barlow", system-ui, sans-serif; text-decoration: none; margin-top: 12px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: grid; gap: 14px; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+ol.steps li::before { content: counter(s); display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font: 700 18px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; }
+.ico { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); margin: 0 2px; }
+.ico svg { width: 20px; height: 20px; stroke: #2f7fd8; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ico.dots svg { fill: var(--ink); stroke: none; }
+.note { font-size: 15px; color: var(--muted); margin-top: 12px; }
+.tip { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--bg); font-size: 16px; }
+.tip strong { color: var(--warn); }
+.ok { font-size: 44px; line-height: 1; }
+ul.know { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 16px; }
+details { margin-top: 18px; }
+summary { color: var(--muted); font-size: 16px; padding: 8px 0; cursor: pointer; }
+details h2 { margin-top: 16px; }
+#qr { display: grid; place-items: center; background: #fff; border-radius: 12px; padding: 14px; margin: 12px auto 0; width: fit-content; }
+#qr img, #qr canvas { display: block; }
+.link { word-break: break-all; font-size: 16px; text-align: center; margin-top: 10px; }
+body.metpijl main { padding-bottom: 90px; }
+.arrow { position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); font-size: 40px; color: var(--accent); pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .arrow { animation: hop 1.2s ease-in-out infinite; }
+  @keyframes hop { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 8px); } }
+}
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <img src="icon-192.png" alt="">
+    <div><h1>Perceelkaart</h1><div class="sub">Percelen en ha, bufferstroken, spuitsporen, zaaiplan en AB-lijnen</div></div>
+  </div>
+
+  <!-- Al geïnstalleerd -->
+  <section class="card main" id="vAl" hidden>
+    <div class="ok">✓</div>
+    <h2 style="margin-top:8px">Je hebt de app al</h2>
+    <a class="btn primary" href="./">Open Perceelkaart</a>
+  </section>
+
+  <!-- Android met installeerknop -->
+  <section class="card main" id="vKnop" hidden>
+    <h2>Installeren met één tik</h2>
+    <button type="button" class="btn primary" id="bInstall">Installeer Perceelkaart</button>
+    <div class="note" id="installNote">Daarna staat het icoon bij je apps.</div>
+  </section>
+
+  <!-- Geïnstalleerd zojuist -->
+  <section class="card main" id="vKlaar" hidden>
+    <div class="ok">✓</div>
+    <h2 style="margin-top:8px">Geïnstalleerd</h2>
+    <p style="margin:0">Je vindt Perceelkaart nu bij je apps. Open hem voortaan via het icoon.</p>
+  </section>
+
+  <!-- Android stappen -->
+  <section class="card main" id="vAndroid" hidden>
+    <h2>Installeren op Android</h2>
+    <ol class="steps">
+      <li><div>Tik rechtsboven op de drie puntjes <span class="ico dots" aria-label="menu"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span></div></li>
+      <li><div>Kies <strong>App installeren</strong> of <strong>Toevoegen aan startscherm</strong></div></li>
+      <li><div>Tik op <strong>Installeren</strong>. Het icoon staat daarna bij je apps.</div></li>
+    </ol>
+    <div class="tip" id="tipAndroid" hidden><strong>Zie je dat niet?</strong> Open deze link in <strong>Chrome</strong>: houd de link ingedrukt en kies "Openen in Chrome", of kopieer hem naar Chrome.</div>
+  </section>
+
+  <!-- iPhone stappen -->
+  <section class="card main" id="vIos" hidden>
+    <h2>Installeren op iPhone</h2>
+    <ol class="steps">
+      <li><div>Tik onderin op het deel-knopje <span class="ico" aria-label="deel-knop"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11v9h12v-9"/></svg></span></div></li>
+      <li><div>Scroll omlaag en kies <strong>Zet op beginscherm</strong> <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg></span></div></li>
+      <li><div>Tik rechtsboven op <strong>Voeg toe</strong>. Het icoon staat daarna op je beginscherm.</div></li>
+    </ol>
+    <div class="tip"><strong>Staat "Zet op beginscherm" er niet bij?</strong> Dan is de link geopend in WhatsApp of een andere app. Tik eerst op het <strong>Safari-kompasje</strong> of op "Open in Safari", en doe het daar opnieuw.</div>
+    <div class="tip" id="tipIosBrowser" hidden>Je gebruikt niet Safari. Het werkt het betrouwbaarst in <strong>Safari</strong>: kopieer de link en plak hem daar.</div>
+  </section>
+
+  <!-- Computer -->
+  <section class="card main" id="vPc" hidden>
+    <h2>Open dit op je telefoon</h2>
+    <p style="margin:0">Scan de code met de camera van je telefoon. Dan krijg je daar de stappen.</p>
+    <div id="qr" aria-label="QR-code naar deze pagina"></div>
+    <div class="link" id="linkTxt"></div>
+  </section>
+
+  <section class="card">
+    <h2>Goed om te weten</h2>
+    <ul class="know">
+      <li>Open de app altijd via het icoon, dan blijven je gegevens bewaard.</li>
+      <li>Voor de kaart, de luchtfoto en het opzoeken van percelen en water heb je internet nodig. Percelen die je al hebt gekozen blijven ook zonder bereik zichtbaar.</li>
+      <li>Alles wat je kiest en instelt blijft op je eigen telefoon.</li>
+      <li>Ook de <a href="../zaaihulp/installeren.html">Zaaihulp</a> (afdraaien, wegen en mengen) staat op deze manier op je telefoon.</li>
+    </ul>
+  </section>
+
+  <details id="alles">
+    <summary>Andere telefoon? Toon alle stappen</summary>
+    <h2>Android (Chrome)</h2>
+    <ol class="steps">
+      <li><div>Open de link in Chrome en tik rechtsboven op de drie puntjes ⋮</div></li>
+      <li><div>Kies <strong>App installeren</strong> of <strong>Toevoegen aan startscherm</strong></div></li>
+    </ol>
+    <h2>iPhone (Safari)</h2>
+    <ol class="steps">
+      <li><div>Open de link in Safari en tik onderin op het deel-knopje</div></li>
+      <li><div>Kies <strong>Zet op beginscherm</strong> en tik op <strong>Voeg toe</strong></div></li>
+    </ol>
+  </details>
+</main>
+<div class="arrow" id="pijl" aria-hidden="true" hidden>↓</div>
+
+<script src="vendor/qrcodejs/qrcode.min.js"></script>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const ua = navigator.userAgent || "";
+  // iPad met iPadOS doet zich voor als Mac, maar heeft wel touch
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const android = /Android/.test(ua);
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const iosSafari = ios && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+  // In-app browsers op Android (WhatsApp, Facebook enz. gebruiken een WebView: "; wv)")
+  const androidInApp = android && (/; wv\)/.test(ua) || /FBAN|FBAV|Instagram/.test(ua));
+  const show = id => { $(id).hidden = false; };
+
+  if (standalone) { show("vAl"); return; }
+
+  if (ios) {
+    show("vIos");
+    if (!iosSafari) show("tipIosBrowser");
+    // Pijl naar het deel-knopje onderin (iPhone, in Safari zit die onderaan)
+    if (iosSafari && /iPhone|iPod/.test(ua)) { show("pijl"); document.body.classList.add("metpijl"); }
+  } else if (android) {
+    // Chrome kan zelf een installeerknop aanbieden; zo niet, dan de stappen via het menu
+    show("vAndroid");
+    if (androidInApp) show("tipAndroid");
+  } else {
+    show("vPc");
+    const url = location.href.split("#")[0];
+    $("linkTxt").textContent = url;
+    try { if (!window.QRCode) throw 0; new QRCode($("qr"), { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M }); }
+    catch (e) { $("qr").hidden = true; }
+  }
+
+  // Installeerknop (Chrome, Edge, Samsung Internet)
+  let uitstel = null;
+  window.addEventListener("beforeinstallprompt", e => {
+    if (!android) return; // op de computer blijft de QR-code staan
+    e.preventDefault(); uitstel = e;
+    $("vAndroid").hidden = true; $("vPc").hidden = true; show("vKnop");
+  });
+  $("bInstall").addEventListener("click", async () => {
+    if (!uitstel) return;
+    uitstel.prompt();
+    try {
+      const keuze = await uitstel.userChoice;
+      if (keuze && keuze.outcome === "dismissed") $("installNote").textContent = "Geannuleerd. Tik nog eens als je hem toch wilt.";
+    } catch (e) {}
+    uitstel = null;
+  });
+  window.addEventListener("appinstalled", () => {
+    ["vKnop", "vAndroid", "vPc"].forEach(id => $(id).hidden = true); show("vKlaar");
+  });
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+}
+</script>
+</body>
+</html>

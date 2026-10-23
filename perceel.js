@@ -1,4 +1,4 @@
-// perceel.js versie 27 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 28 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -17,6 +17,8 @@
 //   Perceel.verschuif(geometry, d)   // buitenrand d meter naar binnen (negatief: naar buiten), eenvoudig
 //   Perceel.samenvoegen(geometries, clip, naad)   // percelen tot één vorm, naden tot 2×naad m dicht; null als los
 //   opts.abPunt [lon, lat] bij sporen(): de AB-lijn langs de kant die het dichtst bij dat punt ligt
+//   opts.abLijn [[lon, lat], [lon, lat]] bij sporen(): zelf getikte AB-lijn (bijv. langs een pad midden in het perceel);
+//     standaard is die lijn een spuitpad (gangen er recht op), met opts.abRand begint de spuit er een halve breedte naast
 //   opts.sectie (m) bij sporen(): laatste gang in hele secties; de baan toont alleen wat aan staat
 //   Perceel.zaaiPlan(sporen, { breedte, rij, spoor, band, rondes, metDeKlok, andereKant, padenEerst, padLinks })
 //   Perceel.zaaiVlakken(sporen, plan, clip)   // stroken op de kaart voor de gangen met een spuitpad
@@ -562,10 +564,21 @@
     const proj = p => (p[0] - cx) * ux + (p[1] - cy0) * uy;
     const t0 = Math.min(proj(z.a), proj(z.b)), t1 = Math.max(proj(z.a), proj(z.b));
     const pA = [cx + ux * t0, cy0 + uy * t0];
-    const len = t1 - t0;
+    let len = t1 - t0, anker = pA, abEcht = null;
+    // Zelf getikte AB-lijn: die richting, en het raster zo dat de lijn een spuitpad is (gangen op hele breedtes ervan)
+    if (opts.abLijn && opts.abLijn.length === 2) {
+      const A = naarM(opts.abLijn[0]), B = naarM(opts.abLijn[1]), l = Math.hypot(B[0] - A[0], B[1] - A[1]);
+      if (l > 1) {
+        ux = (B[0] - A[0]) / l; uy = (B[1] - A[1]) / l; len = l; abEcht = [A, B];
+        const pts = polys[0][0].map(naarM), c = pts.reduce((t, p) => [t[0] + p[0] / pts.length, t[1] + p[1] / pts.length], [0, 0]);
+        const kant = -(c[0] - A[0]) * uy + (c[1] - A[1]) * ux >= 0 ? 1 : -1;
+        // Gangen liggen op (k + 0,5) breedte van de rand (y = 0): leg die rand een halve breedte achter de lijn
+        const off = opts.abRand ? 0 : -kant * breedte / 2;
+        anker = [A[0] - uy * off, A[1] + ux * off];
+      }
+    }
     const ab = { m: len };
     // Gedraaid stelsel: x langs de AB-kant, y loodrecht erop; de AB-kant ligt op y = 0
-    const anker = pA;
     const rot = p => [(p[0] - anker[0]) * ux + (p[1] - anker[1]) * uy, -(p[0] - anker[0]) * uy + (p[1] - anker[1]) * ux];
     const terug = (x, y) => naarLL([anker[0] + x * ux - y * uy, anker[1] + x * uy + y * ux]);
     const polyM = polys.map(rings => rings.map(r => r.map(c => rot(naarM(c)))));
@@ -700,7 +713,8 @@
       tMin: Math.min(0, zijde === 1 ? ylo : -yhi), // hoe ver het perceel voorbij de AB-lijn uitsteekt (negatief, m)
       buitenKant: uit.length && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
       secties: sectie ? { breedte: sectie, totaal: sectiesTotaal, aan: sectiesAan, laatsteLengte: uit.length ? uit[uit.length - 1].lengte : 0 } : null,
-      abLengte: ab.m, a: terug(0, 0), b: terug(len, 0), sporen: uit,
+      abLengte: ab.m, a: abEcht ? naarLL(abEcht[0]) : terug(0, 0), b: abEcht ? naarLL(abEcht[1]) : terug(len, 0), sporen: uit,
+      rand: [terug(0, 0), terug(len, 0)], // de lijn y = 0 waar het raster op rust (bij een zelf getikte AB-lijn een halve breedte ernaast)
       vlak: { polyM, terug }, // perceel in het gedraaide stelsel (x langs AB, y loodrecht, links positief), voor zaaiVlakken
       // Koers van de AB-lijn in graden t.o.v. het ware noorden, met de klok mee (zoals op een GPS-terminal)
       // (uit de richting in meters oost/noord op de WGS84-ellipsoïde, zoals een GPS-terminal rekent)

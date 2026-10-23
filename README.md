@@ -1,24 +1,52 @@
 # Perceelkaart
 
-Percelen kiezen op de kaart en het totaal in ha zien, met bufferstroken langs water.
+Percelen kiezen op de kaart met het totaal in ha, bufferstroken langs water, spuitsporen, een zaaiplan voor mais en AB-lijnen uitmeten. Werkt op je telefoon.
 
 **Openen:** https://johndeere6110.github.io/perceelkaart/
+**Installeren of doorsturen:** https://johndeere6110.github.io/perceelkaart/installeren.html (ook via **Stuur installatielink** onderaan in de app, en onderaan de installatiepagina van de [Zaaihulp](https://johndeere6110.github.io/zaaihulp/installeren.html))
+
+## Percelen en oppervlakte
 
 - Tik op een perceel om het toe te voegen, nog eens tikken haalt het weg.
-- De oppervlakte wordt vlak in RD (Rijksdriehoeksstelsel) berekend, net als RVO en Boer&Bunder. Tot versie 19 rekende de app over de bol en kwam dan ~0,16 % te laag uit (10,587 in plaats van 10,604 ha).
-- Bij het openen (met bereik) kijkt de app of PDOK voor een bewaard BRP-perceel een nieuwer jaar heeft. Zo ja, dan staat bij dat perceel "BRP 2026 beschikbaar" met het verschil in ha en een knop **Overstappen**. Oevers en gevonden water horen bij de oude grens en vervallen dan.
-- **Grenzen:** kies tussen het BRP-gewasperceel (zoals ingetekend bij de Gecombineerde opgave) en het referentieperceel (RVO, afgeleid van de BGT: de kavel tot de slootkant, meestal nauwkeuriger). De knop zet ook de percelen om die al gekozen zijn. Per perceel zie je de oppervlakte van de andere grens en wissel je met één tik (**Wissel naar referentieperceel / BRP-perceel**); oevers en gevonden water horen bij een grens en komen terug als je terugwisselt. Omvat één referentieperceel twee gekozen BRP-percelen, dan waarschuwt de app dat het totaal dubbel telt.
-- **Water zoeken** markeert randen langs BGT-water (sloot = 3 m, greppel/droge sloot = 0 m). De strook gaat vanaf de insteek van het talud: BGT waterdeel (het water) en BGT ondersteunend waterdeel (oever, slootkant) samen, de buitenrand daarvan is de insteek. Alleen het deel binnen het perceel telt, want de perceelgrens ligt niet precies op de insteek; het talud zelf telt niet als strook. Staat er bij een sloot geen talud in de BGT, dan rekent hij vanaf de waterlijn en zegt hij dat erbij. Per perceel zie je hoeveel m² strook binnen het perceel valt (om te vergelijken met RVO of Boer&Bunder) en wat het vanaf de perceelrand zou zijn. Het talud staat licht bruin op de kaart.
-- Zelf aangewezen oevers (**Oevers aanwijzen**) rekenen vanaf de perceelrand: lengte × breedte.
-- **Oevers aanwijzen** om een rand zelf om te zetten: nat of kort droogvallend (3 m), lang droogvallend (1 m), droge sloot (0 m).
-- Boven 4 % van het perceel rekent hij de strook smaller, zoals RVO (3 m → 1 m → 0,5 m).
-- **Langs water erbij** (per perceel, 0/1/2/3 m): voor percelen waar de BRP-grens al op de bufferstrook ligt maar er dichter bij het water geteeld wordt. Telt lengte waterkant × breedte bij de oppervlakte en het totaal op (voor zaaizaad e.d.; die strook valt wel in de bufferstrook).
-- **AB-lijn meten** (los van percelen): tik A en B op de kaart, sleep ze, tik coördinaten in (52.68, 5.20 of 52,68 5,20) of gebruik GPS. Je ziet de koers A → B en terug (4 decimalen, ware noorden, zoals op de GPS), de afstand, het midden en de coördinaten, en optioneel dezelfde lijn een aantal meter opzij.
-- Twee knoppen **Spuiten** en **Mais zaaien** (los aan/uit): alleen de velden en tekeningen van wat aan staat zijn te zien. Mais zonder spuiten toont alleen het zaaiplan (de spuitbreedte blijft nodig voor de spuitpaden).
-- **Sporen** tekent de spuitsporen (standaard 27 m) evenwijdig aan de lange kant, met A en B, genummerde gangen en pijlen heen en weer. Met **Buitenronde eerst** rijd je eerst een ronde langs de rand en gaat de spuit uit bij het bandenspoor daarvan. Per perceel zie je hoe de laatste gang uitkomt.
-- **Zaaibreedte** (bij de sporen, leeg = uit): zaaiplan op dezelfde AB-lijn, bijvoorbeeld mais 6 m met 16 rijen op 37,5 cm. Per zaaigang zie je welke rijen (van links in de rijrichting) dicht moeten zodat de banden van de spuit (spoorbreedte, bandbreedte) geen rijen raken, ook langs de buitenronde. Is de spuit geen veelvoud van de zaaibreedte (27 op 6 m), dan verschuift dat per spoor. Kopakkers niet meegenomen. Spoorbreedte snel wisselen met 1,50 / 1,80. De app toont het ritme voor de zaaicomputer (bij 27 op 6 m: patroon van 9 gangen met 2 sporen), welke gangen buiten dat ritme vallen (meestal de buitenronde aan één kant, daar zelf dichtzetten) en of de andere startkant beter uitkomt. Met **Zaairondes eromheen** (bijv. 3) en de richting (met of tegen de klok) rekent hij de rondes apart: daar valt het spoor van de spuit-buitenronde rondom in dezelfde rijen, en het ritme telt alleen de gangen in het binnenveld. **Start binnenveld:** in welke gang het eerste spuitpad ligt (geteld vanaf de rand, rondes meegeteld), welke kant je hem op moet rijden en aan welke kant van de zaaier het pad dan zit. Begin daar met de zaaicomputer op het spuitpad, dan houdt het ritme de rest bij. Per spuitpad staan ook de **GPS-lijn** (lijn 0 = hart van gang 1, de app geeft daarvoor een aparte AB-lijn voor de zaaier, een halve zaaibreedte naar binnen) en de **teller** van de zaaicomputer. Bij 27 m op 6 m telt de computer ritme 18 (2 × 9, om en om gespiegeld) met spuitpad bij teller 3, 7, 12, 16; gecontroleerd met een Kverneland Optima (rijen 10 en 15). Onder het perceel staat het zaaiplan in vijf korte regels (zaaicomputer, rondes, start, paden, daarna); uitleg, alle gangen en de AB-lijn voor de zaaier zitten achter "Uitleg". Op de kaart: spuitpaden als gele strook met het lijnnummer, de startgang oranje met een pijl in de rijrichting, de ronde met het spuitpad paars. Rijpatroon standaard **spuitpaden eerst**: na de rondes de spuitpaden achter elkaar in rondjes (om en om heen en terug, kast vast op het pad), daarna de rest met de kast vast zonder pad. Bij 27 m op 6 m zit het pad dan elke keer op dezelfde rijen (10 + 15 bij spoor 1,80). Onder "Uitleg" om te zetten naar heen en weer, en pad links of rechts op de zaaier. Met **Zaaigangen: aan** staat het hart van elke zaaigang als witte stippellijn op de kaart, met in een wit rondje hoeveel banen er tussen de spuitpaden zitten (bij 27 m op 6 m om en om 3 en 4).
-- **Percelen koppelen** maakt van percelen die tegen elkaar liggen één kavel: één buitenrand, samen het aantal ha, en de spuitsporen over het geheel. Bufferstroken blijven per perceel (zoals RVO). Een pad of naad tot ongeveer 3,5 m ertussen mag: dat wordt meegenomen in de vorm voor de sporen, maar telt niet mee in de ha (de kavel laat zien hoeveel m² het is). Ligt er meer tussen (sloot), dan wordt het geweigerd.
+- De oppervlakte wordt vlak in RD (Rijksdriehoeksstelsel) berekend, net als RVO en Boer&Bunder.
+- **Grenzen:** BRP-gewasperceel (zoals ingetekend bij de Gecombineerde opgave) of referentieperceel (RVO, uit de BGT: de kavel tot de slootkant). De knop zet ook de al gekozen percelen om. Per perceel zie je de andere grens met het verschil in ha en wissel je met één tik; oevers en gevonden water horen bij een grens en komen terug als je terugwisselt. Overlappen percelen (één referentieperceel over twee BRP-percelen), dan waarschuwt de app dat het totaal dubbel telt.
+- **Nieuwer BRP-jaar:** bij het openen (met bereik) kijkt de app of PDOK voor een bewaard perceel een nieuwer jaar heeft, met het verschil in ha en een knop **Overstappen**.
+- **Percelen koppelen** maakt van percelen die tegen elkaar liggen één kavel: één buitenrand en de spuitsporen over het geheel. Een pad of naad tot ongeveer 3,5 m ertussen mag; dat telt niet mee in de ha. Ligt er een sloot tussen, dan wordt het geweigerd. Bufferstroken blijven per perceel (zoals RVO).
+
+## Bufferstroken langs water
+
+- **Water zoeken** markeert randen langs BGT-water (sloot = 3 m, greppel/droge sloot = 0 m). De strook gaat vanaf de **insteek van het talud**: BGT waterdeel en BGT ondersteunend waterdeel (oever, slootkant) samen, de buitenrand daarvan is de insteek. Alleen het deel binnen het perceel telt; het talud zelf niet. Geen talud in de BGT: dan vanaf de waterlijn, en dat staat erbij. Per perceel zie je de m² strook binnen het perceel (om te vergelijken met RVO of Boer&Bunder) en wat het vanaf de perceelrand zou zijn. Het talud staat licht bruin op de kaart.
+- **Oevers aanwijzen:** zelf een rand omzetten naar nat of kort droogvallend (3 m), lang droogvallend (1 m) of droge sloot (0 m). Zelf aangewezen oevers rekenen vanaf de perceelrand.
+- Boven 4 % van het perceel wordt de strook smaller, zoals bij RVO (3 m → 1 m → 0,5 m).
+- **Langs water erbij** (per perceel, 0/1/2/3 m): ligt de BRP-grens al op de bufferstrook maar wordt er dichter bij het water geteeld, dan telt lengte waterkant × breedte bij de oppervlakte (voor zaaizaad e.d.; die strook valt wel in de bufferstrook).
+
+## Spuiten en mais zaaien
+
+Twee knoppen, los aan/uit: **Spuiten** en **Mais zaaien**. Alleen de velden en tekeningen van wat aan staat zijn te zien.
+
+**Spuiten**
+- Spuitsporen (standaard 27 m) evenwijdig aan de lange kant, met A en B, genummerde gangen, koers in graden en de coördinaten van A en B.
+- **Buitenronde eerst:** eerst een ronde langs de rand, de spuit gaat uit bij het bandenspoor daarvan. Per perceel zie je hoe de laatste gang uitkomt, in hele secties.
+- **AB-kant kiezen:** tik bij de kant waar de AB-lijn langs moet.
+- **AB-lijn zelf tikken:** tik A en B, bijvoorbeeld langs een pad midden in het perceel. Standaard is die lijn een spuitpad (de gangen liggen op hele spuitbreedtes ervan); onder de spuituitleg om te zetten naar "spuit begint naast de lijn". **AB weer automatisch** zet het terug.
+- Steekt een deel van het perceel voorbij de AB-lijn uit, dan lopen de gangen daar door op dezelfde GPS-lijnen.
+
+**Mais zaaien** (zaaiplan op dezelfde AB-lijn)
+- Instellingen: zaaibreedte (6 m), rijafstand (37,5 cm, dus 16 rijen), zaairondes eromheen (bijv. 3) en de richting (met of tegen de klok), spoorbreedte van de spuit (snel kiezen: 1,50 of 1,80) en bandbreedte.
+- Rijpatroon standaard **spuitpaden eerst**: na de rondes de spuitpaden achter elkaar in rondjes (om en om heen en terug) met de kast vast op het pad, daarna de rest met de kast vast op een teller zonder pad. Bij 27 m op 6 m zit het pad zo elke keer op dezelfde rijen (10 + 15 bij spoor 1,80). Onder "Uitleg" om te zetten naar heen en weer, en pad links of rechts op de zaaier.
+- Onder het perceel in een paar korte regels: rondes, spuitpaden (teller en rijen), rondjes (GPS-lijnen en richting) en daarna. Uitleg, de tabel met alle gangen (lijn, teller, rijrichting, rijen dicht) en de **AB-lijn voor de zaaier** (lijn 0 = hart van gang 1) zitten achter "Uitleg".
+- Ritme van de zaaicomputer: bij 27 m op 6 m ritme 18 (2 × 9, om en om gespiegeld) met spuitpad bij teller 3, 7, 12, 16. Gecontroleerd met een Kverneland Optima (rijen 10 en 15).
+- Op de kaart: spuitpaden als gele strook met het lijnnummer, de startgang oranje met een pijl, de ronde met het spuitpad paars. Met **Zaaigangen: aan** ook het hart van elke zaaigang en elke zaaironde als stippellijn, en in een wit rondje hoeveel banen er tussen de spuitpaden zitten (bij 27 m op 6 m om en om 3 en 4). Uitgezoomd alleen START en de ronde.
+
+## AB-lijn meten (los van percelen)
+
+Tik A en B op de kaart, sleep ze (alles rekent live mee), tik coördinaten in (`52.68, 5.20` of `52,68 5,20`) of gebruik GPS. Je ziet de koers A → B en terug (4 decimalen, ware noorden, zoals op de GPS), de afstand, het midden en de coördinaten, en optioneel dezelfde lijn een aantal meter naar links of rechts. Gecontroleerd tegen de Geocaching Toolbox (verschil 0,0003°).
+
+## Overig
+
+- Alleen de kaart zoomt (tot zoom 22; boven 19 wordt de luchtfoto vergroot), niet de hele pagina.
+- Alles blijft op je eigen telefoon. De app deelt de opslag met de Zaaihulp (zelfde domein), met eigen sleutels.
 
 Bronnen: PDOK (BRP gewaspercelen, RVO referentiepercelen, BGT waterdeel en ondersteunend waterdeel, achtergrondkaart en luchtfoto). De officiële bufferstroken staan in Mijn percelen bij RVO; deze app is een hulpmiddel.
 
-Lettertype Barlow (SIL OFL, zie fonts/OFL.txt), kaart met Leaflet (BSD-2, zie vendor/leaflet/LICENSE), samenvoegen van percelen met polygon-clipping (MIT, zie vendor/polygon-clipping/LICENSE.md).
+Lettertype Barlow (SIL OFL, zie fonts/OFL.txt), kaart met Leaflet (BSD-2, zie vendor/leaflet/LICENSE), samenvoegen van percelen met polygon-clipping (MIT, zie vendor/polygon-clipping/LICENSE.md), QR-code op de installatiepagina met qrcodejs (MIT, zie vendor/qrcodejs/LICENSE).

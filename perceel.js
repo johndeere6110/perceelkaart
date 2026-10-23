@@ -1,4 +1,4 @@
-// perceel.js versie 24 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 25 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -12,6 +12,8 @@
 //   Perceel.waterStrook(geometry, water, breedte, clip, { zijden })   // strook vanaf de insteek (talud), deel binnen het perceel (m²)
 //   Perceel.sporen(geometry, breedte, { andereKant, buitenronde, clip })   // spuit-/strooisporen langs de langste zijde
 //     clip = polygon-clipping (optioneel): maakt de buitenronde exact, ook bij smalle armen en inhammen
+//   Perceel.koers(a, b)   // { koers (graden, ware noorden, met de klok mee), afstand (m), midden } voor een losse AB-lijn
+//   Perceel.verschuifLijn(a, b, d)   // AB-lijn d meter opzij (positief = rechts van A->B): [a', b']
 //   Perceel.verschuif(geometry, d)   // buitenrand d meter naar binnen (negatief: naar buiten), eenvoudig
 //   Perceel.samenvoegen(geometries, clip, naad)   // percelen tot één vorm, naden tot 2×naad m dicht; null als los
 //   opts.abPunt [lon, lat] bij sporen(): de AB-lijn langs de kant die het dichtst bij dat punt ligt
@@ -483,6 +485,22 @@
     }
   }
 
+  // Losse AB-lijn (punten [lon, lat]): koers zoals sporen() hem geeft (meters oost/noord op de ellipsoïde rond het midden)
+  function schaal(lat) {
+    const f = lat * Math.PI / 180;
+    return { ky: 111132.92 - 559.82 * Math.cos(2 * f) + 1.175 * Math.cos(4 * f), kx: 111412.84 * Math.cos(f) - 93.5 * Math.cos(3 * f) };
+  }
+  function koers(a, b) {
+    const { kx, ky } = schaal((a[1] + b[1]) / 2), dx = (b[0] - a[0]) * kx, dy = (b[1] - a[1]) * ky;
+    return { koers: (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360, afstand: Math.hypot(dx, dy), midden: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
+  }
+  function verschuifLijn(a, b, d) {
+    const { kx, ky } = schaal((a[1] + b[1]) / 2), dx = (b[0] - a[0]) * kx, dy = (b[1] - a[1]) * ky, l = Math.hypot(dx, dy) || 1;
+    // Rechts van de rijrichting (oost, noord) = (dy, -dx)
+    const ox = dy / l * d / kx, oy = -dx / l * d / ky;
+    return [[a[0] + ox, a[1] + oy], [b[0] + ox, b[1] + oy]];
+  }
+
   // Buitenrand van (het grootste deel van) een perceel d meter naar binnen; negatief = naar buiten
   function verschuif(geometry, d) {
     const polys = polygonen(geometry);
@@ -923,5 +941,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, koers, verschuifLijn, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
 });

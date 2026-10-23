@@ -157,7 +157,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 39</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 40</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -251,7 +251,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const inNL = (lat, lon) => NL.contains([lat, lon]);
   let view = store.get("kaartTestView", null);
   if (!view || !inNL(view.lat, view.lon) || !(view.z >= 7)) view = { lat: 52.15, lon: 5.4, z: 8 };
-  const map = L.map("map", { zoomControl: true, attributionControl: true, minZoom: 7, maxBounds: NL.pad(0.05), maxBoundsViscosity: 1 })
+  const map = L.map("map", { zoomControl: true, attributionControl: true, minZoom: 7, maxZoom: 22, maxBounds: NL.pad(0.05), maxBoundsViscosity: 1 })
     .setView([view.lat, view.lon], view.z);
   store.set("kaartTestView", view);
   $("bNL").addEventListener("click", () => map.fitBounds(NL));
@@ -264,8 +264,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 
   // PDOK-achtergronden (Web Mercator, geen key)
   const attr = 'Kaart: <a href="https://www.pdok.nl">PDOK</a>, Kadaster';
-  const brt = L.tileLayer("https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png", { minZoom: 7, maxZoom: 19, attribution: attr });
-  const foto = L.tileLayer("https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg", { minZoom: 7, maxZoom: 19, attribution: "Luchtfoto: " + attr });
+  const brt = L.tileLayer("https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png", { minZoom: 7, maxNativeZoom: 19, maxZoom: 22, attribution: attr });
+  const foto = L.tileLayer("https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg", { minZoom: 7, maxNativeZoom: 19, maxZoom: 22, attribution: "Luchtfoto: " + attr });
   let isFoto = store.get("kaartTestFoto", false);
   const setLaag = () => {
     (isFoto ? brt : foto).remove(); (isFoto ? foto : brt).addTo(map);
@@ -1130,7 +1130,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // AB-lijn meten, los van percelen: A en B tikken, slepen, intikken of GPS; koers, afstand, midden en opzij schuiven
   let vrijModus = false;
   const vrij = Object.assign({ a: null, b: null, s: "", links: false }, store.get("kaartVrijAB", {}));
-  const vrijLaag = L.layerGroup().addTo(map);
+  const vrijLaag = L.layerGroup().addTo(map), vrijLijn = L.layerGroup().addTo(map), vrijM = {};
   const bewaarVrij = () => store.set("kaartVrijAB", vrij);
   const llTxt = c => c ? c[1].toFixed(8) + ", " + c[0].toFixed(8) : "";
   // "52.68, 5.20", "52,68 5,20", "52.68 5.20"; omgedraaid (lon, lat) wordt rechtgezet
@@ -1143,29 +1143,34 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     return x > 50 && x < 54 && y > 3 && y < 8 ? [y, x] : null;
   }
   function tekenVrij() {
-    vrijLaag.clearLayers();
+    vrijLijn.clearLayers();
     $("vrijA").value = document.activeElement === $("vrijA") ? $("vrijA").value : llTxt(vrij.a);
     $("vrijB").value = document.activeElement === $("vrijB") ? $("vrijB").value : llTxt(vrij.b);
     $("vrijS").value = document.activeElement === $("vrijS") ? $("vrijS").value : vrij.s;
     $("vrijSkant").textContent = vrij.links ? "links" : "rechts";
     const uit = $("vrijUit"); uit.innerHTML = "";
-    if (!vrijModus) return;
+    // Markers blijven staan (anders breekt het slepen af); tijdens het slepen rekent alles live mee
     [["A", vrij.a, "a"], ["B", vrij.b, "b"]].forEach(([t, c, k]) => {
-      if (!c) return;
-      const m = L.marker([c[1], c[0]], { draggable: true, icon: L.divIcon({ className: "", html: '<div class="abl vrijp">' + t + "</div>", iconSize: [26, 26] }) });
-      m.on("dragend", () => { const p = m.getLatLng(); vrij[k] = [p.lng, p.lat]; bewaarVrij(); tekenVrij(); });
-      vrijLaag.addLayer(m);
+      if (!vrijModus || !c) { if (vrijM[k]) { vrijLaag.removeLayer(vrijM[k]); delete vrijM[k]; } return; }
+      if (!vrijM[k]) {
+        const m = vrijM[k] = L.marker([c[1], c[0]], { draggable: true, icon: L.divIcon({ className: "", html: '<div class="abl vrijp">' + t + "</div>", iconSize: [26, 26] }) });
+        m.on("dragstart", () => { m._sleept = true; });
+        m.on("drag", () => { const p = m.getLatLng(); vrij[k] = [p.lng, p.lat]; tekenVrij(); });
+        m.on("dragend", () => { m._sleept = false; bewaarVrij(); tekenVrij(); });
+        vrijLaag.addLayer(m);
+      } else if (!vrijM[k]._sleept) vrijM[k].setLatLng([c[1], c[0]]);
     });
+    if (!vrijModus) return;
     if (!vrij.a || !vrij.b) { uit.textContent = vrij.a ? "Tik B op de kaart." : "Tik A op de kaart."; return; }
     const k = Perceel.koers(vrij.a, vrij.b), gr = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + "°";
-    vrijLaag.addLayer(L.polyline([[vrij.a[1], vrij.a[0]], [vrij.b[1], vrij.b[0]]], { color: "#e8590c", weight: 3, interactive: false }));
+    vrijLijn.addLayer(L.polyline([[vrij.a[1], vrij.a[0]], [vrij.b[1], vrij.b[0]]], { color: "#e8590c", weight: 3, interactive: false }));
     const sm = parse(vrij.s) || 0;
     let html = "<div class='kort'><div><span>Koers A → B</span><b>" + esc(gr(k.koers)) + "</b></div><div><span>Terug B → A</span><b>" + esc(gr((k.koers + 180) % 360)) + "</b></div>" +
       "<div><span>Afstand</span><b>" + esc(mDec(Math.round(k.afstand * 10) / 10)) + "</b></div></div>" +
       "<div class='ab'>A: " + esc(llTxt(vrij.a)) + "<br>B: " + esc(llTxt(vrij.b)) + "<br>Midden: " + esc(llTxt(k.midden)) + "</div>";
     if (sm) {
       const [a2, b2] = Perceel.verschuifLijn(vrij.a, vrij.b, vrij.links ? -sm : sm);
-      vrijLaag.addLayer(L.polyline([[a2[1], a2[0]], [b2[1], b2[0]]], { color: "#e8590c", weight: 2, dashArray: "6 6", interactive: false }));
+      vrijLijn.addLayer(L.polyline([[a2[1], a2[0]], [b2[1], b2[0]]], { color: "#e8590c", weight: 2, dashArray: "6 6", interactive: false }));
       html += "<div class='ab'><strong>" + esc(mDec(sm)) + " naar " + (vrij.links ? "links" : "rechts") + "</strong> (gezien van A naar B), zelfde koers:<br>A: " + esc(llTxt(a2)) + "<br>B: " + esc(llTxt(b2)) + "</div>";
     }
     uit.innerHTML = html;
@@ -1192,6 +1197,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     tekenVrij();
   }
   $("bVrij").addEventListener("click", () => setVrij(!vrijModus));
+  // Typen: zodra het een geldige coördinaat is meteen meerekenen; bij verlaten van het veld de kaart erheen
+  [["vrijA", "a"], ["vrijB", "b"]].forEach(([id, k]) => $(id).addEventListener("input", () => {
+    const p = leesPunt($(id).value);
+    if (p) { vrij[k] = p; bewaarVrij(); tekenVrij(); }
+  }));
   [["vrijA", "a"], ["vrijB", "b"]].forEach(([id, k]) => $(id).addEventListener("change", () => {
     const p = leesPunt($(id).value);
     if ($(id).value.trim() && !p) { say("Coördinaat niet herkend. Bijvoorbeeld: 52.67786562, 5.20413689", true); return; }

@@ -1,4 +1,4 @@
-// perceel.js versie 25 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 26 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -619,16 +619,10 @@
     const sectie = opts.sectie > 0 && opts.sectie <= breedte ? opts.sectie : 0;
     const sectiesTotaal = sectie ? Math.round(breedte / sectie) : 0;
     const sectiesAan = sectie && n && rest < breedte - 0.05 ? Math.min(sectiesTotaal, Math.max(1, Math.ceil((rest - 0.05) / sectie))) : sectiesTotaal;
-    for (let i = 0; i < n; i++) {
-      const y = startY + richtingY * (marge + (i + 0.5) * breedte);
-      let delen = snij(y);
-      // Zonder buitenronde kan het spoor van de laatste gang net buiten het perceel vallen (smalle rest):
-      // dan de lengte meten langs de rand. Een gang zonder rijdbaar stuk (smalle plek, buitenronde doet het) vervalt.
-      if (!delen.length && !ronde && i === n - 1) delen = snij(startY + richtingY * (W - Math.min(0.5, W / 2)));
-      if (!delen.length) continue;
-      const nr = uit.length + 1;
+    const maakGang = (y, delen, laatste, extra) => {
+      const nr = uit.length + 1, i = laatste ? n - 1 : -1;
       uit.push({
-        nr, y, // y: afstand tot de AB-lijn, met teken (positief = links van A->B)
+        nr, y, extra, // y: afstand tot de AB-lijn, met teken (positief = links van A->B); extra: aan de andere kant van de AB-lijn
         heen: nr % 2 === 1, // heen en weer: oneven gangen van A naar B
         lengte: delen.reduce((t, d) => t + d.tot - d.van, 0),
         lijnen: delen.map(d => [terug(d.van, y), terug(d.tot, y)]),
@@ -646,6 +640,50 @@
           return delenM.map(poly => poly.map(r => r.map(p => terug(p[0], p[1]))));
         })
       });
+    };
+    for (let i = 0; i < n; i++) {
+      const y = startY + richtingY * (marge + (i + 0.5) * breedte);
+      let delen = snij(y);
+      // Zonder buitenronde kan het spoor van de laatste gang net buiten het perceel vallen (smalle rest):
+      // dan de lengte meten langs de rand. Een gang zonder rijdbaar stuk (smalle plek, buitenronde doet het) vervalt.
+      if (!delen.length && !ronde && i === n - 1) delen = snij(startY + richtingY * (W - Math.min(0.5, W / 2)));
+      if (!delen.length) continue;
+      maakGang(y, delen, i === n - 1, false);
+    }
+    // Delen van het perceel aan de andere kant van de AB-lijn (een uitstulping voorbij de AB-kant): het raster van
+    // gangen loopt daar door, op dezelfde GPS-lijnen. Met buitenronde valt de eerste lijn daar samen met het
+    // bandenspoor van de buitenronde langs de AB-kant: alleen de stukken die verder dan een halve breedte van elke rand
+    // liggen tellen (anders dubbel met de buitenronde).
+    const randen = ringen.flatMap(r => r.slice(0, -1).map((p, j) => [p, r[j + 1]]));
+    const totRand = (x, y) => randen.reduce((m, [p, q]) => {
+      const dx = q[0] - p[0], dy = q[1] - p[1], l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((x - p[0]) * dx + (y - p[1]) * dy) / l2)) : 0;
+      return Math.min(m, Math.hypot(x - p[0] - t * dx, y - p[1] - t * dy));
+    }, Infinity);
+    const snijVrij = y => snij(y).flatMap(d => {
+      if (!ronde) return [d];
+      const stap = 1, xs = [], uitD = [];
+      for (let x = d.van; x <= d.tot; x += stap) xs.push(x);
+      let b = null;
+      xs.forEach((x, k) => {
+        const ok = totRand(x, y) > half + 1;
+        if (ok && b === null) b = k;
+        if ((!ok || k === xs.length - 1) && b !== null) {
+          const e = ok ? k : k - 1, van = b === 0 ? d.van : xs[b] - stap / 2, tot = e === xs.length - 1 ? d.tot : xs[e] + stap / 2;
+          if (tot - van > 2) uitD.push({ van, tot });
+          b = null;
+        }
+      });
+      return uitD;
+    });
+    const alleY = ringen.flatMap(r => r.map(p => p[1])), ylo = Math.min(...alleY), yhi = Math.max(...alleY);
+    // Naar de startkant en verder (i < 0), en voorbij de laatste gang (i >= n, bij beginnen aan de andere kant)
+    for (const [i0, stap] of [[-1, -1], [Math.max(n, 1), 1]]) {
+      for (let i = i0; ; i += stap) {
+        const y = startY + richtingY * (marge + (i + 0.5) * breedte);
+        if (y < ylo - breedte || y > yhi + breedte) break;
+        const delen = snijVrij(y);
+        if (delen.length) maakGang(y, delen, false, true);
+      }
     }
     const rondeUit = ronde ? {
       lengte: ronde.sporen.reduce((t, r) => t + ringLengte(r), 0),
@@ -702,7 +740,8 @@
       const lo = o.andereKant ? hi0 - j * zb : lo0 + (j - 1) * zb;
       passen.push({ soort: "gang", gang: j, lo, hi: lo + zb, heen: j % 2 === 1, min: lo0, max: hi0 });
     }
-    const banen = s.sporen.map(x => ({ label: String(x.nr), d: Math.abs(x.y) }));
+    // Gangen aan de andere kant van de AB-lijn (uitstulping) vallen buiten dit plan
+    const banen = s.sporen.filter(x => !x.extra).map(x => ({ label: String(x.nr), d: Math.abs(x.y) }));
     if (s.ronde && W > sb) banen.unshift({ label: "R", d: sb / 2 }, { label: "R", d: W - sb / 2 });
     // Ritme in het binnenveld: anker = het spoor waarmee de meeste andere binnensporen in het ritme vallen
     const opRitme = (d, d0) => { const k = (d - d0) / sb; return Math.abs(k - Math.round(k)) * sb <= 0.05; };

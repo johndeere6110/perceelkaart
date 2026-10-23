@@ -157,7 +157,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 40</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 41</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -541,7 +541,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     tekenSporen(obj, s, !!zi);
     const d = document.createElement("div"); d.className = "sp";
     const r1 = document.createElement("div");
-    const gTxt = s.gangen + (s.gangen === 1 ? " gang" : " gangen") + " langs de lange kant (" + mTxt(s.abLengte) + ")";
+    const nEx = s.sporen.filter(x => x.extra).length;
+    const gTxt = s.gangen + (s.gangen === 1 ? " gang" : " gangen") + " langs de lange kant (" + mTxt(s.abLengte) + ")" + (nEx ? ", waarvan " + nEx + " in het stuk aan de andere kant van de AB-lijn" : "");
     r1.innerHTML = "<strong>Spuiten " + esc(mDec(sb)) + ":</strong> " + esc(s.ronde
       ? (s.gangen ? "eerst de buitenronde (" + kmTxt(s.ronde.lengte) + "), daarna " + gTxt + ". Spuit uit zodra je over het bandenspoor van de buitenronde gaat." : "alleen de buitenronde (" + kmTxt(s.ronde.lengte) + ").")
       : gTxt + ".") + " Samen " + esc(kmTxt(s.totaalM)) + " rijden.";
@@ -628,6 +629,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     d.appendChild(kort);
     const los = binnen.filter(g => g.buiten);
     if (los.length) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Buiten het ritme, zelf dichtzetten: lijn " + los.map(lijn).join(", ") + "."; d.appendChild(x); }
+    if (s.sporen.some(x => x.extra)) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Het stuk aan de andere kant van de AB-lijn zit niet in het zaaiplan. Kies zo nodig een andere AB-kant."; d.appendChild(x); }
     // Uitleg, tabel en instellingen: uitklapbaar
     const det = document.createElement("details"); det.className = "zdet";
     if (obj._zaaiOpen) det.open = true;

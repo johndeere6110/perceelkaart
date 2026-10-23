@@ -44,6 +44,7 @@ Tik A en B op de kaart, sleep ze (alles rekent live mee), tik coördinaten in (`
 
 ## Overig
 
+- **Tablet:** liggend staat de kaart links over de volle hoogte en de bediening rechts in een eigen kolom; staand is de kaart groter.
 - Alleen de kaart zoomt (tot zoom 22; boven 19 wordt de luchtfoto vergroot), niet de hele pagina.
 - Alles blijft op je eigen telefoon. De app deelt de opslag met de Zaaihulp (zelfde domein), met eigen sleutels.
 - Onderaan staat **Zaaihulp openen**; de Zaaihulp heeft op het startscherm een knop naar de Perceelkaart. De installatiepagina's verwijzen naar elkaar: één link sturen is genoeg om allebei te installeren.

@@ -168,7 +168,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 52</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 53</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -963,6 +963,17 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       : om ? mTxt(om) + " oever, alleen droge sloten: geen bufferstrook." : "");
     $("info").hidden = !sel.length;
     if (!sel.length && oeverModus) setOever(false);
+    // AB-kant kiezen zonder Spuiten of Mais: toch de AB-lijn met A en B laten zien, anders zie je niet welke kant het is
+    if (abModus && !spuitAan && !maisAan) {
+      kavels.map(kv => ({ obj: kv, geom: kavelVorm(kv) })).concat(sel.filter(q => !kavelVan(q)).map(q => ({ obj: q, geom: q.geometry }))).forEach(o => {
+        if (!o.geom) return;
+        let sp = null;
+        try { sp = Perceel.sporen(o.geom, spuitBreedte() || 27, { abPunt: o.obj.abPunt || null, abLijn: o.obj.abLijn || null, abRand: !!o.obj.abRand }); } catch (e) {}
+        if (!sp) return;
+        spoorLaag.addLayer(L.polyline([[sp.a[1], sp.a[0]], [sp.b[1], sp.b[0]]], { color: "#e8590c", weight: 5, opacity: .9, interactive: false }));
+        [["A", sp.a], ["B", sp.b]].forEach(([t, c]) => spoorLaag.addLayer(L.marker([c[1], c[0]], { icon: L.divIcon({ className: "", html: '<div class="abl">' + t + '</div>', iconSize: [20, 20] }), interactive: false, keyboard: false })));
+      });
+    }
     map.invalidateSize();
   }
   $("bWis").addEventListener("click", e => { if (armed(e.currentTarget, "Tik nog eens om te wissen")) { sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken(); say("Selectie gewist. Tik op een perceel om te beginnen."); } });
@@ -1035,6 +1046,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("bAB").textContent = aan ? "Klaar met AB-kant" : "AB-kant kiezen";
     $("map").classList.toggle("oever", aan);
     if (aan) say("Tik op de kant van het perceel of de kavel waar de AB-lijn langs moet lopen. Je kunt meerdere kanten proberen; tik Klaar als hij goed staat.");
+    teken();
   }
   $("bAB").addEventListener("click", () => { if (!sel.length && !abModus) { say("Kies eerst een perceel; de AB-lijn hoort bij een perceel of kavel. Een losse lijn: AB-lijn meten.", true); return; } setAB(!abModus); });
   function abTik(ll) {

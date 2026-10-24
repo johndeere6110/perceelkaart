@@ -168,7 +168,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 50</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 51</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -182,6 +182,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   <div class="advice vrij" id="vrijBox" hidden>
     <div class="vrow"><label for="vrijA">A</label><input id="vrijA" type="text" inputmode="decimal" autocomplete="off" placeholder="tik op de kaart of 52.68, 5.20"><button type="button" class="btn klein" id="vrijAgps">GPS</button></div>
     <div class="vrow"><label for="vrijB">B</label><input id="vrijB" type="text" inputmode="decimal" autocomplete="off" placeholder="tik op de kaart of 52.68, 5.21"><button type="button" class="btn klein" id="vrijBgps">GPS</button></div>
+    <div class="vrow"><label for="vrijK">A+ koers (°)</label><input id="vrijK" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 244,672"><span></span></div>
     <div class="vrow"><label for="vrijS">Opzij (m)</label><input id="vrijS" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="0"><button type="button" class="btn klein" id="vrijSkant">rechts</button></div>
     <div id="vrijUit"></div>
     <div class="row" style="margin-top:8px"><button type="button" class="btn klein" id="vrijWis">Wissen</button><button type="button" class="btn klein" id="vrijOm">A en B omdraaien</button></div>
@@ -1178,7 +1179,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   });
   // AB-lijn meten, los van percelen: A en B tikken, slepen, intikken of GPS; koers, afstand, midden en opzij schuiven
   let vrijModus = false;
-  const vrij = Object.assign({ a: null, b: null, s: "", links: false }, store.get("kaartVrijAB", {}));
+  const vrij = Object.assign({ a: null, b: null, s: "", links: false, k: "" }, store.get("kaartVrijAB", {}));
   const vrijLaag = L.layerGroup().addTo(map), vrijLijn = L.layerGroup().addTo(map), vrijM = {};
   const bewaarVrij = () => store.set("kaartVrijAB", vrij);
   const llTxt = c => c ? c[1].toFixed(8) + ", " + c[0].toFixed(8) : "";
@@ -1196,6 +1197,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("vrijA").value = document.activeElement === $("vrijA") ? $("vrijA").value : llTxt(vrij.a);
     $("vrijB").value = document.activeElement === $("vrijB") ? $("vrijB").value : llTxt(vrij.b);
     $("vrijS").value = document.activeElement === $("vrijS") ? $("vrijS").value : vrij.s;
+    $("vrijK").value = document.activeElement === $("vrijK") ? $("vrijK").value : vrij.k;
     $("vrijSkant").textContent = vrij.links ? "links" : "rechts";
     const uit = $("vrijUit"); uit.innerHTML = "";
     // Markers blijven staan (anders breekt het slepen af); tijdens het slepen rekent alles live mee
@@ -1204,7 +1206,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       if (!vrijM[k]) {
         const m = vrijM[k] = L.marker([c[1], c[0]], { draggable: true, icon: L.divIcon({ className: "", html: '<div class="abl vrijp">' + t + "</div>", iconSize: [26, 26] }) });
         m.on("dragstart", () => { m._sleept = true; });
-        m.on("drag", () => { const p = m.getLatLng(); vrij[k] = [p.lng, p.lat]; tekenVrij(); });
+        m.on("drag", () => { const p = m.getLatLng(); vrij[k] = [p.lng, p.lat]; if (k === "a") zetAplus(); else vrij.k = ""; tekenVrij(); });
         m.on("dragend", () => { m._sleept = false; bewaarVrij(); tekenVrij(); });
         vrijLaag.addLayer(m);
       } else if (!vrijM[k]._sleept) vrijM[k].setLatLng([c[1], c[0]]);
@@ -1213,6 +1215,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (!vrij.a || !vrij.b) { uit.textContent = vrij.a ? "Tik B op de kaart." : "Tik A op de kaart."; return; }
     const k = Perceel.koers(vrij.a, vrij.b), gr = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + "°";
     vrijLijn.addLayer(L.polyline([[vrij.a[1], vrij.a[0]], [vrij.b[1], vrij.b[0]]], { color: "#e8590c", weight: 3, interactive: false }));
+    // Lijn doortrekken (zoals de GPS-kast hem oneindig doortrekt), om langs een rand of pad te controleren
+    const v1 = Perceel.puntOpKoers(vrij.a, k.koers, 2000), v2 = Perceel.puntOpKoers(vrij.a, (k.koers + 180) % 360, 2000);
+    vrijLijn.addLayer(L.polyline([[v2[1], v2[0]], [v1[1], v1[0]]], { color: "#e8590c", weight: 1.5, opacity: .8, dashArray: "8 6", interactive: false }));
     const sm = parse(vrij.s) || 0;
     let html = "<div class='kort'><div><span>Koers A → B</span><b>" + esc(gr(k.koers)) + "</b></div><div><span>Terug B → A</span><b>" + esc(gr((k.koers + 180) % 360)) + "</b></div>" +
       "<div><span>Afstand</span><b>" + esc(mDec(Math.round(k.afstand * 10) / 10)) + "</b></div></div>" +
@@ -1222,9 +1227,22 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       vrijLijn.addLayer(L.polyline([[a2[1], a2[0]], [b2[1], b2[0]]], { color: "#e8590c", weight: 2, dashArray: "6 6", interactive: false }));
       html += "<div class='ab'><strong>" + esc(mDec(sm)) + " naar " + (vrij.links ? "links" : "rechts") + "</strong> (gezien van A naar B), zelfde koers:<br>A: " + esc(llTxt(a2)) + "<br>B: " + esc(llTxt(b2)) + "</div>";
     }
+    // Controle: hoe ligt de lijn ten opzichte van de langste rechte kant van het perceel waar A in ligt
+    const ob = objBijPunt(vrij.a);
+    if (ob) {
+      try {
+        const ref = Perceel.sporen(ob.geom, 27, {});
+        if (ref) {
+          let dv = Math.abs(k.koers - ref.koers) % 180; if (dv > 90) dv = 180 - dv; // lijnen: richting maakt niet uit
+          const opz = ref.abLengte * Math.tan(dv * Math.PI / 180);
+          html += "<div class='ab'>Langste rechte kant van " + esc(ob.naam) + ": koers " + esc(gr(ref.koers)) + " / " + esc(gr((ref.koers + 180) % 360)) +
+            "<br><strong>Verschil " + esc(dv.toLocaleString("nl-NL", { minimumFractionDigits: 3, maximumFractionDigits: 3 })) + "°</strong> = " + esc(mDec(Math.round(opz * 100) / 100)) + " op " + esc(mTxt(ref.abLengte)) + (dv < 0.05 ? " (loopt mee met de kant)" : dv < 0.5 ? "" : " (loopt niet evenwijdig met die kant)") + "</div>";
+        }
+      } catch (e) { /* geen vergelijking */ }
+    }
     uit.innerHTML = html;
     // Gebruik deze lijn voor het perceel of de kavel waar A in (of bij) ligt: sporen en zaaiplan gaan erop
-    const o = objBijPunt(vrij.a);
+    const o = ob;
     if (o) {
       const bt = document.createElement("button"); bt.type = "button"; bt.className = "btn"; bt.style.marginTop = "10px"; bt.style.width = "100%";
       bt.textContent = "Gebruik als AB-lijn voor " + o.naam;
@@ -1238,6 +1256,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   }
   function vrijTik(ll) {
     const c = [ll.lng, ll.lat];
+    // A+ ingevuld: elke tik zet A, de lijn volgt de koers
+    if (parse(vrij.k) != null) { vrij.a = c; zetAplus(); bewaarVrij(); tekenVrij(); return; }
     if (!vrij.a) vrij.a = c;
     else if (!vrij.b) vrij.b = c;
     else {
@@ -1261,7 +1281,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // Typen: zodra het een geldige coördinaat is meteen meerekenen; bij verlaten van het veld de kaart erheen
   [["vrijA", "a"], ["vrijB", "b"]].forEach(([id, k]) => $(id).addEventListener("input", () => {
     const p = leesPunt($(id).value);
-    if (p) { vrij[k] = p; bewaarVrij(); tekenVrij(); }
+    if (p) { vrij[k] = p; if (k === "a") zetAplus(); else vrij.k = ""; bewaarVrij(); tekenVrij(); }
   }));
   [["vrijA", "a"], ["vrijB", "b"]].forEach(([id, k]) => $(id).addEventListener("change", () => {
     const p = leesPunt($(id).value);
@@ -1270,14 +1290,23 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (p) map.panTo([p[1], p[0]]);
   }));
   $("vrijS").addEventListener("input", () => { vrij.s = $("vrijS").value; bewaarVrij(); tekenVrij(); });
+  // A+: punt A plus een koers. B komt dan 500 m verder op die koers te liggen (zelfde rekenwijze als de GPS-kast)
+  const zetAplus = () => {
+    const g = parse(vrij.k);
+    if (vrij.a && g != null && g >= 0 && g < 360) vrij.b = Perceel.puntOpKoers(vrij.a, g, 500);
+  };
+  $("vrijK").addEventListener("input", () => {
+    vrij.k = $("vrijK").value; zetAplus(); bewaarVrij(); tekenVrij();
+    if (vrij.k && !vrij.a) say("Zet eerst punt A (tikken, intikken of GPS); de lijn gaat met deze koers door A.");
+  });
   $("vrijSkant").addEventListener("click", () => { vrij.links = !vrij.links; bewaarVrij(); tekenVrij(); });
-  $("vrijWis").addEventListener("click", () => { vrij.a = vrij.b = null; bewaarVrij(); tekenVrij(); });
-  $("vrijOm").addEventListener("click", () => { [vrij.a, vrij.b] = [vrij.b, vrij.a]; bewaarVrij(); tekenVrij(); });
+  $("vrijWis").addEventListener("click", () => { vrij.a = vrij.b = null; vrij.k = ""; bewaarVrij(); tekenVrij(); });
+  $("vrijOm").addEventListener("click", () => { [vrij.a, vrij.b] = [vrij.b, vrij.a]; vrij.k = ""; bewaarVrij(); tekenVrij(); });
   [["vrijAgps", "a"], ["vrijBgps", "b"]].forEach(([id, k]) => $(id).addEventListener("click", async e => {
     const btn = e.currentTarget; btn.disabled = true; btn.textContent = "…";
     try {
       const p = await Perceel.positie();
-      vrij[k] = [p.lon, p.lat]; bewaarVrij(); tekenVrij(); map.panTo([p.lat, p.lon]);
+      vrij[k] = [p.lon, p.lat]; if (k === "a") zetAplus(); else vrij.k = ""; bewaarVrij(); tekenVrij(); map.panTo([p.lat, p.lon]);
       say((k === "a" ? "A" : "B") + " op je GPS-positie (nauwkeurig tot ca. " + Math.round(p.nauwkeurigheid || 0) + " m). Een telefoon is geen RTK: sleep het punt zo nodig nog goed.", (p.nauwkeurigheid || 0) > 5);
     } catch (er) { say(er.message, true); }
     finally { btn.disabled = false; btn.textContent = "GPS"; }

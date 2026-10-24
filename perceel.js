@@ -1,4 +1,4 @@
-// perceel.js versie 29 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 30 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -13,6 +13,7 @@
 //   Perceel.sporen(geometry, breedte, { andereKant, buitenronde, clip })   // spuit-/strooisporen langs de langste zijde
 //     clip = polygon-clipping (optioneel): maakt de buitenronde exact, ook bij smalle armen en inhammen
 //   Perceel.koers(a, b)   // { koers (graden, ware noorden, met de klok mee), afstand (m), midden } voor een losse AB-lijn
+//   Perceel.puntOpKoers(a, koers, afstand)   // punt op afstand (m) vanaf a in de richting van koers (A+), zoals de GPS-kast
 //   Perceel.verschuifLijn(a, b, d)   // AB-lijn d meter opzij (positief = rechts van A->B): [a', b']
 //   Perceel.verschuif(geometry, d)   // buitenrand d meter naar binnen (negatief: naar buiten), eenvoudig
 //   Perceel.samenvoegen(geometries, clip, naad)   // percelen tot één vorm, naden tot 2×naad m dicht; null als los
@@ -499,6 +500,12 @@
   function koers(a, b) {
     const lat = (a[1] + b[1]) / 2, { kx, ky } = schaal(lat), dx = (b[0] - a[0]) * kx, dy = (b[1] - a[1]) * ky;
     return { koers: koersKast(b[0] - a[0], b[1] - a[1], lat), afstand: Math.hypot(dx, dy), midden: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
+  }
+  // A+: punt in de richting van een koers (graden), zodat koers(a, punt) precies die koers geeft (zelfde bol als koersKast)
+  function puntOpKoers(a, graden, afstand) {
+    const t = graden * Math.PI / 180, m = 111320, dLat = afstand * Math.cos(t) / m;
+    // koers() rekent met de breedte halverwege, dus hier ook
+    return [a[0] + afstand * Math.sin(t) / (m * Math.cos((a[1] + dLat / 2) * Math.PI / 180)), a[1] + dLat];
   }
   function verschuifLijn(a, b, d) {
     const { kx, ky } = schaal((a[1] + b[1]) / 2), dx = (b[0] - a[0]) * kx, dy = (b[1] - a[1]) * ky, l = Math.hypot(dx, dy) || 1;
@@ -1011,5 +1018,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, koers, verschuifLijn, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, koers, puntOpKoers, verschuifLijn, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
 });

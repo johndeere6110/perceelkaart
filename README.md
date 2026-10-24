@@ -40,7 +40,9 @@ Twee knoppen, los aan/uit: **Spuiten** en **Mais zaaien**. Alleen de velden en t
 
 ## AB-lijn meten (los van percelen)
 
-Tik A en B op de kaart, sleep ze (alles rekent live mee), tik coördinaten in (`52.68, 5.20` of `52,68 5,20`) of gebruik GPS. Je ziet de koers A → B en terug (4 decimalen, ware noorden, zoals op de GPS), de afstand, het midden en de coördinaten, en optioneel dezelfde lijn een aantal meter naar links of rechts. Gecontroleerd tegen de Geocaching Toolbox (verschil 0,0003°).
+Tik A en B op de kaart, sleep ze (alles rekent live mee), tik coördinaten in (`52.68, 5.20` of `52,68 5,20`) of gebruik GPS. Je ziet de koers A → B en terug (4 decimalen, ware noorden), de afstand, het midden en de coördinaten, en optioneel dezelfde lijn een aantal meter naar links of rechts.
+
+De koers wordt gerekend zoals de GPS-kast: met de aarde als bol. Vergeleken met de terminal op twee percelen (47,321° en 244,672°) scheelde het daarna nog ±0,02°, het tikken van A en B. Op de afgeplatte aarde (zoals de Geocaching Toolbox) komt een schuine lijn tot ~0,07° hoger uit; een noord-zuidlijn scheelt bijna niets.
 
 ## Overig
 

@@ -1,4 +1,4 @@
-// perceel.js versie 28 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 29 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -492,9 +492,13 @@
     const f = lat * Math.PI / 180;
     return { ky: 111132.92 - 559.82 * Math.cos(2 * f) + 1.175 * Math.cos(4 * f), kx: 111412.84 * Math.cos(f) - 93.5 * Math.cos(3 * f) };
   }
+  // Koers zoals de GPS-kast hem geeft: de aarde als bol (oost = lengteverschil × cos breedte, noord = breedteverschil).
+  // Op de afgeplatte aarde komt een schuine lijn hier tot ~0,07° hoger uit; vergeleken met een terminal (twee percelen)
+  // klopte de bol, tot op de nauwkeurigheid van het tikken.
+  const koersKast = (dLon, dLat, lat) => (Math.atan2(dLon * Math.cos(lat * Math.PI / 180), dLat) * 180 / Math.PI + 360) % 360;
   function koers(a, b) {
-    const { kx, ky } = schaal((a[1] + b[1]) / 2), dx = (b[0] - a[0]) * kx, dy = (b[1] - a[1]) * ky;
-    return { koers: (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360, afstand: Math.hypot(dx, dy), midden: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
+    const lat = (a[1] + b[1]) / 2, { kx, ky } = schaal(lat), dx = (b[0] - a[0]) * kx, dy = (b[1] - a[1]) * ky;
+    return { koers: koersKast(b[0] - a[0], b[1] - a[1], lat), afstand: Math.hypot(dx, dy), midden: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
   }
   function verschuifLijn(a, b, d) {
     const { kx, ky } = schaal((a[1] + b[1]) / 2), dx = (b[0] - a[0]) * kx, dy = (b[1] - a[1]) * ky, l = Math.hypot(dx, dy) || 1;
@@ -716,9 +720,8 @@
       abLengte: ab.m, a: abEcht ? naarLL(abEcht[0]) : terug(0, 0), b: abEcht ? naarLL(abEcht[1]) : terug(len, 0), sporen: uit,
       rand: [terug(0, 0), terug(len, 0)], // de lijn y = 0 waar het raster op rust (bij een zelf getikte AB-lijn een halve breedte ernaast)
       vlak: { polyM, terug }, // perceel in het gedraaide stelsel (x langs AB, y loodrecht, links positief), voor zaaiVlakken
-      // Koers van de AB-lijn in graden t.o.v. het ware noorden, met de klok mee (zoals op een GPS-terminal)
-      // (uit de richting in meters oost/noord op de WGS84-ellipsoïde, zoals een GPS-terminal rekent)
-      koers: (Math.atan2(ux, uy) * 180 / Math.PI + 360) % 360,
+      // Koers van de AB-lijn in graden t.o.v. het ware noorden, met de klok mee, gerekend zoals de GPS-kast (zie koersKast)
+      koers: koersKast(ux / kx, uy / ky, lat0),
       totaalM: uit.reduce((t, s) => t + s.lengte, 0) + (rondeUit ? rondeUit.lengte : 0)
     };
   }

@@ -168,7 +168,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 51</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 52</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -1032,9 +1032,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (aan && koppelModus) setKoppel(false);
     abModus = aan;
     $("bAB").setAttribute("aria-pressed", aan);
-    $("bAB").textContent = aan ? "Tik op de kant…" : "AB-kant kiezen";
+    $("bAB").textContent = aan ? "Klaar met AB-kant" : "AB-kant kiezen";
     $("map").classList.toggle("oever", aan);
-    if (aan) say("Tik op de kant van het perceel of de kavel waar de AB-lijn langs moet lopen.");
+    if (aan) say("Tik op de kant van het perceel of de kavel waar de AB-lijn langs moet lopen. Je kunt meerdere kanten proberen; tik Klaar als hij goed staat.");
   }
   $("bAB").addEventListener("click", () => { if (!sel.length && !abModus) { say("Kies eerst een perceel; de AB-lijn hoort bij een perceel of kavel. Een losse lijn: AB-lijn meten.", true); return; } setAB(!abModus); });
   function abTik(ll) {
@@ -1050,9 +1050,14 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       if (!best || d < best.d) best = { d, o };
     }));
     if (!best || best.d > 30) { say("Tik dichter bij de rand van een perceel of kavel.", true); return; }
-    best.o.obj.abPunt = [ll.lng, ll.lat]; best.o.opslaan();
-    setAB(false); teken();
-    say("AB-lijn ligt nu langs de gekozen kant van " + best.o.naam + "." + (spuitAan || maisAan ? "" : " Zet Spuiten of Mais zaaien aan om de sporen en de koers te zien."));
+    best.o.obj.abPunt = [ll.lng, ll.lat]; delete best.o.obj.abLijn; best.o.opslaan();
+    teken(); // blijft aan: nog een kant proberen kan, tot je Klaar tikt
+    // Koers van deze kant meteen laten zien, om te vergelijken met de GPS-kast
+    let k = null;
+    try { const sp = Perceel.sporen(best.o.geom, spuitBreedte() || 27, { abPunt: best.o.obj.abPunt }); if (sp) k = sp; } catch (e) {}
+    const gr = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + "°";
+    say("AB-lijn langs deze kant van " + best.o.naam + (k ? ": koers " + gr(k.koers) + " / " + gr((k.koers + 180) % 360) + " (" + mTxt(k.abLengte) + ")" : "") +
+      ". Tik een andere kant om te vergelijken, of Klaar met AB-kant." + (spuitAan || maisAan ? "" : " Zet Spuiten of Mais zaaien aan om de sporen te zien."));
   }
   // Perceel of kavel bij een punt: waar het in ligt, anders de dichtstbijzijnde rand (binnen 40 px). Voor AB-lijn meten -> perceel.
   function objBijPunt(c) {

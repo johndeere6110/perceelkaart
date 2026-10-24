@@ -27,7 +27,7 @@ Twee knoppen, los aan/uit: **Spuiten** en **Mais zaaien**. Alleen de velden en t
 **Spuiten**
 - Spuitsporen (standaard 27 m) evenwijdig aan de lange kant, met A en B, genummerde gangen, koers in graden en de coördinaten van A en B.
 - **Buitenronde eerst:** eerst een ronde langs de rand, de spuit gaat uit bij het bandenspoor daarvan. Per perceel zie je hoe de laatste gang uitkomt, in hele secties.
-- **AB-kant kiezen** (naast AB-lijn meten): tik bij de kant van een gekozen perceel of kavel waar de AB-lijn langs moet.
+- **AB-kant kiezen** (naast AB-lijn meten): tik bij de kant van een gekozen perceel of kavel waar de AB-lijn langs moet. Blijft aan tot je **Klaar met AB-kant** tikt: je kunt kanten proberen, bij elke tik staat de koers erbij om met de GPS-kast te vergelijken.
 - **Eigen AB-lijn** (bijv. langs een pad midden in het perceel): zet A en B bij **AB-lijn meten** en tik **Gebruik als AB-lijn voor perceel …**. Standaard is die lijn een spuitpad (de gangen liggen op hele spuitbreedtes ervan); onder de spuituitleg om te zetten naar "spuit begint naast de lijn". **AB weer automatisch** zet het terug.
 - Steekt een deel van het perceel voorbij de AB-lijn uit, dan lopen de gangen daar door op dezelfde GPS-lijnen.
 

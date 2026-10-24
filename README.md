@@ -27,8 +27,8 @@ Twee knoppen, los aan/uit: **Spuiten** en **Mais zaaien**. Alleen de velden en t
 **Spuiten**
 - Spuitsporen (standaard 27 m) evenwijdig aan de lange kant, met A en B, genummerde gangen, koers in graden en de coördinaten van A en B.
 - **Buitenronde eerst:** eerst een ronde langs de rand, de spuit gaat uit bij het bandenspoor daarvan. Per perceel zie je hoe de laatste gang uitkomt, in hele secties.
-- **AB-kant kiezen** (onder AB-lijn meten, altijd zichtbaar): tik bij de kant van een gekozen perceel of kavel waar de AB-lijn langs moet.
-- **AB-lijn zelf tikken:** tik A en B, bijvoorbeeld langs een pad midden in het perceel. Standaard is die lijn een spuitpad (de gangen liggen op hele spuitbreedtes ervan); onder de spuituitleg om te zetten naar "spuit begint naast de lijn". **AB weer automatisch** zet het terug.
+- **AB-kant kiezen** (naast AB-lijn meten): tik bij de kant van een gekozen perceel of kavel waar de AB-lijn langs moet.
+- **Eigen AB-lijn** (bijv. langs een pad midden in het perceel): zet A en B bij **AB-lijn meten** en tik **Gebruik als AB-lijn voor perceel …**. Standaard is die lijn een spuitpad (de gangen liggen op hele spuitbreedtes ervan); onder de spuituitleg om te zetten naar "spuit begint naast de lijn". **AB weer automatisch** zet het terug.
 - Steekt een deel van het perceel voorbij de AB-lijn uit, dan lopen de gangen daar door op dezelfde GPS-lijnen.
 
 **Mais zaaien** (zaaiplan op dezelfde AB-lijn)
@@ -38,7 +38,7 @@ Twee knoppen, los aan/uit: **Spuiten** en **Mais zaaien**. Alleen de velden en t
 - Ritme van de zaaicomputer: bij 27 m op 6 m ritme 18 (2 × 9, om en om gespiegeld) met spuitpad bij teller 3, 7, 12, 16. Gecontroleerd met een Kverneland Optima (rijen 10 en 15).
 - Op de kaart: spuitpaden als gele strook met het lijnnummer, de startgang oranje met een pijl, de ronde met het spuitpad paars. Met **Zaaigangen: aan** ook het hart van elke zaaigang en elke zaaironde als stippellijn, en in een wit rondje hoeveel banen er tussen de spuitpaden zitten (bij 27 m op 6 m om en om 3 en 4). Uitgezoomd alleen START en de ronde.
 
-## AB-lijn meten (los van percelen)
+## AB-lijn meten
 
 Tik A en B op de kaart, sleep ze (alles rekent live mee), tik coördinaten in (`52.68, 5.20` of `52,68 5,20`) of gebruik GPS. Je ziet de koers A → B en terug (4 decimalen, ware noorden), de afstand, het midden en de coördinaten, en optioneel dezelfde lijn een aantal meter naar links of rechts.
 

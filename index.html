@@ -168,7 +168,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 49</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 50</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -178,8 +178,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <button type="button" class="btn" id="bNL">Nederland</button>
   </div>
   <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bBron" aria-pressed="false">Grenzen: BRP-gewasperceel</button></div>
-  <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bVrij" aria-pressed="false">AB-lijn meten</button></div>
-  <div class="row" id="abKeuze" style="margin-top:8px"><button type="button" class="btn" id="bAB" aria-pressed="false">AB-kant kiezen</button><button type="button" class="btn" id="bABlijn" aria-pressed="false">AB-lijn zelf tikken</button></div>
+  <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bVrij" aria-pressed="false">AB-lijn meten</button><button type="button" class="btn" id="bAB" aria-pressed="false">AB-kant kiezen</button></div>
   <div class="advice vrij" id="vrijBox" hidden>
     <div class="vrow"><label for="vrijA">A</label><input id="vrijA" type="text" inputmode="decimal" autocomplete="off" placeholder="tik op de kaart of 52.68, 5.20"><button type="button" class="btn klein" id="vrijAgps">GPS</button></div>
     <div class="vrow"><label for="vrijB">B</label><input id="vrijB" type="text" inputmode="decimal" autocomplete="off" placeholder="tik op de kaart of 52.68, 5.21"><button type="button" class="btn klein" id="vrijBgps">GPS</button></div>
@@ -1027,7 +1026,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // AB-kant kiezen: tik bij de kant van een perceel of kavel waar de AB-lijn langs moet
   let abModus = false;
   function setAB(aan) {
-    if (aan && abLijnModus) setABlijn(false);
+    if (aan && vrijModus) setVrij(false);
     if (aan && oeverModus) setOever(false);
     if (aan && koppelModus) setKoppel(false);
     abModus = aan;
@@ -1054,48 +1053,23 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     setAB(false); teken();
     say("AB-lijn ligt nu langs de gekozen kant van " + best.o.naam + "." + (spuitAan || maisAan ? "" : " Zet Spuiten of Mais zaaien aan om de sporen en de koers te zien."));
   }
-  // AB-lijn zelf tikken (bijv. langs een pad midden in het perceel): A en dan B, voor het perceel of de kavel waar A in ligt
-  let abLijnModus = false, abLijnA = null, abLijnTmp = null;
-  function setABlijn(aan) {
-    if (aan) { if (oeverModus) setOever(false); if (koppelModus) setKoppel(false); if (abModus) setAB(false); if (vrijModus) setVrij(false); }
-    abLijnModus = aan; abLijnA = null;
-    if (abLijnTmp) { abLijnTmp.remove(); abLijnTmp = null; }
-    $("bABlijn").setAttribute("aria-pressed", aan);
-    $("bABlijn").textContent = aan ? "Tik A, dan B…" : "AB-lijn zelf tikken";
-    $("map").classList.toggle("oever", aan);
-    if (aan) say("Tik punt A van de AB-lijn, in of bij het perceel (bijvoorbeeld op het pad). Daarna punt B.");
-  }
-  $("bABlijn").addEventListener("click", () => { if (!sel.length && !abLijnModus) { say("Kies eerst een perceel; de AB-lijn hoort bij een perceel of kavel. Een losse lijn: AB-lijn meten.", true); return; } setABlijn(!abLijnModus); });
-  function abLijnTik(ll) {
-    const c = [ll.lng, ll.lat];
-    if (!abLijnA) {
-      const objs = kavels.map(kv => ({ obj: kv, geom: kavelVorm(kv), opslaan: bewaarK, naam: kv.naam }))
-        .concat(sel.filter(q => !kavelVan(q)).map(q => ({ obj: q, geom: q.geometry, opslaan: bewaar, naam: "perceel " + (sel.indexOf(q) + 1) })))
-        .filter(o => o.geom);
-      // Perceel of kavel waar A in ligt, anders de dichtstbijzijnde rand (binnen 40 px)
-      let o = objs.find(x => Perceel.bevatPunt(x.geom, c[0], c[1]));
-      if (!o) {
-        const p = map.latLngToContainerPoint(ll); let best = null;
-        objs.forEach(x => Perceel.zijden(x.geom).forEach(z => {
-          const d = L.LineUtil.pointToSegmentDistance(p, map.latLngToContainerPoint([z.a[1], z.a[0]]), map.latLngToContainerPoint([z.b[1], z.b[0]]));
-          if (!best || d < best.d) best = { d, x };
-        }));
-        if (best && best.d <= 40) o = best.x;
-      }
-      if (!o) { say("Tik in of bij een gekozen perceel of kavel.", true); return; }
-      abLijnA = { o, c };
-      abLijnTmp = L.marker(ll, { icon: L.divIcon({ className: "", html: '<div class="abl">A</div>', iconSize: [20, 20] }), interactive: false }).addTo(map);
-      say("A gezet bij " + o.naam + ". Tik nu punt B, zo ver mogelijk weg op dezelfde lijn.");
-      return;
+  // Perceel of kavel bij een punt: waar het in ligt, anders de dichtstbijzijnde rand (binnen 40 px). Voor AB-lijn meten -> perceel.
+  function objBijPunt(c) {
+    const objs = kavels.map(kv => ({ obj: kv, geom: kavelVorm(kv), opslaan: bewaarK, naam: kv.naam }))
+      .concat(sel.filter(q => !kavelVan(q)).map(q => ({ obj: q, geom: q.geometry, opslaan: bewaar, naam: "perceel " + (sel.indexOf(q) + 1) })))
+      .filter(o => o.geom);
+    let o = objs.find(x => Perceel.bevatPunt(x.geom, c[0], c[1]));
+    if (!o) {
+      const p = map.latLngToContainerPoint([c[1], c[0]]); let best = null;
+      objs.forEach(x => Perceel.zijden(x.geom).forEach(z => {
+        const d = L.LineUtil.pointToSegmentDistance(p, map.latLngToContainerPoint([z.a[1], z.a[0]]), map.latLngToContainerPoint([z.b[1], z.b[0]]));
+        if (!best || d < best.d) best = { d, x };
+      }));
+      if (best && best.d <= 40) o = best.x;
     }
-    const { o } = abLijnA, k = Perceel.koers(abLijnA.c, c);
-    if (k.afstand < 10) { say("B ligt te dicht bij A. Tik B verder weg.", true); return; }
-    o.obj.abLijn = [abLijnA.c, c]; delete o.obj.abPunt; o.opslaan();
-    setABlijn(false); teken();
-    say("AB-lijn van " + o.naam + ": koers " + k.koers.toLocaleString("nl-NL", { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + "°, " + Math.round(k.afstand) + " m. De lijn telt als spuitpad; anders onder de spuituitleg omzetten.");
+    return o || null;
   }
   function setOever(aan) {
-    if (aan && abLijnModus) setABlijn(false);
     if (aan && abModus) setAB(false);
     if (aan && koppelModus) { koppelModus = false; koppelSet.clear(); $("bKoppel").setAttribute("aria-pressed", false); $("bKoppel").textContent = "Percelen koppelen"; }
     oeverModus = aan;
@@ -1188,7 +1162,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     });
   }
   renderTypes();
-  map.on("click", ev => vrijModus ? vrijTik(ev.latlng) : abLijnModus ? abLijnTik(ev.latlng) : abModus ? abTik(ev.latlng) : koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
+  map.on("click", ev => vrijModus ? vrijTik(ev.latlng) : abModus ? abTik(ev.latlng) : koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
   teken();
   // Paneel eronder groeit/krimpt: kaart laten meeschalen
   if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe($("map"));
@@ -1249,6 +1223,18 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       html += "<div class='ab'><strong>" + esc(mDec(sm)) + " naar " + (vrij.links ? "links" : "rechts") + "</strong> (gezien van A naar B), zelfde koers:<br>A: " + esc(llTxt(a2)) + "<br>B: " + esc(llTxt(b2)) + "</div>";
     }
     uit.innerHTML = html;
+    // Gebruik deze lijn voor het perceel of de kavel waar A in (of bij) ligt: sporen en zaaiplan gaan erop
+    const o = objBijPunt(vrij.a);
+    if (o) {
+      const bt = document.createElement("button"); bt.type = "button"; bt.className = "btn"; bt.style.marginTop = "10px"; bt.style.width = "100%";
+      bt.textContent = "Gebruik als AB-lijn voor " + o.naam;
+      bt.addEventListener("click", () => {
+        o.obj.abLijn = [vrij.a.slice(), vrij.b.slice()]; delete o.obj.abPunt; o.opslaan();
+        setVrij(false); teken();
+        say("AB-lijn van " + o.naam + " staat op deze lijn (telt als spuitpad; onder de spuituitleg om te zetten)." + (spuitAan || maisAan ? "" : " Zet Spuiten of Mais zaaien aan om de sporen te zien."));
+      });
+      uit.appendChild(bt);
+    }
   }
   function vrijTik(ll) {
     const c = [ll.lng, ll.lat];
@@ -1262,7 +1248,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     bewaarVrij(); tekenVrij();
   }
   function setVrij(aan) {
-    if (aan) { if (oeverModus) setOever(false); if (koppelModus) setKoppel(false); if (abModus) setAB(false); if (abLijnModus) setABlijn(false); }
+    if (aan) { if (oeverModus) setOever(false); if (koppelModus) setKoppel(false); if (abModus) setAB(false); }
     vrijModus = aan;
     $("bVrij").setAttribute("aria-pressed", aan);
     $("bVrij").textContent = aan ? "Klaar met AB-lijn" : "AB-lijn meten";

@@ -168,14 +168,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 53</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 54</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
   <div class="row">
     <button type="button" class="btn" id="bLaag" aria-pressed="false">Luchtfoto</button>
     <button type="button" class="btn" id="bMij">Mijn locatie</button>
-    <button type="button" class="btn" id="bNL">Nederland</button>
   </div>
   <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bBron" aria-pressed="false">Grenzen: BRP-gewasperceel</button></div>
   <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bVrij" aria-pressed="false">AB-lijn meten</button><button type="button" class="btn" id="bAB" aria-pressed="false">AB-kant kiezen</button></div>
@@ -267,7 +266,6 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const map = L.map("map", { zoomControl: true, attributionControl: true, minZoom: 7, maxZoom: 22, maxBounds: NL.pad(0.05), maxBoundsViscosity: 1 })
     .setView([view.lat, view.lon], view.z);
   store.set("kaartTestView", view);
-  $("bNL").addEventListener("click", () => map.fitBounds(NL));
   map.on("moveend", () => { const c = map.getCenter(); store.set("kaartTestView", { lat: c.lat, lon: c.lng, z: map.getZoom() }); });
   // Uitgezoomd (onder 17) de kleine zaailabels verbergen
   // iPhone negeert user-scalable=no: knijpen buiten de kaart tegenhouden

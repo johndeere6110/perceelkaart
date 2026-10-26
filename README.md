@@ -25,7 +25,7 @@ Percelen kiezen op de kaart met het totaal in ha, bufferstroken langs water, spu
 Twee knoppen, los aan/uit: **Spuiten** en **Mais zaaien**. Alleen de velden en tekeningen van wat aan staat zijn te zien.
 
 **Spuiten**
-- Spuitsporen (standaard 27 m) evenwijdig aan de lange kant, met A en B, genummerde gangen, koers in graden en de coördinaten van A en B. A en B liggen op de hoeken van die kant (van hoek tot hoek, zoals je A en B in de trekker zet).
+- Spuitsporen (standaard 27 m) evenwijdig aan de lange kant, met A en B, genummerde gangen, koers in graden en de coördinaten van A en B. A en B liggen een stukje voor de hoeken op de rand (ca. 15 m, de rand daar over 20 m gemiddeld), zoals je A en B in de trekker zet; een afgeronde of uitstekende hoek trekt de lijn zo niet scheef.
 - **Buitenronde eerst:** eerst een ronde langs de rand, de spuit gaat uit bij het bandenspoor daarvan. Per perceel zie je hoe de laatste gang uitkomt, in hele secties.
 - **Begin aan andere kant:** de gangen beginnen aan de overkant. A en B schuiven dan mee naar die kant (zelfde koers, op de lijn door het verste punt), zodat de GPS-lijnen bij de getekende gangen passen. Met **AB-kant kiezen** kies je meteen de kant zelf; dat zet "begin aan andere kant" (spuiten en zaaien) weer uit.
 - **AB-kant kiezen** (naast AB-lijn meten): tik bij de kant van een gekozen perceel of kavel waar de AB-lijn langs moet. Blijft aan tot je **Klaar met AB-kant** tikt: je kunt kanten proberen, bij elke tik staat de koers erbij om met de GPS-kast te vergelijken.

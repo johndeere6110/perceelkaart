@@ -1,4 +1,4 @@
-// perceel.js versie 32 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 33 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -558,9 +558,31 @@
         if (d < bd) { bd = d; ki = j; }
       });
     } else zs.forEach((z, j) => { if (z.l > zs[ki].l) ki = j; });
-    // A en B op de hoeken van deze kant (zoals in de trekker: A op de ene hoek, naar de andere hoek, daar B)
-    const z = zs[ki];
-    let ux = (z.b[0] - z.a[0]) / z.l, uy = (z.b[1] - z.a[1]) / z.l, len = z.l, anker = z.a, abEcht = null;
+    // A en B een stukje voor de hoeken, op de rand zelf (zoals in de trekker: A aan het ene eind, naar het andere eind, daar B).
+    // Niet op de hoekpunten: daar zit vaak een afgeronde of uitstekende hoek. De rand wordt per eind over 20 m gemiddeld
+    // (5-25 m van de hoek, korter bij een korte kant), A en B liggen in het midden daarvan.
+    const z = zs[ki], u0 = [(z.b[0] - z.a[0]) / z.l, (z.b[1] - z.a[1]) / z.l], ring0 = polys[0][0].map(naarM);
+    // Afstand van de echte rand tot de kant (loodrecht), op t meter langs de kant; null als de rand daar niet in de buurt ligt
+    const randOp = t => {
+      let best = null;
+      for (let j = 0; j < ring0.length - 1; j++) {
+        const p = ring0[j], q = ring0[j + 1];
+        const tp = (p[0] - z.a[0]) * u0[0] + (p[1] - z.a[1]) * u0[1], tq = (q[0] - z.a[0]) * u0[0] + (q[1] - z.a[1]) * u0[1];
+        if ((tp > t) === (tq > t) || tp === tq) continue;
+        const sp = -(p[0] - z.a[0]) * u0[1] + (p[1] - z.a[1]) * u0[0], sq = -(q[0] - z.a[0]) * u0[1] + (q[1] - z.a[1]) * u0[0];
+        const sv = sp + (sq - sp) * (t - tp) / (tq - tp);
+        if (Math.abs(sv) <= 3 && (best === null || Math.abs(sv) < Math.abs(best))) best = sv;
+      }
+      return best;
+    };
+    const sch = Math.min(1, z.l / 100), eind = t0 => {
+      const st = [];
+      for (let k = 0; k <= 10; k++) { const v = randOp(t0 + (k - 5) * 2 * sch); if (v !== null) st.push(v); }
+      const sv = st.length ? st.reduce((a, b) => a + b, 0) / st.length : 0;
+      return [z.a[0] + u0[0] * t0 - u0[1] * sv, z.a[1] + u0[1] * t0 + u0[0] * sv];
+    };
+    const pA = eind(15 * sch), pB = eind(z.l - 15 * sch), lAB = Math.hypot(pB[0] - pA[0], pB[1] - pA[1]);
+    let ux = (pB[0] - pA[0]) / lAB, uy = (pB[1] - pA[1]) / lAB, len = lAB, anker = pA, abEcht = null;
     // Zelf getikte AB-lijn: die richting, en het raster zo dat de lijn een spuitpad is (gangen op hele breedtes ervan)
     if (opts.abLijn && opts.abLijn.length === 2) {
       const A = naarM(opts.abLijn[0]), B = naarM(opts.abLijn[1]), l = Math.hypot(B[0] - A[0], B[1] - A[1]);

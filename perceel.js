@@ -1,4 +1,4 @@
-// perceel.js versie 31 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 32 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -558,26 +558,9 @@
         if (d < bd) { bd = d; ki = j; }
       });
     } else zs.forEach((z, j) => { if (z.l > zs[ki].l) ki = j; });
-    // Beste rechte lijn door alle echte randpunten op dit stuk (binnen 0,75 m): ruis middelt uit, een knik ernaast telt niet mee
-    const z = zs[ki], u0 = [(z.b[0] - z.a[0]) / z.l, (z.b[1] - z.a[1]) / z.l];
-    const op = polys[0][0].map(naarM).filter(p => {
-      const dx = p[0] - z.a[0], dy = p[1] - z.a[1], t = dx * u0[0] + dy * u0[1];
-      return Math.abs(dx * u0[1] - dy * u0[0]) <= 0.75 && t >= -0.5 && t <= z.l + 0.5;
-    });
-    let ux = u0[0], uy = u0[1], cx = (z.a[0] + z.b[0]) / 2, cy0 = (z.a[1] + z.b[1]) / 2;
-    if (op.length >= 3) {
-      cx = op.reduce((t, p) => t + p[0], 0) / op.length; cy0 = op.reduce((t, p) => t + p[1], 0) / op.length;
-      let sxx = 0, sxy = 0, syy = 0;
-      op.forEach(p => { const dx = p[0] - cx, dy = p[1] - cy0; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; });
-      const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
-      ux = Math.cos(th); uy = Math.sin(th);
-      if (ux * u0[0] + uy * u0[1] < 0) { ux = -ux; uy = -uy; }
-    }
-    // A en B: de uiteinden van dit stuk, op de gevonden lijn
-    const proj = p => (p[0] - cx) * ux + (p[1] - cy0) * uy;
-    const t0 = Math.min(proj(z.a), proj(z.b)), t1 = Math.max(proj(z.a), proj(z.b));
-    const pA = [cx + ux * t0, cy0 + uy * t0];
-    let len = t1 - t0, anker = pA, abEcht = null;
+    // A en B op de hoeken van deze kant (zoals in de trekker: A op de ene hoek, naar de andere hoek, daar B)
+    const z = zs[ki];
+    let ux = (z.b[0] - z.a[0]) / z.l, uy = (z.b[1] - z.a[1]) / z.l, len = z.l, anker = z.a, abEcht = null;
     // Zelf getikte AB-lijn: die richting, en het raster zo dat de lijn een spuitpad is (gangen op hele breedtes ervan)
     if (opts.abLijn && opts.abLijn.length === 2) {
       const A = naarM(opts.abLijn[0]), B = naarM(opts.abLijn[1]), l = Math.hypot(B[0] - A[0], B[1] - A[1]);

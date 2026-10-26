@@ -27,14 +27,17 @@ Twee knoppen, los aan/uit: **Spuiten** en **Mais zaaien**. Alleen de velden en t
 **Spuiten**
 - Spuitsporen (standaard 27 m) evenwijdig aan de lange kant, met A en B, genummerde gangen, koers in graden en de coördinaten van A en B.
 - **Buitenronde eerst:** eerst een ronde langs de rand, de spuit gaat uit bij het bandenspoor daarvan. Per perceel zie je hoe de laatste gang uitkomt, in hele secties.
+- **Begin aan andere kant:** de gangen beginnen aan de overkant. A en B schuiven dan mee naar die kant (zelfde koers, op de lijn door het verste punt), zodat de GPS-lijnen bij de getekende gangen passen. Met **AB-kant kiezen** kies je meteen de kant zelf; dat zet "begin aan andere kant" (spuiten en zaaien) weer uit.
 - **AB-kant kiezen** (naast AB-lijn meten): tik bij de kant van een gekozen perceel of kavel waar de AB-lijn langs moet. Blijft aan tot je **Klaar met AB-kant** tikt: je kunt kanten proberen, bij elke tik staat de koers erbij om met de GPS-kast te vergelijken.
-- **Eigen AB-lijn** (bijv. langs een pad midden in het perceel): zet A en B bij **AB-lijn meten** en tik **Gebruik als AB-lijn voor perceel …**. Standaard is die lijn een spuitpad (de gangen liggen op hele spuitbreedtes ervan); onder de spuituitleg om te zetten naar "spuit begint naast de lijn". **AB weer automatisch** zet het terug.
+- **Eigen AB-lijn** (bijv. langs een pad midden in het perceel): zet A en B bij **AB-lijn meten** en tik **Gebruik als AB-lijn voor perceel …**. Standaard is die lijn een spuitpad (de gangen liggen op hele spuitbreedtes ervan); onder de spuituitleg om te zetten naar "spuit begint naast de lijn". De gangen blijven op die lijn, dus "begin aan andere kant" is er dan niet. **AB weer automatisch** zet het terug.
 - Steekt een deel van het perceel voorbij de AB-lijn uit, dan lopen de gangen daar door op dezelfde GPS-lijnen.
 
 **Mais zaaien** (zaaiplan op dezelfde AB-lijn)
 - Instellingen: zaaibreedte (6 m), rijafstand (37,5 cm, dus 16 rijen), zaairondes eromheen (bijv. 3) en de richting (met of tegen de klok), spoorbreedte van de spuit (snel kiezen: 1,50 of 1,80) en bandbreedte.
 - Rijpatroon standaard **spuitpaden eerst**: na de rondes de spuitpaden achter elkaar in rondjes (om en om heen en terug) met de kast vast op het pad, daarna de rest met de kast vast op een teller zonder pad. Bij 27 m op 6 m zit het pad zo elke keer op dezelfde rijen (10 + 15 bij spoor 1,80). Onder "Uitleg" om te zetten naar heen en weer, en pad links of rechts op de zaaier.
 - Onder het perceel in een paar korte regels: rondes, spuitpaden (teller en rijen), rondjes (GPS-lijnen en richting) en daarna. Uitleg, de tabel met alle gangen (lijn, teller, rijrichting, rijen dicht) en de **AB-lijn voor de zaaier** (lijn 0 = hart van gang 1) zitten achter "Uitleg".
+- **Binnenveld begint aan de overkant:** dan ligt lijn 0 van de zaaier ook aan de overkant en tellen de GPS-lijnen vanaf daar (de AB-lijn zaaier verschuift mee).
+- **Eigen AB-lijn midden in het perceel:** de zaairondes liggen langs de echte randen, de zaaigangen ertussen op het raster van de lijn, aan beide kanten (lijnen voorbij lijn 0 zijn negatief). De rondes heten dan "rechts van AB" en "links van AB".
 - Ritme van de zaaicomputer: bij 27 m op 6 m ritme 18 (2 × 9, om en om gespiegeld) met spuitpad bij teller 3, 7, 12, 16. Gecontroleerd met een Kverneland Optima (rijen 10 en 15).
 - Op de kaart: spuitpaden als gele strook met het lijnnummer, de startgang oranje met een pijl, de ronde met het spuitpad paars. Met **Zaaigangen: aan** ook het hart van elke zaaigang en elke zaaironde als stippellijn, en in een wit rondje hoeveel banen er tussen de spuitpaden zitten (bij 27 m op 6 m om en om 3 en 4). Uitgezoomd alleen START en de ronde.
 

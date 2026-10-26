@@ -1,4 +1,4 @@
-// perceel.js versie 30 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 31 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -11,6 +11,7 @@
 //   Perceel.waterBijPerceel(geometry, water, clip)   // waterdelen bijgeknipt rond het perceel, om te bewaren
 //   Perceel.waterStrook(geometry, water, breedte, clip, { zijden })   // strook vanaf de insteek (talud), deel binnen het perceel (m²)
 //   Perceel.sporen(geometry, breedte, { andereKant, buitenronde, clip })   // spuit-/strooisporen langs de langste zijde
+//     andereKant: het raster (en A en B) aan de overkant, door het verste punt; niet bij een eigen AB-lijn
 //     clip = polygon-clipping (optioneel): maakt de buitenronde exact, ook bij smalle armen en inhammen
 //   Perceel.koers(a, b)   // { koers (graden, ware noorden, met de klok mee), afstand (m), midden } voor een losse AB-lijn
 //   Perceel.puntOpKoers(a, koers, afstand)   // punt op afstand (m) vanaf a in de richting van koers (A+), zoals de GPS-kast
@@ -22,8 +23,9 @@
 //     standaard is die lijn een spuitpad (gangen er recht op), met opts.abRand begint de spuit er een halve breedte naast
 //   opts.sectie (m) bij sporen(): laatste gang in hele secties; de baan toont alleen wat aan staat
 //   Perceel.zaaiPlan(sporen, { breedte, rij, spoor, band, rondes, metDeKlok, andereKant, padenEerst, padLinks })
+//     // welke zaai-elementen dicht voor de spuitsporen
 //   Perceel.zaaiVlakken(sporen, plan, clip)   // stroken op de kaart voor de gangen met een spuitpad
-//   Perceel.zaaiLijnen(sporen, plan, clip)    // hartlijn van elke binnengang, binnen de rondes   // welke zaai-elementen dicht voor de spuitsporen
+//   Perceel.zaaiLijnen(sporen, plan, clip)    // hartlijn van elke binnengang, binnen de rondes
 //
 // Fouten zijn Error-objecten met .code: "geen-gps", "gps-geweigerd", "gps-timeout", "gps-onbekend",
 // "offline" (geen verbinding en niks opgeslagen op deze plek), "server", "geen-perceel". De .message is Nederlands.
@@ -603,8 +605,10 @@
     let richtingY = cy / ca >= 0 ? 1 : -1;
     const zijde = richtingY; // kant van de AB-lijn waar het perceel ligt (links van A->B = 1)
     const W = richtingY === 1 ? ymax : -ymin;
+    // Beginnen aan de overkant: het raster rust dan op de lijn door het verste punt, daar komen A en B ook te liggen.
+    // Een zelf getikte AB-lijn blijft het raster (anders is het pad geen spuitpad meer).
     let startY = 0;
-    if (opts.andereKant) { startY = richtingY === 1 ? ymax : ymin; richtingY = -richtingY; }
+    if (opts.andereKant && !abEcht) { startY = richtingY === 1 ? ymax : ymin; richtingY = -richtingY; }
     // Buitenronde: eerst een baan langs de hele rand; de gangen doen alleen het midden,
     // en de spuit gaat uit bij het bandenspoor van de buitenronde (halve breedte van de rand)
     const ronde = opts.buitenronde ? (() => {
@@ -665,6 +669,7 @@
         })
       });
     };
+    let restGang = null; // de laatste gewone gang (met de rest), voor de secties
     for (let i = 0; i < n; i++) {
       const y = startY + richtingY * (marge + (i + 0.5) * breedte);
       let delen = snij(y);
@@ -673,6 +678,7 @@
       if (!delen.length && !ronde && i === n - 1) delen = snij(startY + richtingY * (W - Math.min(0.5, W / 2)));
       if (!delen.length) continue;
       maakGang(y, delen, i === n - 1, false);
+      if (i === n - 1) restGang = uit[uit.length - 1];
     }
     // Delen van het perceel aan de andere kant van de AB-lijn (een uitstulping voorbij de AB-kant): het raster van
     // gangen loopt daar door, op dezelfde GPS-lijnen. Met buitenronde valt de eerste lijn daar samen met het
@@ -722,10 +728,13 @@
       breedte, gangen: uit.length, perceelBreedte: W, zijde,
       perceelLengte: xmax - xmin, rest, ronde: rondeUit,
       tMin: Math.min(0, zijde === 1 ? ylo : -yhi), // hoe ver het perceel voorbij de AB-lijn uitsteekt (negatief, m)
+      dMin: zijde === 1 ? ylo : -yhi, // dichtstbijzijnde punt van het perceel, gemeten zoals perceelBreedte (kan negatief zijn)
+      abLijn: !!abEcht, // zelf getikte AB-lijn: het raster rust niet (per se) op een rand
       buitenKant: uit.length && rest < breedte - 0.05 ? Math.max(0, breedte - rest) : 0,
-      secties: sectie ? { breedte: sectie, totaal: sectiesTotaal, aan: sectiesAan, laatsteLengte: uit.length ? uit[uit.length - 1].lengte : 0 } : null,
-      abLengte: ab.m, a: abEcht ? naarLL(abEcht[0]) : terug(0, 0), b: abEcht ? naarLL(abEcht[1]) : terug(len, 0), sporen: uit,
-      rand: [terug(0, 0), terug(len, 0)], // de lijn y = 0 waar het raster op rust (bij een zelf getikte AB-lijn een halve breedte ernaast)
+      // laatsteLengte: de gang met de rest (niet een gang in het stuk voorbij de AB-lijn); 0 als die vervalt
+      secties: sectie ? { breedte: sectie, totaal: sectiesTotaal, aan: sectiesAan, laatsteLengte: restGang ? restGang.lengte : 0 } : null,
+      abLengte: ab.m, a: abEcht ? naarLL(abEcht[0]) : terug(0, startY), b: abEcht ? naarLL(abEcht[1]) : terug(len, startY), sporen: uit,
+      rand: [terug(0, 0), terug(len, 0)], // de lijn y = 0 (bij een zelf getikte AB-lijn een halve breedte ernaast; met andereKant rust het raster aan de overkant)
       vlak: { polyM, terug }, // perceel in het gedraaide stelsel (x langs AB, y loodrecht, links positief), voor zaaiVlakken
       // Koers van de AB-lijn in graden t.o.v. het ware noorden, met de klok mee, gerekend zoals de GPS-kast (zie koersKast)
       koers: koersKast(ux / kx, uy / ky, lat0),
@@ -741,7 +750,8 @@
   // de laatste gang overlapt de rondes (die elementen gaan dan uit). Rijen geteld van links in de rijrichting.
   // Sporen van de spuit-buitenronde ("R") liggen langs de lange kanten; in de zaairondes ligt dat spoor rondom op dezelfde
   // afstand van de rand, dus dezelfde rijen. Kopakkers zonder zaairondes niet meegenomen.
-  // Geeft { rijen, rondes, aantalGangen, ritme, gangen: [{ soort: "ronde"|"gang", gang, kant, heen, midden, dicht, sporen, buiten }] }.
+  // Geeft { rijen, rondes, aantalGangen, ritme, gangen: [{ soort: "ronde"|"gang", gang, kant, heen, midden, dicht, sporen, buiten }],
+  // e0 (de rand aan de AB-kant, 0 behalve bij een eigen AB-lijn), lijn0 en lijnRichting (GPS-lijnen van de zaaier) }.
   // midden = hart van de zaaigang, afstand tot de AB-kant (m).
   // ritme: { gangen, sporen } = in het binnenveld herhaalt het patroon elke `gangen` gangen met `sporen` spuitsporen.
   // buiten: spoor in het binnenveld buiten het vaste ritme. Rondes regelt de computer niet met het ritme.
@@ -752,23 +762,37 @@
     const zb = o.breedte, ra = o.rij, sp = o.spoor || 0, band = o.band || 0.4;
     if (!s || !(zb > 0) || !(ra > 0) || ra > zb) return null;
     const n = Math.round(zb / ra), W = s.perceelBreedte, f = s.zijde || 1, sb = s.breedte;
-    const r = Math.max(0, Math.min(Math.floor(o.rondes || 0), Math.floor(W / zb / 2)));
-    const lo0 = r * zb, hi0 = W - r * zb; // binnenveld, afstand tot de AB-kant
+    // Zelf getikte AB-lijn (bijv. langs een pad midden in het perceel): de rondes liggen langs de echte randen (e0 en W),
+    // de gangen ertussen op het raster van die lijn, aan beide kanten ervan. Anders is de AB-kant zelf de rand (e0 = 0).
+    const vrij = !!s.abLijn && typeof s.dMin === "number", e0 = vrij ? s.dMin : 0;
+    const r = Math.max(0, Math.min(Math.floor(o.rondes || 0), Math.floor((W - e0) / zb / 2)));
+    const lo0 = e0 + r * zb, hi0 = W - r * zb; // binnenveld, afstand tot de AB-kant
     // Gangen in afstand tot de AB-kant (d). Tegen de klok in rijdt je met het veld links: aan de AB-kant A->B als f = 1.
     const passen = [];
     const abHeen = (f === 1) !== !!o.metDeKlok;
     for (let k = 1; k <= r; k++) {
-      passen.push({ soort: "ronde", gang: k, kant: "ab", lo: (k - 1) * zb, hi: k * zb, heen: abHeen, min: 0, max: W });
-      passen.push({ soort: "ronde", gang: k, kant: "over", lo: W - k * zb, hi: W - (k - 1) * zb, heen: !abHeen, min: 0, max: W });
+      passen.push({ soort: "ronde", gang: k, kant: "ab", lo: e0 + (k - 1) * zb, hi: e0 + k * zb, heen: abHeen, min: e0, max: W });
+      passen.push({ soort: "ronde", gang: k, kant: "over", lo: W - k * zb, hi: W - (k - 1) * zb, heen: !abHeen, min: e0, max: W });
     }
-    const aantal = hi0 - lo0 > 0.5 ? Math.ceil((hi0 - lo0 - 0.01) / zb) : 0;
-    for (let j = 1; j <= aantal; j++) {
-      const lo = o.andereKant ? hi0 - j * zb : lo0 + (j - 1) * zb;
-      passen.push({ soort: "gang", gang: j, lo, hi: lo + zb, heen: j % 2 === 1, min: lo0, max: hi0 });
+    let aantal = 0;
+    if (vrij) {
+      // Op het raster van de lijn (hele zaaibreedtes van y = 0); de eerste en de laatste gang mogen de rondes overlappen
+      const m0 = Math.floor((lo0 + 0.5) / zb), m1 = Math.ceil((hi0 - 0.5) / zb) - 1;
+      aantal = hi0 - lo0 > 0.5 ? Math.max(0, m1 - m0 + 1) : 0;
+      for (let j = 1; j <= aantal; j++) {
+        const lo = (o.andereKant ? m1 - j + 1 : m0 + j - 1) * zb;
+        passen.push({ soort: "gang", gang: j, lo, hi: lo + zb, heen: j % 2 === 1, min: lo0, max: hi0 });
+      }
+    } else {
+      aantal = hi0 - lo0 > 0.5 ? Math.ceil((hi0 - lo0 - 0.01) / zb) : 0;
+      for (let j = 1; j <= aantal; j++) {
+        const lo = o.andereKant ? hi0 - j * zb : lo0 + (j - 1) * zb;
+        passen.push({ soort: "gang", gang: j, lo, hi: lo + zb, heen: j % 2 === 1, min: lo0, max: hi0 });
+      }
     }
-    // Stuk voorbij de AB-lijn (uitstulping, of AB-lijn langs een pad midden in het perceel): het raster loopt door,
-    // gang 0, -1, ... (d negatief = aan de andere kant van de AB-lijn). Daar liggen de rondes langs de rand van dat stuk.
-    if (!o.andereKant && s.tMin < -0.5) {
+    // Stuk voorbij de AB-kant (uitstulping): het raster loopt door, gang 0, -1, ... (d negatief = aan de andere kant
+    // van de AB-lijn). Daar liggen de rondes langs de rand van dat stuk.
+    if (!vrij && !o.andereKant && s.tMin < -0.5) {
       const tLo = s.tMin + r * zb;
       for (let j = 0; ; j--) {
         const lo = lo0 + (j - 1) * zb;
@@ -778,7 +802,7 @@
     }
     // d: afstand tot de AB-lijn, met teken (positief = de kant van het perceel, negatief = voorbij de AB-lijn)
     const banen = s.sporen.map(x => ({ label: String(x.nr), d: f * x.y, extra: !!x.extra }));
-    if (s.ronde && W > sb) banen.unshift({ label: "R", d: sb / 2 }, { label: "R", d: W - sb / 2 });
+    if (s.ronde && W - e0 > sb) banen.unshift({ label: "R", d: e0 + sb / 2 }, { label: "R", d: W - sb / 2 });
     // Ritme in het binnenveld: anker = het spoor waarmee de meeste andere binnensporen in het ritme vallen
     const opRitme = (d, d0) => { const k = (d - d0) / sb; return Math.abs(k - Math.round(k)) * sb <= 0.05; };
     const binnen = banen.filter(b => b.d >= lo0 && b.d <= hi0);
@@ -793,8 +817,8 @@
       const wd = b.d + off;
       passen.forEach(p => {
         if (wd < p.lo - band || wd > p.hi + band) return;
-        // Buitenronde en gewone gangen niet in het stuk voorbij de AB-lijn, de gangen daar niet in de rondes
-        if (p.voorbij ? !b.extra : b.extra && p.soort === "ronde") return;
+        // Buitenronde en gewone gangen niet in het stuk voorbij de AB-kant, de gangen daar niet in de rondes
+        if (!vrij && (p.voorbij ? !b.extra : b.extra && p.soort === "ronde")) return;
         // Links in de rijrichting: A->B is links de kant waar y groeit; d groeit in richting f
         const naarLinks = (p.heen ? 1 : -1) * f > 0;
         for (let k = 0; k < n; k++) {
@@ -813,7 +837,8 @@
     gangen = gangen.filter(g => {
       if (g.soort !== "ronde" || g.kant !== "over") return true;
       const ab = gangen.find(h => h.soort === "ronde" && h.gang === g.gang && h.kant === "ab");
-      if (ab && ab.dicht.join() === g.dicht.join()) { ab.kant = "rondom"; return false; }
+      // Rondom: het hart (en dus de lijn) van de kant waar je begint
+      if (ab && ab.dicht.join() === g.dicht.join()) { ab.kant = "rondom"; if (o.andereKant) ab.midden = g.midden; return false; }
       return true;
     });
     gangen.sort((a, b) => (a.soort === b.soort ? 0 : a.soort === "ronde" ? -1 : 1) || a.gang - b.gang || String(a.kant).localeCompare(String(b.kant)));
@@ -828,7 +853,11 @@
       }
     }
     const alle = passen.filter(p => p.soort === "gang").map(p => ({ gang: p.gang, midden: (p.lo + p.hi) / 2 }));
-    return { rijen: n, rondes: r, breedte: zb, aantalGangen: aantal, ritme, gangen, alle };
+    // GPS-lijnen van de zaaier: lijn 0 ligt op d = lijn0, de nummers lopen op in de richting lijnRichting (in d).
+    // Normaal het hart van de eerste strook langs de AB-kant; binnenveld aan de overkant: langs de overkant (lijn = gang - 1);
+    // eigen AB-lijn: op het raster van die lijn (de lijnen veranderen dan niet met de startkant).
+    const lijn0 = !vrij && o.andereKant ? W - zb / 2 : zb / 2, lijnRichting = !vrij && o.andereKant ? -1 : 1;
+    return { rijen: n, rondes: r, breedte: zb, aantalGangen: aantal, ritme, gangen, alle, e0, lijn0, lijnRichting };
   }
   // Hartlijn van elke binnengang (plan.alle), afgeknipt binnen de rondes: [{ gang, midden, lijnen: [[lonlat, lonlat], ...] }],
   // en van elke zaaironde: [{ ronde, lijnen: [ring van lonlat, ...] }] (gesloten lijn op een halve zaaibreedte binnen de ronde)
@@ -850,6 +879,19 @@
       for (let j = 0; j + 1 < xs.length; j += 2) if (xs[j + 1] - xs[j] > 1) lijnen.push([terug(xs[j], y), terug(xs[j + 1], y)]);
       return { gang: g.gang, midden: g.midden, lijnen };
     }));
+  }
+  // Punt op de randen van een (multi)polygoon (in meters) dat het dichtst bij p ligt; null zonder randen
+  function dichtstBij(poly, p) {
+    let best = null, bd = Infinity;
+    poly.forEach(rings => rings.forEach(r => {
+      for (let j = 0; j < r.length - 1; j++) {
+        const a = r[j], b = r[j + 1], dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+        const t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
+        const q = [a[0] + t * dx, a[1] + t * dy], d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        if (d < bd) { bd = d; best = q; }
+      }
+    }));
+    return best;
   }
   // Stroken op de kaart voor de gangen uit een zaaiPlan: binnengang = strook van één zaaibreedte binnen de rondes,
   // ronde = ring op die afstand van de rand. Geeft [{ g, geometry (MultiPolygon), label [lon, lat], pijl: [van, naar] | null,
@@ -885,10 +927,13 @@
         label = terug((a + b) / 2, y); pijl = [terug(x0, y), terug(x1, y)];
         lijn = [terug(a, y), terug(b, y)];
       } else {
-        // Ronde: label aan de AB-kant, halverwege
+        // Ronde: label op het hart van de ronde, aan zijn kant, niet in het midden (daar staat START vaak)
         let a = Infinity, b = -Infinity;
         polyM.forEach(rings => rings[0].forEach(p => { a = Math.min(a, p[0]); b = Math.max(b, p[0]); }));
-        label = terug(a + (b - a) * 0.15, f * (g.gang - 0.5) * zb); // niet in het midden, daar staat START vaak
+        const d = g.kant === "over" ? s.perceelBreedte - (g.gang - 0.5) * zb : (plan.e0 || 0) + (g.gang - 0.5) * zb;
+        let p = [a + (b - a) * 0.15, f * d];
+        try { p = dichtstBij(binnen((g.gang - 0.5) * zb), p) || p; } catch (e) { /* dan op deze afstand van de AB-lijn */ }
+        label = terug(p[0], p[1]);
       }
       uit.push({ g, geometry: { type: "MultiPolygon", coordinates: naarLL(vorm) }, label, pijl, lijn });
     });

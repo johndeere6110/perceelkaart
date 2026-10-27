@@ -168,7 +168,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </head>
 <body>
 <header>
-  <h1>Perceelkaart</h1><span class="tag">versie 58</span>
+  <h1>Perceelkaart</h1><span class="tag">versie 59</span>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -232,6 +232,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   </div>
   <div class="row" style="margin-top:14px"><a class="btn link" href="../zaaihulp/">Zaaihulp openen</a><button type="button" class="btn" id="bDeel">Stuur installatielink</button></div>
   <div class="hint" id="deelHint"></div>
+  <div class="hint" id="opslagStand"></div>
   <details>
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
@@ -1195,6 +1196,17 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       else hint.textContent = url;
     } catch (e) { if (e && e.name !== "AbortError") hint.textContent = url; }
   });
+  // Opslag beschermen: vraag de browser de gegevens niet op te ruimen bij weinig ruimte, en laat zien of dat lukte
+  (async () => {
+    const el = $("opslagStand");
+    try {
+      if (!navigator.storage || !navigator.storage.persisted) { el.textContent = "Opslag: deze browser zegt niet of de gegevens beschermd zijn."; return; }
+      let p = await navigator.storage.persisted();
+      if (!p && navigator.storage.persist) p = await navigator.storage.persist();
+      el.textContent = p ? "Opslag: beschermd, de browser ruimt de gegevens niet zomaar op."
+        : "Opslag: niet beschermd, bij weinig ruimte mag de browser de gegevens opruimen. Op het beginscherm installeren helpt vaak.";
+    } catch (e) { el.textContent = ""; }
+  })();
   // AB-lijn meten, los van percelen: A en B tikken, slepen, intikken of GPS; koers, afstand, midden en opzij schuiven
   let vrijModus = false;
   const vrij = Object.assign({ a: null, b: null, s: "", links: false, k: "" }, store.get("kaartVrijAB", {}));

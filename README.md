@@ -53,7 +53,7 @@ De koers wordt gerekend zoals de GPS-kast: met de aarde als bol. Vergeleken met 
 
 - **Tablet:** liggend staat de kaart links over de volle hoogte en de bediening rechts in een eigen kolom; staand is de kaart groter.
 - Alleen de kaart zoomt (tot zoom 22; boven 19 wordt de luchtfoto vergroot), niet de hele pagina.
-- Alles blijft op je eigen telefoon. De app deelt de opslag met de Zaaihulp (zelfde domein), met eigen sleutels.
+- Alles blijft op je eigen telefoon. De app deelt de opslag met de Zaaihulp (zelfde domein), met eigen sleutels. Bij het opstarten vraagt de app de browser om de gegevens niet op te ruimen bij weinig ruimte; onderaan staat of dat gelukt is. Het icoon van het beginscherm verwijderen (vooral op iPhone) of browsergegevens wissen wist de percelen en instellingen wel; die zijn opnieuw te maken (percelen opnieuw aantikken, Water zoeken).
 - Onderaan staat **Zaaihulp openen**; de Zaaihulp heeft op het startscherm een knop naar de Perceelkaart. De installatiepagina's verwijzen naar elkaar: één link sturen is genoeg om allebei te installeren.
 
 Bronnen: PDOK (BRP gewaspercelen, RVO referentiepercelen, BGT waterdeel en ondersteunend waterdeel, achtergrondkaart en luchtfoto). De officiële bufferstroken staan in Mijn percelen bij RVO; deze app is een hulpmiddel.

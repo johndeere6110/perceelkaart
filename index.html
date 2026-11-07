@@ -70,6 +70,9 @@ header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-
 .namen input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .namen .meta { margin-top: 6px; }
 .namenlijst { margin-top: 4px; }
+.namendet summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 6px 0; }
+.namendet[open] summary { color: var(--ink); }
+.namen .binnen { margin: 6px 0 8px; }
 .namenlijst li { cursor: pointer; }
 .namenlijst .nr { color: var(--accent); font-weight: 700; }
 .namenlijst li.actief .name { color: var(--accent); font-weight: 700; }
@@ -249,7 +252,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 71</div>
+  <div class="voet">versie 72</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1036,15 +1039,16 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       : om ? mTxt(om) + " oever, alleen droge sloten: geen bufferstrook." : "");
     $("info").hidden = !sel.length;
     if (!sel.length && oeverModus) setOever(false);
-    // AB-kant kiezen zonder Spuiten of Mais: toch de AB-lijn met A en B laten zien, anders zie je niet welke kant het is
-    if (abModus && !spuitAan && !maisAan) {
+    // AB-kant kiezen: de AB-lijn meteen dik oranje laten zien (ook met Spuiten of Mais aan), zonder eerst een kant te tikken;
+    // A en B alleen als de sporen ze niet al tekenen
+    if (abModus) {
       kavels.map(kv => ({ obj: kv, geom: kavelVorm(kv) })).concat(sel.filter(q => !kavelVan(q)).map(q => ({ obj: q, geom: q.geometry }))).forEach(o => {
         if (!o.geom) return;
         let sp = null;
         try { sp = Perceel.sporen(o.geom, spuitBreedte() || 27, { abPunt: o.obj.abPunt || null, abLijn: o.obj.abLijn || null, abRand: !!o.obj.abRand }); } catch (e) {}
         if (!sp) return;
         spoorLaag.addLayer(L.polyline([[sp.a[1], sp.a[0]], [sp.b[1], sp.b[0]]], { color: "#e8590c", weight: 5, opacity: .9, interactive: false }));
-        [["A", sp.a], ["B", sp.b]].forEach(([t, c]) => spoorLaag.addLayer(L.marker([c[1], c[0]], { icon: L.divIcon({ className: "", html: '<div class="abl">' + t + '</div>', iconSize: [20, 20] }), interactive: false, keyboard: false })));
+        if (!spuitAan && !maisAan) [["A", sp.a], ["B", sp.b]].forEach(([t, c]) => spoorLaag.addLayer(L.marker([c[1], c[0]], { icon: L.divIcon({ className: "", html: '<div class="abl">' + t + '</div>', iconSize: [20, 20] }), interactive: false, keyboard: false })));
       });
     }
     renderNamen();
@@ -1082,12 +1086,109 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (sel.length) map.fitBounds(L.geoJSON({ type: "FeatureCollection", features: sel.map(q => ({ type: "Feature", properties: {}, geometry: q.geometry })) }).getBounds(), { padding: [24, 24], maxZoom: 17 });
     say(naam + ": " + sel.length + (sel.length === 1 ? " perceel, " : " percelen, ") + haTxt(haGeheel(sel)) + " ha.");
   }
+  // Delen via een link: per perceel een punt erin (de ontvanger haalt het perceel zelf op), de grens (BRP of referentie),
+  // zelf aangewezen oevers, AB-keuzes en kavels. Gevonden water gaat niet mee (Water zoeken bij de ontvanger).
+  const r7 = v => Math.round(v * 1e7) / 1e7, punt7 = c => [r7(c[0]), r7(c[1])];
+  const abVelden = (o, x) => {
+    if (o.abPunt) x.ab = punt7(o.abPunt);
+    if (o.abLijn) x.al = o.abLijn.map(punt7);
+    if (o.abRand) x.ar = 1;
+    if (o.spuitAnders) x.sa = 1;
+    if (typeof o.zaaiAnders === "boolean") x.za = o.zaaiAnders ? 1 : 0;
+    return x;
+  };
+  const abTerug = (x, o) => {
+    if (x.ab) o.abPunt = x.ab;
+    if (x.al) o.abLijn = x.al;
+    if (x.ar) o.abRand = true;
+    if (x.sa) o.spuitAnders = true;
+    if (x.za != null) o.zaaiAnders = !!x.za;
+    return o;
+  };
+  function deelLink() {
+    const p = sel.map(q => {
+      const m = Perceel.binnenPunt(q.geometry), x = { pt: punt7(m) };
+      if (q.ref) x.r = 1;
+      const hand = {};
+      Object.keys(q.oever || {}).forEach(k => { if (!(q.wauto && q.wauto[k])) hand[k] = q.oever[k]; });
+      // Oevers horen bij de randstukjes van deze grens: alleen terugzetten als de ontvanger dezelfde grens krijgt
+      if (Object.keys(hand).length) { x.o = hand; x.nz = Perceel.zijden(q.geometry).length; }
+      if (q.extraWater) x.e = q.extraWater;
+      return abVelden(q, x);
+    });
+    const k = kavels.map(kv => abVelden(kv, { n: kv.naam, l: kv.leden.map(key => sel.findIndex(q => q.key === key)).filter(i => i >= 0) }));
+    const json = JSON.stringify({ v: 1, n: naamActief, p, k });
+    const b64 = btoa(unescape(encodeURIComponent(json))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return new URL("./", location.href).href + "#deel=" + b64;
+  }
+  function leesDeel(tekst) {
+    const m = /#deel=([A-Za-z0-9_-]+)/.exec(String(tekst || ""));
+    if (!m) return null;
+    try {
+      const b = m[1].replace(/-/g, "+").replace(/_/g, "/");
+      const d = JSON.parse(decodeURIComponent(escape(atob(b + "===".slice((b.length + 3) % 4)))));
+      return d && d.v === 1 && typeof d.n === "string" && Array.isArray(d.p) && d.p.every(x => x && Array.isArray(x.pt) && x.pt.length === 2) ? d : null;
+    } catch (e) { return null; }
+  }
+  let binnen = null; // gedeelde link die nog opgehaald moet worden
+  async function haalDeel(d, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = "Ophalen…"; }
+    const uit = [], mis = [];
+    let oeverMis = 0;
+    for (const [i, x] of d.p.entries()) {
+      try {
+        const r = await Perceel.zoekOpPunt(x.pt[0], x.pt[1], x.r ? { api: Perceel.API_REF, cacheKey: "perceelCacheRef" } : undefined);
+        r.perceel.ref = !!x.r;
+        const q = abTerug(x, nieuwPerceel(r.perceel));
+        if (x.o) { if (Perceel.zijden(q.geometry).length === x.nz) q.oever = x.o; else oeverMis++; }
+        if (x.e) q.extraWater = x.e;
+        uit[i] = uit.some(y => y && y.key === q.key) ? null : q;
+      } catch (e) { uit[i] = null; mis.push(i + 1); }
+    }
+    const lijst = uit.filter(Boolean);
+    const k = (d.k || []).map(kv => abTerug(kv, { naam: kv.n, leden: (kv.l || []).map(i => uit[i] && uit[i].key).filter(Boolean) })).filter(kv => kv.leden.length >= 2);
+    let naam = d.n.trim() || "Gedeeld", nr = 2;
+    while (namen.some(n => n.naam === naam)) naam = d.n + " (" + nr++ + ")";
+    binnen = null;
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+    if (!lijst.length) { teken(); say("De gedeelde percelen konden niet opgehaald worden" + (mis.length ? " (geen verbinding?)" : "") + ".", true); return; }
+    namen.push({ naam, sel: lijst, kavels: k, ts: Date.now() });
+    zetNamen(); teken();
+    say(naam + " toegevoegd: " + lijst.length + (lijst.length === 1 ? " perceel" : " percelen") + ". Tik de naam om ze te zien; zoek daar het water opnieuw." +
+      (mis.length ? " Niet gevonden: perceel " + mis.join(", ") + "." : "") + (oeverMis ? " Bij " + oeverMis + " perceel is de grens anders, de zelf aangewezen oevers zijn niet overgenomen." : ""), !!(mis.length || oeverMis));
+  }
+  async function deel(btn) {
+    const url = deelLink(), titel = "Percelen van " + naamActief;
+    try {
+      if (navigator.share) { await navigator.share({ title: titel, text: titel + " (Perceelkaart):", url }); say("Gedeeld. De ontvanger tikt de link aan (of plakt hem bij Namen) en krijgt " + naamActief + " in zijn lijst."); }
+      else if (navigator.clipboard) { await navigator.clipboard.writeText(url); say("Link gekopieerd: plak hem in WhatsApp of een mail."); }
+      else say(url);
+    } catch (e) { if (e && e.name !== "AbortError") say(url); }
+  }
+  {
+    const d = leesDeel(location.hash);
+    if (d) binnen = d;
+  }
+  let namenOpen = store.get("kaartNamenOpen", false);
   function renderNamen() {
     const box = $("namenBox"); box.innerHTML = "";
     const kn = (t, f, pressed) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = t; if (pressed != null) b.setAttribute("aria-pressed", pressed); b.addEventListener("click", f); return b; };
-    if (namen.length) {
-      // Namenlijst: per naam het aantal percelen en de ha; tik een regel om die percelen op de kaart te zetten
-      const kop = document.createElement("div"); kop.className = "lbl2"; kop.textContent = "Namen";
+    // Gedeelde link binnengekomen: eerst vragen
+    if (binnen) {
+      const d = binnen, kaart = document.createElement("div"); kaart.className = "advice binnen";
+      const t = document.createElement("div");
+      t.textContent = "Gedeeld: " + d.n + ", " + d.p.length + (d.p.length === 1 ? " perceel" : " percelen") + ". Toevoegen aan je namen?";
+      const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
+      const ja = kn("Toevoegen", () => haalDeel(d, ja)); ja.setAttribute("aria-pressed", "true");
+      r.append(ja, kn("Niet nu", () => { binnen = null; try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {} teken(); }));
+      kaart.append(t, r); box.appendChild(kaart);
+    }
+    {
+      // Namenlijst, uitklapbaar (altijd, ook leeg: daar plak je een gedeelde link): per naam het aantal percelen en de ha; tik een regel om die percelen op de kaart te zetten
+      const det = document.createElement("details"); det.className = "namendet"; det.open = namenOpen;
+      det.addEventListener("toggle", () => { namenOpen = det.open; store.set("kaartNamenOpen", namenOpen); });
+      const sum = document.createElement("summary");
+      sum.textContent = "Namen (" + namen.length + ")" + (naamActief ? " · op de kaart: " + naamActief : "");
       const ul = document.createElement("ul"); ul.className = "log namenlijst";
       namen.slice().sort((a, b) => a.naam.localeCompare(b.naam, "nl")).forEach(n => {
         const li = document.createElement("li"), actief = n.naam === naamActief;
@@ -1114,7 +1215,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         });
         ul.appendChild(li);
       });
-      box.append(kop, ul);
+      // Gedeelde link plakken (bijv. op een iPhone, waar een link in Safari opent en niet in de app)
+      const pl = document.createElement("div"); pl.className = "opslaan";
+      const inp = document.createElement("input"); inp.type = "text"; inp.placeholder = "Gedeelde link plakken"; inp.setAttribute("aria-label", "Gedeelde link plakken");
+      const b = kn("Ophalen", () => { const d = leesDeel(inp.value); if (!d) { say("Dat is geen gedeelde link van de Perceelkaart.", true); return; } binnen = d; namenOpen = true; teken(); });
+      pl.append(inp, b);
+      det.append(sum, ul, pl);
+      box.appendChild(det);
     }
     if (naamActief) {
       const m = document.createElement("div"); m.className = "meta";
@@ -1128,6 +1235,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       });
       klaar.setAttribute("aria-pressed", "true");
       r.appendChild(klaar);
+      r.appendChild(kn("Delen", e => deel(e.currentTarget)));
       r.appendChild(kn("Naam weghalen", e => {
         if (!armed(e.currentTarget, "Tik nog eens om " + naamActief + " weg te halen")) return;
         const was = naamActief; namen = namen.filter(x => x.naam !== was); naamActief = null; store.set("kaartNaamActief", null); zetNamen(); teken();
@@ -1150,7 +1258,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       r.append(inp, b); box.appendChild(r);
     } else if (namen.length) {
       const m = document.createElement("div"); m.className = "meta";
-      m.textContent = "Tik een naam om zijn percelen te zien, of tik percelen aan voor een nieuwe naam.";
+      m.textContent = (namenOpen ? "Tik een naam" : "Klap Namen open en tik een naam") + " om zijn percelen te zien, of tik percelen aan voor een nieuwe naam.";
       box.appendChild(m);
     }
     box.hidden = !box.childNodes.length;

@@ -62,6 +62,13 @@ header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-
   .panel { grid-column: 2; grid-row: 2; max-width: none; margin: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; border-left: 1px solid var(--line); }
 }
 .row { display: flex; gap: 10px; }
+.namen { margin-top: 8px; }
+.namen .lijst { display: flex; flex-wrap: wrap; gap: 6px; }
+.namen .btn { flex: none; min-height: 40px; font-size: 15px; padding: 0 12px; }
+.namen .opslaan { display: flex; gap: 6px; margin-top: 6px; }
+.namen input { flex: 1; min-width: 0; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 16px; padding: 0 8px; outline: none; }
+.namen input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.namen .meta { margin-top: 6px; }
 .btn { flex: 1; min-height: 52px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 17px "Barlow", system-ui, sans-serif; }
 a.btn.link { display: flex; align-items: center; justify-content: center; text-decoration: none; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -187,6 +194,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <div class="row" style="margin-top:8px"><button type="button" class="btn klein" id="vrijWis">Wissen</button><button type="button" class="btn klein" id="vrijOm">A en B omdraaien</button></div>
   </div>
   <div class="hint" id="hint">Tik op een perceel om het toe te voegen. Nog eens tikken haalt het weg.</div>
+  <div class="namen" id="namenBox"></div>
   <div class="advice" id="info" aria-live="polite" hidden>
     <div class="tot"><span id="totLbl"></span><span class="adv-main num" id="totHa"></span></div>
     <div class="meta" id="totSub"></div>
@@ -237,7 +245,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 67</div>
+  <div class="voet">versie 68</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -332,6 +340,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // BRP van het lopende jaar (concept) voor een eigen regio, uitgeknipt uit de PDOK-download; daarbuiten PDOK
   Perceel.gebruikRegio("brp2026/");
   let sel = store.get("kaartTestSelectie", []);
+  // Namen (bijv. per klant of boer): percelen en kavels bewaard onder een naam, alleen op deze telefoon.
+  // Is een naam actief, dan worden wijzigingen daar vanzelf in bijgewerkt.
+  let namen = store.get("kaartNamen", []);
+  if (!Array.isArray(namen)) namen = [];
+  namen = namen.filter(n => n && typeof n.naam === "string" && Array.isArray(n.sel));
+  let naamActief = store.get("kaartNaamActief", null);
+  if (!namen.some(n => n.naam === naamActief)) naamActief = null;
   if (!Array.isArray(sel)) sel = [];
   sel = sel.filter(q => q && q.geometry && typeof q.ha === "number");
   // Oppervlakte opnieuw uit de grens (eerder bewaard op 2 decimalen)
@@ -496,7 +511,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // Spuitsporen onder de perceelranden tekenen
   const spoorLaag = L.layerGroup().addTo(map);
   const laag = L.layerGroup().addTo(map);
-  const bewaar = () => store.set("kaartTestSelectie", sel);
+  const bewaar = () => { store.set("kaartTestSelectie", sel); bewaarNaam(); };
   const spuitEl = $("spuitB");
   spuitEl.value = store.get("kaartSpuitBreedte", "27");
   let spuitAan = store.get("kaartSpuitAan", false);
@@ -540,7 +555,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // Kavels: percelen die tegen elkaar liggen en samen gespoten worden
   let kavels = store.get("kaartKavels", []);
   if (!Array.isArray(kavels)) kavels = [];
-  const bewaarK = () => store.set("kaartKavels", kavels);
+  const bewaarK = () => { store.set("kaartKavels", kavels); bewaarNaam(); };
   let koppelModus = false;
   const koppelSet = new Set();
   const kavelVan = q => kavels.find(k => k.leden.includes(q.key));
@@ -935,8 +950,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         maakDetail().appendChild(n);
       }
       // Langs water erbij: 0 -> 1 -> 2 -> 3 m langs nat water, of tot de insteek (voor percelen waar de grens niet tot het water loopt)
-      if (bf.natM || ti) {
-        const standen = (bf.natM ? [0, 1, 2, 3] : [0]).concat(ti ? ["insteek", "insteekSpuit"] : []);
+      if (ti || (typeof q.extraWater === "number" && q.extraWater > 0 && bf.natM)) {
+        // Alleen als er een strook tussen perceel en insteek ligt; een eerder ingestelde vaste breedte (1-3 m) blijft werken tot je hem uitzet
+        const standen = [0].concat(typeof q.extraWater === "number" && q.extraWater > 0 && bf.natM ? [q.extraWater] : [], ti ? ["insteek", "insteekSpuit"] : []);
         const ew = standen.includes(q.extraWater) ? q.extraWater : 0;
         const r = document.createElement("div"), bt = document.createElement("button");
         bt.type = "button"; bt.className = "btn klein";
@@ -988,7 +1004,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     });
     const bfs = sel.map(buffer), tot = sel.reduce((a, q) => a + q.ha, 0), dubbel = sel.some(q => binnenAnder(q) >= 0);
     const af = bfs.reduce((a, x) => a + x.af, 0), om = bfs.reduce((a, x) => a + x.lengte, 0), bij = bfs.reduce((a, x) => a + x.extra, 0);
-    $("totLbl").textContent = (sel.length === 1 ? "1 perceel" : sel.length + " percelen samen") + (af ? ", zonder bufferstrook" : "");
+    $("totLbl").textContent = (naamActief ? naamActief + ": " : "") + (sel.length === 1 ? "1 perceel" : sel.length + " percelen samen") + (af ? ", zonder bufferstrook" : "");
     $("totHa").textContent = haTxt(tot + bij - af) + " ha";
     $("totSub").textContent = (dubbel ? "Let op: percelen overlappen, het totaal telt dubbel. " : "") + (af || bij ? "Bruto " + haTxt(tot) + " ha" + (bij ? " + langs water " + haTxt(bij) + " ha" : "") + (af ? " − bufferstroken " + haTxt(af) + " ha" : "") + (om ? " (" + mTxt(om) + " oever)" : "")
       : om ? mTxt(om) + " oever, alleen droge sloten: geen bufferstrook." : "");
@@ -1005,9 +1021,82 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         [["A", sp.a], ["B", sp.b]].forEach(([t, c]) => spoorLaag.addLayer(L.marker([c[1], c[0]], { icon: L.divIcon({ className: "", html: '<div class="abl">' + t + '</div>', iconSize: [20, 20] }), interactive: false, keyboard: false })));
       });
     }
+    renderNamen();
     map.invalidateSize();
   }
-  $("bWis").addEventListener("click", e => { if (armed(e.currentTarget, "Tik nog eens om te wissen")) { sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken(); say("Selectie gewist. Tik op een perceel om te beginnen."); } });
+  $("bWis").addEventListener("click", e => {
+    if (!armed(e.currentTarget, "Tik nog eens om te wissen")) return;
+    // Een actieve naam eerst loslaten: zijn percelen blijven bewaard
+    const was = naamActief; naamActief = null; store.set("kaartNaamActief", null);
+    sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
+    say(was ? "Kaart leeg. De percelen van " + was + " blijven bewaard: tik de naam om ze terug te halen." : "Selectie gewist. Tik op een perceel om te beginnen.");
+  });
+  // Namen bewaren en terughalen
+  function zetNamen() {
+    try { localStorage.setItem("kaartNamen", JSON.stringify(namen)); return true; }
+    catch (e) { say("De opslag is vol: de namen zijn niet bijgewerkt. Haal een naam of percelen weg.", true); return false; }
+  }
+  function bewaarNaam() {
+    const n = naamActief && namen.find(x => x.naam === naamActief);
+    if (!n) return;
+    n.sel = sel; n.ts = Date.now();
+    try { n.kavels = kavels; } catch (e) { /* kavels nog niet geladen */ }
+    zetNamen();
+  }
+  const haGeheel = lijst => lijst.reduce((t, q) => t + (q.ha || 0), 0);
+  function laadNaam(naam) {
+    const n = namen.find(x => x.naam === naam);
+    if (!n) return;
+    bewaarNaam();
+    naamActief = naam; store.set("kaartNaamActief", naam);
+    sel = JSON.parse(JSON.stringify(n.sel || [])); kavels = JSON.parse(JSON.stringify(n.kavels || []));
+    store.set("kaartTestSelectie", sel); store.set("kaartKavels", kavels);
+    setOever(false); setKoppel(false); setAB(false); teken();
+    if (sel.length) map.fitBounds(L.geoJSON({ type: "FeatureCollection", features: sel.map(q => ({ type: "Feature", properties: {}, geometry: q.geometry })) }).getBounds(), { padding: [24, 24], maxZoom: 17 });
+    say(naam + ": " + sel.length + (sel.length === 1 ? " perceel, " : " percelen, ") + haTxt(haGeheel(sel)) + " ha.");
+  }
+  function renderNamen() {
+    const box = $("namenBox"); box.innerHTML = "";
+    const kn = (t, f, pressed) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = t; if (pressed != null) b.setAttribute("aria-pressed", pressed); b.addEventListener("click", f); return b; };
+    if (namen.length) {
+      const lijst = document.createElement("div"); lijst.className = "lijst";
+      namen.slice().sort((a, b) => a.naam.localeCompare(b.naam, "nl")).forEach(n => {
+        lijst.appendChild(kn(n.naam + " · " + n.sel.length, e => {
+          if (n.naam === naamActief) { laadNaam(n.naam); return; }
+          // Niet bewaarde percelen op de kaart gaan weg: eerst bevestigen
+          if (!naamActief && sel.length && !armed(e.currentTarget, "Kaart wordt vervangen, tik nog eens")) return;
+          laadNaam(n.naam);
+        }, n.naam === naamActief));
+      });
+      box.appendChild(lijst);
+    }
+    if (naamActief) {
+      const m = document.createElement("div"); m.className = "meta";
+      m.textContent = "Bezig met " + naamActief + ": wat je verandert wordt vanzelf onder die naam bewaard.";
+      const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
+      r.appendChild(kn("Naam weghalen", e => {
+        if (!armed(e.currentTarget, "Tik nog eens om " + naamActief + " weg te halen")) return;
+        const was = naamActief; namen = namen.filter(x => x.naam !== was); naamActief = null; store.set("kaartNaamActief", null); zetNamen(); teken();
+        say(was + " is weggehaald. De percelen staan nog op de kaart, zonder naam.");
+      }));
+      box.append(m, r);
+    } else if (sel.length) {
+      const r = document.createElement("div"); r.className = "opslaan";
+      const inp = document.createElement("input"); inp.type = "text"; inp.maxLength = 40; inp.placeholder = "Naam, bijv. Jouke"; inp.setAttribute("aria-label", "Naam voor deze percelen");
+      const b = kn("Bewaar onder naam", e => {
+        const naam = inp.value.trim().replace(/\s+/g, " ");
+        if (!naam) { say("Vul eerst een naam in.", true); inp.focus(); return; }
+        const bestaat = namen.find(x => x.naam === naam);
+        if (bestaat && !armed(e.currentTarget, naam + " overschrijven? Tik nog eens")) return;
+        namen = namen.filter(x => x.naam !== naam).concat([{ naam, sel: [], kavels: [], ts: Date.now() }]);
+        naamActief = naam; store.set("kaartNaamActief", naam); bewaarNaam(); teken();
+        say(sel.length + (sel.length === 1 ? " perceel" : " percelen") + " bewaard onder " + naam + ". Tik de naam om ze later terug te halen.");
+      });
+      inp.addEventListener("keydown", ev => { if (ev.key === "Enter") b.click(); });
+      r.append(inp, b); box.appendChild(r);
+    }
+    box.hidden = !box.childNodes.length;
+  }
 
   async function zoek(lat, lon) {
     if (map.getZoom() < 14) { map.setView([lat, lon], 16); say("Ingezoomd. Tik nog eens op het perceel."); return; }

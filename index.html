@@ -85,6 +85,8 @@ a.btn.link { display: flex; align-items: center; justify-content: center; text-d
 button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .vrij .vrow { display: grid; grid-template-columns: 5.5em 1fr auto; gap: 8px; align-items: center; margin-top: 6px; }
 .vrij .vrow label { color: var(--muted); font-weight: 500; }
+.vrij .vrow .kiesAB { min-height: 44px; border-radius: 8px; border: 2px solid #e8590c; background: #e8590c; color: #fff; font: 700 18px "Barlow", system-ui, sans-serif; }
+.vrij .vrow .kiesAB[aria-pressed="true"] { background: #fff; color: #e8590c; box-shadow: 0 0 0 3px rgba(232, 89, 12, .45); }
 .vrij .vrow input { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 16px; padding: 0 8px; outline: none; }
 .vrij .vrow input.num { text-align: right; font-size: 20px; }
 .vrij .vrow input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
@@ -195,8 +197,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bBron" aria-pressed="false">Grenzen: BRP-gewasperceel</button></div>
   <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bVrij" aria-pressed="false">AB-lijn meten</button><button type="button" class="btn" id="bAB" aria-pressed="false">AB-kant kiezen</button></div>
   <div class="advice vrij" id="vrijBox" hidden>
-    <div class="vrow"><label for="vrijA">A</label><input id="vrijA" type="text" inputmode="decimal" autocomplete="off" placeholder="tik op de kaart of 52.68, 5.20"><button type="button" class="btn klein" id="vrijAgps">GPS</button></div>
-    <div class="vrow"><label for="vrijB">B</label><input id="vrijB" type="text" inputmode="decimal" autocomplete="off" placeholder="tik op de kaart of 52.68, 5.21"><button type="button" class="btn klein" id="vrijBgps">GPS</button></div>
+    <div class="vrow"><button type="button" class="kiesAB" id="kiesA" aria-pressed="false" aria-label="A kiezen: de volgende tik op de kaart zet A daar">A</button><input id="vrijA" aria-label="Coördinaat A" type="text" inputmode="decimal" autocomplete="off" placeholder="tik op de kaart of 52.68, 5.20"><button type="button" class="btn klein" id="vrijAgps">GPS</button></div>
+    <div class="vrow"><button type="button" class="kiesAB" id="kiesB" aria-pressed="false" aria-label="B kiezen: de volgende tik op de kaart zet B daar">B</button><input id="vrijB" aria-label="Coördinaat B" type="text" inputmode="decimal" autocomplete="off" placeholder="tik op de kaart of 52.68, 5.21"><button type="button" class="btn klein" id="vrijBgps">GPS</button></div>
     <div class="vrow"><label for="vrijK">A+ koers (°)</label><input id="vrijK" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 244,672"><span></span></div>
     <div class="vrow"><label for="vrijS">Opzij (m)</label><input id="vrijS" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="0"><button type="button" class="btn klein" id="vrijSkant">rechts</button></div>
     <div id="vrijUit"></div>
@@ -254,7 +256,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 76</div>
+  <div class="voet">versie 77</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1557,10 +1559,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         const m = vrijM[k] = L.marker([c[1], c[0]], { draggable: true, icon: L.divIcon({ className: "", html: '<div class="abl vrijp">' + t + "</div>", iconSize: [26, 26] }) });
         m.on("dragstart", () => { m._sleept = true; });
         // Tik op A of B: dat punt kiezen, de volgende tik op de kaart zet het daar
-        m.on("click", () => {
-          vrijKies = vrijKies === k ? null : k; markeerKies();
-          say(vrijKies ? t + " gekozen: tik op de kaart waar " + t + " moet komen." : t + " niet meer gekozen.");
-        });
+        m.on("click", () => kies(k));
         m.on("drag", () => { const p = m.getLatLng(); vrij[k] = [p.lng, p.lat]; if (k === "a") zetAplus(); else vrij.k = ""; tekenVrij(); });
         m.on("dragend", () => { m._sleept = false; bewaarVrij(); tekenVrij(); });
         vrijLaag.addLayer(m);
@@ -1612,12 +1611,20 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   }
   // Gekozen punt (a of b) na een tik op het blokje A of B; de volgende tik op de kaart zet het daar
   let vrijKies = null;
-  const markeerKies = () => ["a", "b"].forEach(k => { const el = vrijM[k] && vrijM[k].getElement(); const d = el && el.querySelector(".abl"); if (d) d.classList.toggle("gekozen", vrijKies === k); });
+  const markeerKies = () => ["a", "b"].forEach(k => {
+    const el = vrijM[k] && vrijM[k].getElement(), d = el && el.querySelector(".abl");
+    if (d) d.classList.toggle("gekozen", vrijKies === k);
+    $(k === "a" ? "kiesA" : "kiesB").setAttribute("aria-pressed", vrijKies === k);
+  });
+  const kies = k => { vrijKies = vrijKies === k ? null : k; markeerKies(); const t = k === "a" ? "A" : "B"; say(vrijKies ? t + " gekozen: tik op de kaart waar " + t + " moet komen." : t + " niet meer gekozen."); };
+  $("kiesA").addEventListener("click", () => kies("a"));
+  $("kiesB").addEventListener("click", () => kies("b"));
   function vrijTik(ll) {
     const c = [ll.lng, ll.lat];
-    if (vrijKies && vrij.a && vrij.b) {
+    // A of B gekozen (knop A/B in het paneel of het blokje op de kaart): dat punt komt hier, ook als het ver weg stond
+    if (vrijKies) {
       const k = vrijKies; vrij[k] = c; if (k === "a") zetAplus(); else vrij.k = "";
-      vrijKies = null; bewaarVrij(); tekenVrij(); markeerKies(); say((k === "a" ? "A" : "B") + " verplaatst.");
+      vrijKies = null; bewaarVrij(); tekenVrij(); markeerKies(); say((k === "a" ? "A" : "B") + " staat nu hier.");
       return;
     }
     // A+ ingevuld: elke tik zet A, de lijn volgt de koers
@@ -1625,24 +1632,20 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (!vrij.a) vrij.a = c;
     else if (!vrij.b) vrij.b = c;
     else {
-      // Allebei gezet en niets gekozen. Allebei buiten beeld (oude lijn ergens anders): nieuwe lijn.
-      const zicht = map.getBounds(), inA = zicht.contains([vrij.a[1], vrij.a[0]]), inB = zicht.contains([vrij.b[1], vrij.b[0]]);
-      if (!inA && !inB) { vrij.a = c; vrij.b = null; bewaarVrij(); tekenVrij(); say("Nieuwe AB-lijn: A staat hier, tik nu B."); return; }
-      // Eén punt buiten beeld (daar kun je niet op tikken): dat punt komt naar je tik
-      if (inA !== inB) vrij[inA ? "b" : "a"] = c;
-      // Allebei in beeld: niets verzetten zonder dat je A of B gekozen hebt
-      else { say("Tik eerst op A of B om hem te verplaatsen (of sleep hem).", true); return; }
+      // Allebei gezet: het dichtstbijzijnde punt verplaatsen
+      const d = p => map.distance(ll, L.latLng(p[1], p[0]));
+      if (d(vrij.a) <= d(vrij.b)) vrij.a = c; else vrij.b = c;
     }
     bewaarVrij(); tekenVrij();
   }
   function setVrij(aan) {
     if (aan) { if (oeverModus) setOever(false); if (koppelModus) setKoppel(false); if (abModus) setAB(false); }
-    vrijModus = aan; vrijKies = null;
+    vrijModus = aan; vrijKies = null; markeerKies();
     $("bVrij").setAttribute("aria-pressed", aan);
     $("bVrij").textContent = aan ? "Klaar met AB-lijn" : "AB-lijn meten";
     $("vrijBox").hidden = !aan;
     $("map").classList.toggle("oever", aan);
-    say(aan ? "Tik A en B op de kaart (of GPS / intikken). Daarna kun je ze slepen, of tik op A of B en dan op de nieuwe plek." : "Tik op een perceel om het toe te voegen. Nog eens tikken haalt het weg.");
+    say(aan ? "Tik A en B op de kaart (of GPS / intikken). Daarna kun je ze slepen; een tik verplaatst het dichtstbijzijnde punt. Staat er een ver weg: tik op A of B hiernaast en dan op de kaart." : "Tik op een perceel om het toe te voegen. Nog eens tikken haalt het weg.");
     tekenVrij();
   }
   $("bVrij").addEventListener("click", () => setVrij(!vrijModus));

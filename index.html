@@ -111,7 +111,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .log .go { border: 0; background: none; color: inherit; text-align: left; padding: 0; font: inherit; min-width: 0; }
 .log .name { font-weight: 500; overflow-wrap: anywhere; }
 .log .meta { font-size: 14px; color: var(--muted); }
-.log .w { font-size: 21px; }
+.log .w { font-size: 21px; text-align: right; }
+.log .w small, .kavel .w small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); line-height: 1.3; white-space: pre-line; }
+/* Uitleg onder het netto breekt af, anders drukt hij de naam van het perceel plat */
+.log .w, .kavel .w { max-width: 30vw; }
 .del { border: 0; background: none; color: var(--muted); font-size: 24px; width: 44px; height: 44px; border-radius: 8px; }
 .armed { color: var(--warn) !important; font-weight: 700 !important; }
 .leaflet-tooltip.pnr { background: var(--hl); border: 0; color: #1C2318; font: 700 15px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; padding: 1px 7px; border-radius: 999px; box-shadow: none; }
@@ -256,7 +259,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 77</div>
+  <div class="voet">versie 78</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -540,6 +543,15 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     return { per, lengte, hoofd: stappen[0].af, af: Math.min(stappen[stap].af, q.ha), stap, stappen, max, water, natM, extra, ti, vrij };
   }
   const m2Txt = v => Math.round(v).toLocaleString("nl-NL") + " m²";
+  // Kleine regel onder het netto per perceel: is de bufferstrook eraf, ligt hij erbuiten, of is het nog niet bekend
+  function nettoUitleg(q, bf) {
+    if (!bf.lengte && !bf.extra) return Array.isArray(q.water) ? "netto\ngeen water langs de rand" : "bufferstrook nog niet bekend";
+    const delen = [];
+    if (bf.af >= 0.0005) delen.push("− strook " + haTxt(bf.af));
+    if (bf.extra) delen.push("+ langs water " + haTxt(bf.extra));
+    if (delen.length) return "netto\nbruto " + haTxt(q.ha) + "\n" + delen.join("\n");
+    return bf.natM ? "netto\nstrook ligt buiten het perceel" : "netto\ngeen strook (droge sloot)";
+  }
   const nlM = v => String(v).replace(".", ",") + " m";
   let oeverModus = false;
   // Spuitsporen onder de perceelranden tekenen
@@ -1005,7 +1017,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       if ((spuitAan || maisAan) && sb && !kv) { const d = spuitBlok(q.geometry, q, bewaar, sb); if (d) maakDetail().appendChild(d); }
       go.append(nm, mt);
       go.addEventListener("click", () => naamActief ? toonPerceel(i) : map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
-      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha + bf.extra) + " ha";
+      // Netto groot (bufferstrook eraf, langs water erbij erbij), klein eronder wat er van het bruto af of bij is
+      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha + bf.extra - bf.af) + " ha";
+      { const k = document.createElement("small"); k.textContent = nettoUitleg(q, bf); w.appendChild(k); }
       const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "×";
       del.setAttribute("aria-label", "Haal perceel " + (i + 1) + " weg");
       del.addEventListener("click", () => { sel.splice(i, 1); bewaar(); teken(); });
@@ -1028,7 +1042,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const n1 = document.createElement("div"); n1.className = "naam"; n1.textContent = kv.naam;
       const n2 = document.createElement("div"); n2.className = "meta"; n2.textContent = "perceel " + leden.map(q => sel.indexOf(q) + 1).join(" + ");
       nm.append(n1, n2);
-      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(leden.reduce((t, q) => t + q.ha + buffer(q).extra, 0)) + " ha";
+      const bfl = leden.map(buffer), bruto = leden.reduce((t, q) => t + q.ha, 0), af = bfl.reduce((t, b) => t + b.af, 0), bij = bfl.reduce((t, b) => t + b.extra, 0);
+      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(bruto + bij - af) + " ha";
+      { const k = document.createElement("small"); k.textContent = af || bij ? "netto\nbruto " + haTxt(bruto) + (af ? "\n− strook " + haTxt(af) : "") + (bij ? "\n+ langs water " + haTxt(bij) : "") : "netto"; w.appendChild(k); }
       kop.append(nm, w); box.appendChild(kop);
       // Pad of naad tussen de percelen: zit in de vorm voor de sporen, niet in de ha
       if (vorm) {
@@ -1215,6 +1231,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         mt.textContent = n.sel.length + (n.sel.length === 1 ? " perceel" : " percelen") + (kv ? ", " + kv + (kv === 1 ? " kavel" : " kavels") : "") + (actief ? " · nu op de kaart" : "");
         go.append(nm, mt);
         const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(haGeheel(n.sel)) + " ha";
+        { const k = document.createElement("small"); k.textContent = "bruto"; w.appendChild(k); }
         li.append(nr, go, w, document.createElement("span"));
         li.addEventListener("click", () => {
           if (actief) { laadNaam(n.naam); return; }

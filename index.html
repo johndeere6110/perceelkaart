@@ -249,7 +249,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 70</div>
+  <div class="voet">versie 71</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -266,7 +266,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const haTxt = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false });
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { say("De opslag van de telefoon is vol: dit is NIET bewaard. Haal percelen of namen weg.", true); return false; } }
   };
   if (!window.L) { say("Kaart kon niet laden. Heb je internet?", true); return; }
   if (!window.Perceel) { say("perceel.js kon niet laden.", true); return; }
@@ -348,17 +348,34 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // Is een naam actief, dan worden wijzigingen daar vanzelf in bijgewerkt.
   let namen = store.get("kaartNamen", []);
   if (!Array.isArray(namen)) namen = [];
-  namen = namen.filter(n => n && typeof n.naam === "string" && Array.isArray(n.sel));
+  namen = namen.filter(n => n && typeof n.naam === "string" && (Array.isArray(n.sel) || n.opKaart));
   let naamActief = store.get("kaartNaamActief", null);
+  // De naam die op de kaart staat, is niet dubbel bewaard: zijn percelen zijn de kaart (kaartTestSelectie)
+  const opKaart = namen.find(n => n.opKaart);
+  if (opKaart) naamActief = opKaart.naam;
   if (!namen.some(n => n.naam === naamActief)) naamActief = null;
   if (!Array.isArray(sel)) sel = [];
   sel = sel.filter(q => q && q.geometry && typeof q.ha === "number");
+  namen.forEach(n => { if (n.opKaart) { n.sel = sel; delete n.opKaart; } });
+  // Eerder bewaard water was een hele rechthoek rond het perceel (honderden kB per perceel): eenmalig inkorten
+  const kortWater = lijst => {
+    let iets = false;
+    lijst.forEach(q => [q, q.alt].forEach(x => {
+      if (!x || x.waterKort || !Array.isArray(x.water) || !x.water.length || !x.geometry || !window.polygonClipping) return;
+      try { x.water = Perceel.waterBijPerceel(x.geometry, x.water, polygonClipping); x.waterKort = 1; delete x.reken; iets = true; } catch (e) { /* dan zo laten */ }
+    }));
+    return iets;
+  };
+  if (kortWater(sel)) store.set("kaartTestSelectie", sel);
+  let namenKort = false;
+  namen.forEach(n => { if (n.sel !== sel && kortWater(n.sel)) namenKort = true; });
+  if (namenKort) try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(n => n.naam === naamActief ? { naam: n.naam, ts: n.ts, opKaart: true } : n))); } catch (e) {}
   // Oppervlakte opnieuw uit de grens (eerder bewaard op 2 decimalen)
   sel.forEach(q => { try { q.ha = Perceel.oppervlakteHa(q.geometry); if (q.alt && q.alt.geometry) q.alt.ha = Perceel.oppervlakteHa(q.alt.geometry); } catch (e) {} });
   const nieuwPerceel = p => ({ key: sleutel(p), gewas: p.gewas || (p.ref ? "Referentieperceel" : ""), jaar: p.jaar, status: p.status || "", ha: p.ha, bron: p.bron, ref: !!p.ref, geometry: p.geometry, oever: {} });
   // Andere grens per perceel (BRP <-> referentieperceel), in q.alt. Alles wat bij een grens hoort wisselt mee,
   // zodat terugwisselen de oevers, het gevonden water en de sleutel (kavels) terugzet.
-  const GRENS = ["key", "gewas", "jaar", "status", "ha", "bron", "ref", "geometry", "oever", "wauto", "water", "taludStatus", "waterTs", "extraWater"];
+  const GRENS = ["key", "gewas", "jaar", "status", "ha", "bron", "ref", "geometry", "oever", "wauto", "water", "taludStatus", "waterTs", "extraWater", "reken", "waterKort"];
   const altBezig = new Map(), altGeprobeerd = new Set();
   // Overlap: ligt een gekozen perceel binnen een ander (bijv. referentieperceel over twee BRP-percelen)? Dan telt het dubbel.
   const middenCache = new Map();
@@ -425,7 +442,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (sel.some(x => x !== q && x.key === n.key)) return "dubbel";
     if (b === q) {
       const oudKey = q.key;
-      ["wauto", "water", "taludStatus", "waterTs"].forEach(k => delete q[k]);
+      ["wauto", "water", "taludStatus", "waterTs", "reken", "waterKort"].forEach(k => delete q[k]);
       Object.assign(q, n, { oever: {} });
       kavels.forEach(kv => kv.leden = kv.leden.map(x => x === oudKey ? q.key : x));
       bewaarK();
@@ -454,31 +471,35 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (!q.oever || typeof q.oever !== "object") q.oever = {};
     Object.keys(q.oever).forEach(k => q.oever[k] = naarType(q.oever[k]));
   });
-  // Strook vanaf de insteek (BGT water + talud) langs de randen die Water zoeken vond (q.wauto), per stap; null = niet te berekenen
-  const strookCache = new Map();
+  // Uitkomsten van de strookberekeningen bewaren bij het perceel (q.reken): op een telefoon kost rekenen seconden, dus alleen
+  // opnieuw na Water zoeken (waterTs) of een andere oever, niet bij elke start. RV = versie van de rekenwijze.
+  const RV = 2;
+  const rondGeo = g => g && g.coordinates ? { type: g.type, coordinates: JSON.parse(JSON.stringify(g.coordinates, (k, v) => typeof v === "number" ? Math.round(v * 1e7) / 1e7 : v)) } : g;
+  let rekenBewaar = null;
+  function onthoud(q, id, f) {
+    if (!q.reken || q.reken.ts !== (q.waterTs || 0) || q.reken.v !== RV) q.reken = { ts: q.waterTs || 0, v: RV, r: {} };
+    const r = q.reken.r;
+    if (!(id in r)) {
+      let x = null;
+      try { x = f(); } catch (e) { x = null; }
+      if (x && x.geometry) x.geometry = rondGeo(x.geometry);
+      const ids = Object.keys(r); if (ids.length >= 12) delete r[ids[0]]; // oude oevercombinaties eruit
+      r[id] = x;
+      clearTimeout(rekenBewaar); rekenBewaar = setTimeout(bewaar, 300);
+    }
+    return r[id];
+  }
   // Strook tussen de perceelrand en de insteek (buiten het perceel), uit het gevonden water; null = geen water gezocht
-  const insteekCache = new Map();
   // vrij: zoveel m van de insteek afblijven (spuiten), 0 = tot de insteek (gras)
   function totInsteek(q, vrij) {
     if (!Array.isArray(q.water) || !q.water.length || !window.polygonClipping) return null;
-    const id = q.key + "|" + (q.waterTs || 0) + "|" + (vrij || 0);
-    if (!insteekCache.has(id)) {
-      let r = null;
-      try { r = Perceel.totInsteek(q.geometry, q.water, polygonClipping, { vrij }); } catch (e) { r = null; }
-      insteekCache.set(id, r);
-    }
-    return insteekCache.get(id);
+    return onthoud(q, "i" + (vrij || 0), () => Perceel.totInsteek(q.geometry, q.water, polygonClipping, { vrij }));
   }
+  // Strook vanaf de insteek (BGT water + talud) langs de randen die Water zoeken vond (q.wauto), per stap; null = niet te berekenen
   // hand: zelf aangewezen randen met een strook; daar telt de strook vanaf de insteek niet nog eens
   function waterStrook(q, keys, hand, i) {
     if (!keys.length || !Array.isArray(q.water) || !window.polygonClipping) return null;
-    const id = q.key + "|" + i + "|" + (q.waterTs || 0) + "|" + keys.join(",") + "|" + hand.join(",");
-    if (!strookCache.has(id)) {
-      let r = null;
-      try { r = Perceel.waterStrook(q.geometry, q.water, typeVan("nat").st[i], polygonClipping, { zijden: keys, hand }); } catch (e) { r = null; }
-      strookCache.set(id, r);
-    }
-    return strookCache.get(id);
+    return onthoud(q, "s" + i + "|" + keys.join(",") + "|" + hand.join(","), () => Perceel.waterStrook(q.geometry, q.water, typeVan("nat").st[i], polygonClipping, { zijden: keys, hand }));
   }
   // Per perceel: lengte per type, en de stap waarop het onder 4 % komt (of de laatste stap).
   // Zelf aangewezen oevers: lengte × breedte vanaf de perceelrand. Gevonden water: strook vanaf de insteek van het talud, deel binnen het perceel.
@@ -559,6 +580,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   // Kavels: percelen die tegen elkaar liggen en samen gespoten worden
   let kavels = store.get("kaartKavels", []);
   if (!Array.isArray(kavels)) kavels = [];
+  namen.forEach(n => { if (n.naam === naamActief && !Array.isArray(n.kavels)) n.kavels = kavels; });
   const bewaarK = () => { store.set("kaartKavels", kavels); bewaarNaam(); };
   let koppelModus = false;
   const koppelSet = new Set();
@@ -1031,13 +1053,14 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   $("bWis").addEventListener("click", e => {
     if (!armed(e.currentTarget, "Tik nog eens om te wissen")) return;
     // Een actieve naam eerst loslaten: zijn percelen blijven bewaard
-    const was = naamActief; naamActief = null; store.set("kaartNaamActief", null);
+    bewaarNaam();
+    const was = naamActief; naamActief = null; store.set("kaartNaamActief", null); zetNamen();
     sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
     say(was ? "Kaart leeg. De percelen van " + was + " blijven bewaard: tik de naam om ze terug te halen." : "Selectie gewist. Tik op een perceel om te beginnen.");
   });
   // Namen bewaren en terughalen
   function zetNamen() {
-    try { localStorage.setItem("kaartNamen", JSON.stringify(namen)); return true; }
+    try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(n => n.naam === naamActief ? { naam: n.naam, ts: n.ts, opKaart: true } : n))); return true; }
     catch (e) { say("De opslag is vol: de namen zijn niet bijgewerkt. Haal een naam of percelen weg.", true); return false; }
   }
   function bewaarNaam() {
@@ -1054,7 +1077,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     bewaarNaam();
     naamActief = naam; store.set("kaartNaamActief", naam);
     sel = JSON.parse(JSON.stringify(n.sel || [])); kavels = JSON.parse(JSON.stringify(n.kavels || []));
-    store.set("kaartTestSelectie", sel); store.set("kaartKavels", kavels);
+    store.set("kaartTestSelectie", sel); store.set("kaartKavels", kavels); zetNamen();
     setOever(false); setKoppel(false); setAB(false); teken();
     if (sel.length) map.fitBounds(L.geoJSON({ type: "FeatureCollection", features: sel.map(q => ({ type: "Feature", properties: {}, geometry: q.geometry })) }).getBounds(), { padding: [24, 24], maxZoom: 17 });
     say(naam + ": " + sel.length + (sel.length === 1 ? " perceel, " : " percelen, ") + haTxt(haGeheel(sel)) + " ha.");
@@ -1099,7 +1122,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
       // Afronden: kaart leeg, de naam blijft bewaard; daarna percelen voor de volgende naam aantikken
       const klaar = kn("Klaar met " + naamActief, () => {
-        const was = naamActief; bewaarNaam(); naamActief = null; store.set("kaartNaamActief", null);
+        const was = naamActief; bewaarNaam(); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
         sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
         say(was + " is bewaard. Tik percelen aan voor de volgende naam, of tik een naam om hem terug te halen.");
       });
@@ -1313,7 +1336,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         // Waterdelen en taluds bewaren (bijgeknipt): de strook wordt vanaf de insteek gerekend
         q.water = window.polygonClipping ? Perceel.waterBijPerceel(q.geometry, water, polygonClipping) : [];
         q.taludStatus = water.taludFout ? "fout" : "ok";
-        q.waterTs = Date.now();
+        q.waterTs = Date.now(); q.waterKort = 1; delete q.reken;
         if (water.taludFout) regels.push("Perceel " + (i + 1) + ": " + water.taludFout + " Gerekend vanaf de waterlijn.");
         regels.push("Perceel " + (i + 1) + ": " + (nat || droog ? [nat ? mTxt(nat) + " water" : "", droog ? mTxt(droog) + " greppel/droge sloot" : ""].filter(Boolean).join(", ") : "geen (nieuw) water langs de rand"));
         const wd = water.filter(w => !w.talud), td = water.filter(w => w.talud);

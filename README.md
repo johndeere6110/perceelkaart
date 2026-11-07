@@ -54,6 +54,7 @@ De koers wordt gerekend zoals de GPS-kast: met de aarde als bol. Vergeleken met 
 ## Overig
 
 - **Tablet:** liggend staat de kaart links over de volle hoogte en de bediening rechts in een eigen kolom; staand is de kaart groter.
+- **Opslag en snelheid:** van het gevonden water bewaart de app alleen wat binnen 15 m van het perceel ligt, en de uitkomsten van de strookberekening worden bij het perceel bewaard (opnieuw rekenen alleen na Water zoeken of een andere oever). De naam die op de kaart staat, wordt niet dubbel opgeslagen. Is de opslag van de telefoon vol, dan zegt de app dat (anders werd het stil niet bewaard).
 - Alleen de kaart zoomt (tot zoom 22; boven 19 wordt de luchtfoto vergroot), niet de hele pagina.
 - Alles blijft op je eigen telefoon. De app deelt de opslag met de Zaaihulp (zelfde domein), met eigen sleutels. Bij het opstarten vraagt de app de browser om de gegevens niet op te ruimen bij weinig ruimte; onderaan staat of dat gelukt is. Het icoon van het beginscherm verwijderen (vooral op iPhone) of browsergegevens wissen wist de percelen en instellingen wel; die zijn opnieuw te maken (percelen opnieuw aantikken, Water zoeken).
 - Onderaan staat **Zaaihulp openen**; de Zaaihulp heeft op het startscherm een knop naar de Perceelkaart. De installatiepagina's verwijzen naar elkaar: één link sturen is genoeg om allebei te installeren.

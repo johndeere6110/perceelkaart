@@ -1,4 +1,4 @@
-// perceel.js versie 37 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 39 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -384,19 +384,38 @@
     const ky = 111132.92 - 559.82 * Math.cos(2 * f) + 1.175 * Math.cos(4 * f), kx = 111412.84 * Math.cos(f) - 93.5 * Math.cos(3 * f);
     return { m: c => [(c[0] - lon0) * kx, (c[1] - lat0) * ky], ll: q => [lon0 + q[0] / kx, lat0 + q[1] / ky] };
   }
-  // Waterdelen (en taluds) rond een perceel, bijgeknipt tot het perceel + marge m, om te bewaren: [{ droog, talud, geometry }]
+  // Waterdelen (en taluds) rond een perceel om te bewaren: [{ droog, talud, geometry }]. Alleen wat binnen marge m (15) van
+  // het perceel ligt (een band, geen rechthoek: bij een lang of schuin perceel zitten daar de sloten van alle buren in),
+  // vereenvoudigd op 1 cm. De strook rekent tot ca. 10 m van de rand, dus dit is genoeg. Kan ook op al bewaard water.
+  // Taluds krijgen bijNat / bijWater: ligt tegen (nat) water, bepaald vóór het knippen.
   function waterBijPerceel(geometry, water, clip, marge) {
     marge = marge == null ? 15 : marge;
     if (!polygonen(geometry).length || !clip) return [];
     const v = vlak(geometry);
+    const perceel = polygonen(geometry).map(rings => [rings[0].map(v.m)]);
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-    polygonen(geometry).forEach(rings => rings[0].forEach(c => { const p = v.m(c); x1 = Math.min(x1, p[0]); y1 = Math.min(y1, p[1]); x2 = Math.max(x2, p[0]); y2 = Math.max(y2, p[1]); }));
+    perceel.forEach(rings => rings[0].forEach(p => { x1 = Math.min(x1, p[0]); y1 = Math.min(y1, p[1]); x2 = Math.max(x2, p[0]); y2 = Math.max(y2, p[1]); }));
     x1 -= marge; y1 -= marge; x2 += marge; y2 += marge;
-    const rh = [[[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]]];
+    let band = [[[[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]]]];
+    try { band = clip.union(perceel, ...randVormen(perceel, marge, 1, 0, true)); } catch (e) { /* dan de rechthoek */ }
+    // Vóór het knippen vastleggen welk talud tegen (nat) water ligt: na het knippen raken ze elkaar soms niet meer
+    const inM = w => polygonen(w.geometry).map(rings => rings.map(r => r.map(v.m)));
+    const isNat = w => !w.talud && !(typeof w.droog === "boolean" ? w.droog : isDroog(w));
+    const natW = water.filter(isNat).map(inM), alleW = water.filter(w => !w.talud).map(inM);
+    const gezien = new Set();
     return water.flatMap(w => {
+      // Hetzelfde waterdeel kan dubbel binnenkomen (uit twee vragen aan PDOK): één keer bewaren
+      const id = (w.talud ? "t" : "w") + JSON.stringify(w.geometry.coordinates);
+      if (gezien.has(id)) return [];
+      gezien.add(id);
       let delen;
-      try { delen = clip.intersection(polygonen(w.geometry).map(rings => rings.map(r => r.map(v.m))), rh); } catch (e) { return []; }
-      return delen.length ? [Object.assign(w.talud ? { droog: false, talud: true } : { droog: isDroog(w) }, { geometry: { type: "MultiPolygon", coordinates: rond(delen.map(poly => poly.map(r => r.map(v.ll)))) } })] : [];
+      try { delen = clip.intersection(polygonen(w.geometry).map(rings => rings.map(r => vereenvoudig(r.map(v.m), 0.01))), band); } catch (e) { return []; }
+      let soort = { droog: typeof w.droog === "boolean" ? w.droog : isDroog(w) };
+      if (w.talud) {
+        const t = inM(w);
+        soort = { droog: false, talud: true, bijNat: typeof w.bijNat === "boolean" ? w.bijNat : natW.some(n => raakt(n, t, 0.5)), bijWater: typeof w.bijWater === "boolean" ? w.bijWater : alleW.some(n => raakt(n, t, 0.5)) };
+      }
+      return delen.length ? [Object.assign(soort, { geometry: { type: "MultiPolygon", coordinates: rond(delen.map(poly => poly.map(r => r.map(v.ll)))) } })] : [];
     });
   }
   // Afstand van punt p tot de randen van een lijst polygonen (meters)
@@ -438,7 +457,7 @@
     const nat = natW.flat();
     if (!nat.length) return leeg;
     // Taluds die tegen nat water liggen (die van een droge sloot doen niet mee)
-    const taluds = water.filter(w => w.talud).map(inM).filter(t => natW.some(n => raakt(n, t, 0.5))).flat();
+    const taluds = water.filter(w => w.talud && (typeof w.bijNat === "boolean" ? w.bijNat : natW.some(n => raakt(n, inM(w), 0.5)))).map(inM).flat();
     // Alleen bij de gekozen randstukjes: per stukje een band van breedte + tol aan weerskanten. Naast een stukje
     // dat ook een strook heeft (gekozen, of in o.hand: zelf aangewezen) afgeknipt op de bissectrice, zodat de
     // strook langs een zelf aangewezen buurrand niet dubbel telt; anders een strookbreedte recht door.
@@ -467,7 +486,7 @@
       if (!gang.length) return leeg;
     }
     // Zelfde aanpak als binnenGebied: struikelt de rekenbibliotheek, dan opnieuw met een iets grovere rand
-    const pogingen = [0.3, 0.5, 1, 2];
+    const pogingen = [0.01, 0.3, 0.5, 1, 2]; // 1 cm: met 30 cm week de strook tot ca. 8 % af
     for (let i = 0; i < pogingen.length; i++) {
       try {
         // Water en talud samen: de buitenrand is de insteek. Piepkleine gaatjes (naad tussen twee vlakken) dicht.
@@ -506,7 +525,7 @@
     const perceel = polygonen(geometry).map(rings => rings.map(r => r.map(v.m)));
     const sloten = water.filter(w => !w.talud).map(inM);
     if (!sloten.length) return leeg;
-    const taluds = water.filter(w => w.talud).map(inM).filter(t => sloten.some(n => raakt(n, t, 0.5)));
+    const taluds = water.filter(w => w.talud && (typeof w.bijWater === "boolean" ? w.bijWater : sloten.some(n => raakt(n, inM(w), 0.5)))).map(inM);
     let insteek = sloten.flat().concat(taluds.flat());
     if (clip) { try { insteek = clip.union(...insteek); } catch (e) { /* dan los: de stralen raken dezelfde randen */ } }
     // Punt binnen een lijst polygonen (even-oneven over alle ringen, dus gaten tellen mee)

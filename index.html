@@ -253,7 +253,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 74</div>
+  <div class="voet">versie 75</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1611,9 +1611,18 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (!vrij.a) vrij.a = c;
     else if (!vrij.b) vrij.b = c;
     else {
-      // Allebei gezet: het dichtstbijzijnde punt verplaatsen
-      const d = p => map.distance(ll, L.latLng(p[1], p[0]));
-      if (d(vrij.a) <= d(vrij.b)) vrij.a = c; else vrij.b = c;
+      // Allebei gezet. Wat in beeld is telt: staat één punt ver weg buiten beeld (bijv. van een oude lijn), dan komt dat
+      // punt naar je tik, behalve vlak bij het punt in beeld (dat verplaats je dan). Allebei buiten beeld: nieuwe lijn.
+      const zicht = map.getBounds(), inA = zicht.contains([vrij.a[1], vrij.a[0]]), inB = zicht.contains([vrij.b[1], vrij.b[0]]);
+      const px = p => map.latLngToContainerPoint(ll).distanceTo(map.latLngToContainerPoint([p[1], p[0]]));
+      if (!inA && !inB) { vrij.a = c; vrij.b = null; bewaarVrij(); tekenVrij(); say("Nieuwe AB-lijn: A staat hier, tik nu B."); return; }
+      if (inA !== inB) {
+        const binnen = inA ? "a" : "b", buiten = inA ? "b" : "a";
+        if (px(vrij[binnen]) <= 40) vrij[binnen] = c; else vrij[buiten] = c;
+      } else {
+        const d = p => map.distance(ll, L.latLng(p[1], p[0]));
+        if (d(vrij.a) <= d(vrij.b)) vrij.a = c; else vrij.b = c;
+      }
     }
     bewaarVrij(); tekenVrij();
   }

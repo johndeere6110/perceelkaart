@@ -237,7 +237,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 63</div>
+  <div class="voet">versie 64</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -435,12 +435,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const strookCache = new Map();
   // Strook tussen de perceelrand en de insteek (buiten het perceel), uit het gevonden water; null = geen water gezocht
   const insteekCache = new Map();
-  function totInsteek(q) {
+  // vrij: zoveel m van de insteek afblijven (spuiten), 0 = tot de insteek (gras)
+  function totInsteek(q, vrij) {
     if (!Array.isArray(q.water) || !q.water.length || !window.polygonClipping) return null;
-    const id = q.key + "|" + (q.waterTs || 0);
+    const id = q.key + "|" + (q.waterTs || 0) + "|" + (vrij || 0);
     if (!insteekCache.has(id)) {
       let r = null;
-      try { r = Perceel.totInsteek(q.geometry, q.water, polygonClipping); } catch (e) { r = null; }
+      try { r = Perceel.totInsteek(q.geometry, q.water, polygonClipping, { vrij }); } catch (e) { r = null; }
       insteekCache.set(id, r);
     }
     return insteekCache.get(id);
@@ -479,9 +480,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const water = autoNat.length ? { m: autoM, breedte: typeVan("nat").st[stap], kant: wsOk ? ws(stap) : null, hoofd: wsOk && stap ? ws(0) : null, rand: autoM * typeVan("nat").st[stap] } : null;
     // Langs water erbij (q.extraWater m): BRP-grens al teruggelegd, maar er wordt dichter bij het water geteeld
     const natM = Object.entries(per).reduce((a, [id, m]) => a + (typeVan(id).st[0] > 0 ? m : 0), 0);
-    const ti = totInsteek(q);
-    const extra = q.extraWater === "insteek" ? (ti ? ti.m2 / 10000 : 0) : natM * (typeof q.extraWater === "number" ? q.extraWater : 0) / 10000;
-    return { per, lengte, hoofd: stappen[0].af, af: Math.min(stappen[stap].af, q.ha), stap, stappen, max, water, natM, extra, ti };
+    // Tot de insteek: alles (gras), of bij spuiten tot de bufferbreedte van deze stap vanaf de insteek
+    const ti = totInsteek(q), vrij = typeVan("nat").st[stap], tiSp = q.extraWater === "insteekSpuit" ? totInsteek(q, vrij) : null;
+    const extra = q.extraWater === "insteek" ? (ti ? ti.m2 / 10000 : 0) : q.extraWater === "insteekSpuit" ? (tiSp ? tiSp.m2 / 10000 : 0)
+      : natM * (typeof q.extraWater === "number" ? q.extraWater : 0) / 10000;
+    return { per, lengte, hoofd: stappen[0].af, af: Math.min(stappen[stap].af, q.ha), stap, stappen, max, water, natM, extra, ti, vrij };
   }
   const m2Txt = v => Math.round(v).toLocaleString("nl-NL") + " m²";
   const nlM = v => String(v).replace(".", ",") + " m";
@@ -929,13 +932,14 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       }
       // Langs water erbij: 0 -> 1 -> 2 -> 3 m langs nat water, of tot de insteek (voor percelen waar de grens niet tot het water loopt)
       if (bf.natM || ti) {
-        const standen = (bf.natM ? [0, 1, 2, 3] : [0]).concat(ti ? ["insteek"] : []);
+        const standen = (bf.natM ? [0, 1, 2, 3] : [0]).concat(ti ? ["insteek", "insteekSpuit"] : []);
         const ew = standen.includes(q.extraWater) ? q.extraWater : 0;
         const r = document.createElement("div"), bt = document.createElement("button");
-        bt.type = "button"; bt.className = "btn klein"; bt.textContent = "Langs water erbij: " + (ew === "insteek" ? "tot insteek" : nlM(ew));
+        bt.type = "button"; bt.className = "btn klein";
+        bt.textContent = "Langs water erbij: " + (ew === "insteek" ? "tot insteek (gras)" : ew === "insteekSpuit" ? "spuiten, " + nlM(bf.vrij) + " van de insteek af" : nlM(ew));
         bt.addEventListener("click", () => { q.extraWater = standen[(standen.indexOf(ew) + 1) % standen.length]; bewaar(); teken(); });
         r.appendChild(bt);
-        if (ew) { const t = document.createElement("span"); t.textContent = " + " + m2Txt(bf.extra * 10000) + (ew === "insteek" ? " tot de insteek" : " (" + mTxt(bf.natM) + " × " + nlM(ew) + ")") + ", perceel " + haTxt(q.ha) + " ha"; r.appendChild(t); }
+        if (ew) { const t = document.createElement("span"); t.textContent = " + " + m2Txt(bf.extra * 10000) + (ew === "insteek" ? " tot de insteek" : ew === "insteekSpuit" ? " tot " + nlM(bf.vrij) + " van de insteek" : " (" + mTxt(bf.natM) + " × " + nlM(ew) + ")") + ", perceel " + haTxt(q.ha) + " ha"; r.appendChild(t); }
         maakDetail().appendChild(r);
       }
       // Spuitsporen: los perceel hier, percelen in een kavel bij de kavel

@@ -1,4 +1,4 @@
-// perceel.js versie 34 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 35 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -494,10 +494,11 @@
   // Strook tussen de perceelrand en de insteek (water + talud samen), buiten het perceel: daar zaai je bijv. gras tot de insteek.
   // Langs de randstukjes o.zijden (keys; standaard alle) om de meter loodrecht naar buiten kijken hoe ver de insteek ligt,
   // tot o.max m (standaard 10); ligt er verder geen water, dan telt dat stuk niet. Droge sloten tellen ook (ook daar zaai je tot de insteek).
+  // o.vrij (m): zoveel van de insteek afblijven (spuiten: de bufferstrook), de strook loopt dan tot daar.
   // Geeft { m2, lengte (m rand met een strook), breedte (gemiddeld, m), max (breedste, m), geometry (MultiPolygon) }.
   function totInsteek(geometry, water, clip, o) {
     o = o || {};
-    const max = o.max || 10, leeg = { m2: 0, lengte: 0, breedte: 0, max: 0, geometry: { type: "MultiPolygon", coordinates: [] } };
+    const max = o.max || 10, vrij = o.vrij > 0 ? o.vrij : 0, leeg = { m2: 0, lengte: 0, breedte: 0, max: 0, geometry: { type: "MultiPolygon", coordinates: [] } };
     if (!polygonen(geometry).length || !water || !water.length) return leeg;
     const v = vlak(geometry);
     const inM = w => polygonen(w.geometry).map(rings => rings.map(r => r.map(v.m)));
@@ -535,7 +536,7 @@
       const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       if (binnen([mid[0] + n[0] * 0.3, mid[1] + n[1] * 0.3], perceel)) n = [-n[0], -n[1]]; // naar buiten
       const N = Math.max(2, Math.ceil(l)), pt = [], g = [];
-      for (let k = 0; k <= N; k++) { const p = [a[0] + (b[0] - a[0]) * k / N, a[1] + (b[1] - a[1]) * k / N]; pt.push(p); const t = straal(p, n); g.push(t !== null && t > 0.2 ? t : 0); }
+      for (let k = 0; k <= N; k++) { const p = [a[0] + (b[0] - a[0]) * k / N, a[1] + (b[1] - a[1]) * k / N]; pt.push(p); const t = straal(p, n); g.push(t !== null && t - vrij > 0.2 ? t - vrij : 0); }
       // Aaneengesloten stukken met een strook: rand heen, insteek terug
       for (let i = 0; i <= N; i++) {
         if (!g[i]) continue;

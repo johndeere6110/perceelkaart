@@ -245,7 +245,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 68</div>
+  <div class="voet">versie 69</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1072,8 +1072,16 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     }
     if (naamActief) {
       const m = document.createElement("div"); m.className = "meta";
-      m.textContent = "Bezig met " + naamActief + ": wat je verandert wordt vanzelf onder die naam bewaard.";
+      m.textContent = "✓ Bewaard onder " + naamActief + ". Wat je nu verandert, wordt vanzelf bijgewerkt.";
       const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
+      // Afronden: kaart leeg, de naam blijft bewaard; daarna percelen voor de volgende naam aantikken
+      const klaar = kn("Klaar met " + naamActief, () => {
+        const was = naamActief; bewaarNaam(); naamActief = null; store.set("kaartNaamActief", null);
+        sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
+        say(was + " is bewaard. Tik percelen aan voor de volgende naam, of tik een naam om hem terug te halen.");
+      });
+      klaar.setAttribute("aria-pressed", "true");
+      r.appendChild(klaar);
       r.appendChild(kn("Naam weghalen", e => {
         if (!armed(e.currentTarget, "Tik nog eens om " + naamActief + " weg te halen")) return;
         const was = naamActief; namen = namen.filter(x => x.naam !== was); naamActief = null; store.set("kaartNaamActief", null); zetNamen(); teken();
@@ -1094,6 +1102,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       });
       inp.addEventListener("keydown", ev => { if (ev.key === "Enter") b.click(); });
       r.append(inp, b); box.appendChild(r);
+    } else if (namen.length) {
+      const m = document.createElement("div"); m.className = "meta";
+      m.textContent = "Tik een naam om zijn percelen te zien, of tik percelen aan voor een nieuwe naam.";
+      box.appendChild(m);
     }
     box.hidden = !box.childNodes.length;
   }

@@ -69,6 +69,10 @@ header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-
 .namen input { flex: 1; min-width: 0; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 16px; padding: 0 8px; outline: none; }
 .namen input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .namen .meta { margin-top: 6px; }
+.namenlijst { margin-top: 4px; }
+.namenlijst li { cursor: pointer; }
+.namenlijst .nr { color: var(--accent); font-weight: 700; }
+.namenlijst li.actief .name { color: var(--accent); font-weight: 700; }
 .btn { flex: 1; min-height: 52px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 17px "Barlow", system-ui, sans-serif; }
 a.btn.link { display: flex; align-items: center; justify-content: center; text-decoration: none; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -245,7 +249,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 69</div>
+  <div class="voet">versie 70</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1059,16 +1063,35 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const box = $("namenBox"); box.innerHTML = "";
     const kn = (t, f, pressed) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = t; if (pressed != null) b.setAttribute("aria-pressed", pressed); b.addEventListener("click", f); return b; };
     if (namen.length) {
-      const lijst = document.createElement("div"); lijst.className = "lijst";
+      // Namenlijst: per naam het aantal percelen en de ha; tik een regel om die percelen op de kaart te zetten
+      const kop = document.createElement("div"); kop.className = "lbl2"; kop.textContent = "Namen";
+      const ul = document.createElement("ul"); ul.className = "log namenlijst";
       namen.slice().sort((a, b) => a.naam.localeCompare(b.naam, "nl")).forEach(n => {
-        lijst.appendChild(kn(n.naam + " · " + n.sel.length, e => {
-          if (n.naam === naamActief) { laadNaam(n.naam); return; }
-          // Niet bewaarde percelen op de kaart gaan weg: eerst bevestigen
-          if (!naamActief && sel.length && !armed(e.currentTarget, "Kaart wordt vervangen, tik nog eens")) return;
+        const li = document.createElement("li"), actief = n.naam === naamActief;
+        if (actief) li.className = "actief";
+        const nr = document.createElement("div"); nr.className = "nr"; nr.textContent = actief ? "✓" : "";
+        const go = document.createElement("button"); go.type = "button"; go.className = "go";
+        go.setAttribute("aria-label", "Toon de percelen van " + n.naam);
+        const nm = document.createElement("div"); nm.className = "name"; nm.textContent = n.naam;
+        const mt = document.createElement("div"); mt.className = "meta";
+        const kv = (n.kavels || []).length;
+        mt.textContent = n.sel.length + (n.sel.length === 1 ? " perceel" : " percelen") + (kv ? ", " + kv + (kv === 1 ? " kavel" : " kavels") : "") + (actief ? " · nu op de kaart" : "");
+        go.append(nm, mt);
+        const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(haGeheel(n.sel)) + " ha";
+        li.append(nr, go, w, document.createElement("span"));
+        li.addEventListener("click", () => {
+          if (actief) { laadNaam(n.naam); return; }
+          // Niet bewaarde percelen op de kaart gaan weg: eerst bevestigen (tweede tik op dezelfde regel binnen 3 s)
+          if (!naamActief && sel.length && li.dataset.armed !== "1") {
+            li.dataset.armed = "1"; const oud = mt.textContent; mt.textContent = "Je percelen op de kaart worden vervangen: tik nog eens"; mt.style.color = "var(--warn)";
+            setTimeout(() => { li.dataset.armed = ""; mt.textContent = oud; mt.style.color = ""; }, 3000);
+            return;
+          }
           laadNaam(n.naam);
-        }, n.naam === naamActief));
+        });
+        ul.appendChild(li);
       });
-      box.appendChild(lijst);
+      box.append(kop, ul);
     }
     if (naamActief) {
       const m = document.createElement("div"); m.className = "meta";

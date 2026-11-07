@@ -253,7 +253,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 73</div>
+  <div class="voet">versie 74</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1007,7 +1007,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       del.setAttribute("aria-label", "Haal perceel " + (i + 1) + " weg");
       del.addEventListener("click", () => { sel.splice(i, 1); bewaar(); teken(); });
       // Bij een naam op de kaart alleen weghalen in Percelen wijzigen
-      li.append(nr, go, w, naamActief && !wijzigen ? document.createElement("span") : del); if (detail) li.appendChild(detail); ul.appendChild(li);
+      li.append(nr, go, w, naamActief && !wijzigen ? document.createElement("span") : del); if (detail) li.appendChild(detail);
+      // Het bekeken perceel bovenaan de lijst, dan hoef je het niet te zoeken
+      if (uitgelicht === q.key) ul.prepend(li); else ul.appendChild(li);
     });
     const kb = $("kavelBox"); kb.innerHTML = "";
     kavels.forEach(kv => {

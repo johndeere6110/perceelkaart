@@ -1,4 +1,4 @@
-// perceel.js versie 33 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 34 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -10,6 +10,7 @@
 //   Perceel.zoekWater(geometry) + Perceel.waterLangsZijden(geometry, water)   // randen langs BGT-water (taluds: .talud)
 //   Perceel.waterBijPerceel(geometry, water, clip)   // waterdelen bijgeknipt rond het perceel, om te bewaren
 //   Perceel.waterStrook(geometry, water, breedte, clip, { zijden })   // strook vanaf de insteek (talud), deel binnen het perceel (m²)
+//   Perceel.totInsteek(geometry, water, clip, { zijden, max })   // strook tussen perceelrand en insteek, buiten het perceel (m²)
 //   Perceel.sporen(geometry, breedte, { andereKant, buitenronde, clip })   // spuit-/strooisporen langs de langste zijde
 //     andereKant: het raster (en A en B) aan de overkant, door het verste punt; niet bij een eigen AB-lijn
 //     clip = polygon-clipping (optioneel): maakt de buitenronde exact, ook bij smalle armen en inhammen
@@ -488,6 +489,70 @@
         return { m2, vanTalud, vanLijn: m2 - vanTalud, geometry: { type: "MultiPolygon", coordinates: strook.map(poly => poly.map(r => r.map(v.ll))) } };
       } catch (e) { if (i === pogingen.length - 1) throw e; }
     }
+  }
+
+  // Strook tussen de perceelrand en de insteek (water + talud samen), buiten het perceel: daar zaai je bijv. gras tot de insteek.
+  // Langs de randstukjes o.zijden (keys; standaard alle) om de meter loodrecht naar buiten kijken hoe ver de insteek ligt,
+  // tot o.max m (standaard 10); ligt er verder geen water, dan telt dat stuk niet. Droge sloten tellen ook (ook daar zaai je tot de insteek).
+  // Geeft { m2, lengte (m rand met een strook), breedte (gemiddeld, m), max (breedste, m), geometry (MultiPolygon) }.
+  function totInsteek(geometry, water, clip, o) {
+    o = o || {};
+    const max = o.max || 10, leeg = { m2: 0, lengte: 0, breedte: 0, max: 0, geometry: { type: "MultiPolygon", coordinates: [] } };
+    if (!polygonen(geometry).length || !water || !water.length) return leeg;
+    const v = vlak(geometry);
+    const inM = w => polygonen(w.geometry).map(rings => rings.map(r => r.map(v.m)));
+    const perceel = polygonen(geometry).map(rings => rings.map(r => r.map(v.m)));
+    const sloten = water.filter(w => !w.talud).map(inM);
+    if (!sloten.length) return leeg;
+    const taluds = water.filter(w => w.talud).map(inM).filter(t => sloten.some(n => raakt(n, t, 0.5)));
+    let insteek = sloten.flat().concat(taluds.flat());
+    if (clip) { try { insteek = clip.union(...insteek); } catch (e) { /* dan los: de stralen raken dezelfde randen */ } }
+    // Punt binnen een lijst polygonen (even-oneven over alle ringen, dus gaten tellen mee)
+    const binnen = (p, P) => P.some(rings => {
+      let c = false;
+      rings.forEach(r => { for (let i = 0, j = r.length - 1; i < r.length; j = i++) if ((r[i][1] > p[1]) !== (r[j][1] > p[1]) && p[0] < (r[j][0] - r[i][0]) * (p[1] - r[i][1]) / (r[j][1] - r[i][1]) + r[i][0]) c = !c; });
+      return c;
+    });
+    // Afstand langs de straal p + t·n tot de eerste rand van de insteek (null: niet binnen max)
+    const straal = (p, n) => {
+      if (binnen(p, insteek)) return 0;
+      let best = null;
+      insteek.forEach(rings => rings.forEach(r => {
+        for (let i = 0; i < r.length - 1; i++) {
+          const a = r[i], b = r[i + 1], ex = b[0] - a[0], ey = b[1] - a[1], d = n[0] * ey - n[1] * ex;
+          if (Math.abs(d) < 1e-12) continue;
+          const t = ((a[0] - p[0]) * ey - (a[1] - p[1]) * ex) / d, u = ((a[0] - p[0]) * n[1] - (a[1] - p[1]) * n[0]) / d;
+          if (t >= 0 && t <= max && u >= 0 && u <= 1 && (best === null || t < best)) best = t;
+        }
+      }));
+      return best;
+    };
+    const keys = o.zijden ? new Set(o.zijden) : null, stroken = [];
+    let lengte = 0, breedst = 0;
+    zijden(geometry).filter(z => (!keys || keys.has(z.key)) && z.m >= 1).forEach(z => {
+      const a = v.m(z.a), b = v.m(z.b), l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      let n = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
+      const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (binnen([mid[0] + n[0] * 0.3, mid[1] + n[1] * 0.3], perceel)) n = [-n[0], -n[1]]; // naar buiten
+      const N = Math.max(2, Math.ceil(l)), pt = [], g = [];
+      for (let k = 0; k <= N; k++) { const p = [a[0] + (b[0] - a[0]) * k / N, a[1] + (b[1] - a[1]) * k / N]; pt.push(p); const t = straal(p, n); g.push(t !== null && t > 0.2 ? t : 0); }
+      // Aaneengesloten stukken met een strook: rand heen, insteek terug
+      for (let i = 0; i <= N; i++) {
+        if (!g[i]) continue;
+        let j = i; while (j < N && g[j + 1]) j++;
+        if (j > i) {
+          const ring = pt.slice(i, j + 1).concat(pt.slice(i, j + 1).map((p, k) => [p[0] + n[0] * g[i + k], p[1] + n[1] * g[i + k]]).reverse());
+          ring.push(ring[0]); stroken.push([ring]);
+          lengte += l * (j - i) / N; breedst = Math.max(breedst, ...g.slice(i, j + 1));
+        }
+        i = j;
+      }
+    });
+    if (!stroken.length) return leeg;
+    let vorm = stroken;
+    if (clip) { try { vorm = clip.difference(clip.union(...stroken), perceel, insteek); } catch (e) { vorm = stroken; } }
+    const m2 = vorm.reduce((t, p) => t + oppM(p), 0);
+    return { m2, lengte, breedte: lengte ? m2 / lengte : 0, max: breedst, geometry: { type: "MultiPolygon", coordinates: vorm.map(poly => poly.map(r => r.map(v.ll))) } };
   }
 
   // Losse AB-lijn (punten [lon, lat]): koers zoals sporen() hem geeft (meters oost/noord op de ellipsoïde rond het midden)
@@ -1068,5 +1133,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, koers, puntOpKoers, verschuifLijn, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
+  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, totInsteek, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, koers, puntOpKoers, verschuifLijn, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
 });

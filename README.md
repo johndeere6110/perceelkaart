@@ -19,6 +19,7 @@ Percelen kiezen op de kaart met het totaal in ha, bufferstroken langs water, spu
 - **Oevers aanwijzen:** zelf een rand omzetten naar nat of kort droogvallend (3 m), lang droogvallend (1 m) of droge sloot (0 m). Zelf aangewezen oevers rekenen vanaf de perceelrand.
 - Boven 4 % van het perceel wordt de strook smaller, zoals bij RVO (3 m → 1 m → 0,5 m).
 - **Langs water erbij** (per perceel, 0/1/2/3 m): ligt de BRP-grens al op de bufferstrook maar wordt er dichter bij het water geteeld, dan telt lengte waterkant × breedte bij de oppervlakte (voor zaaizaad e.d.; die strook valt wel in de bufferstrook).
+- **Tot de insteek:** na Water zoeken meet de app langs alle kanten van het perceel hoe ver de insteek van een sloot ligt (talud of water, tot 10 m; ook als die kant niet als oever gemarkeerd is). Die strook tussen perceelrand en insteek staat licht groen op de kaart, met m² en gemiddelde breedte. Zaai je tot de insteek (bijv. gras), zet dan **Langs water erbij** op **tot insteek**: die strook telt dan mee bij de oppervlakte.
 
 ## Spuiten en mais zaaien
 

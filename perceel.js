@@ -1,4 +1,4 @@
-// perceel.js versie 35 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 36 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -530,7 +530,8 @@
     };
     const keys = o.zijden ? new Set(o.zijden) : null, stroken = [];
     let lengte = 0, breedst = 0;
-    zijden(geometry).filter(z => (!keys || keys.has(z.key)) && z.m >= 1).forEach(z => {
+    // Alleen echte kanten (5 m of meer): vanuit de korte stukjes van een afgeronde hoek kijk je schuin over een dam of oprit
+    zijden(geometry).filter(z => (!keys || keys.has(z.key)) && z.m >= 5).forEach(z => {
       const a = v.m(z.a), b = v.m(z.b), l = Math.hypot(b[0] - a[0], b[1] - a[1]);
       let n = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
       const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];

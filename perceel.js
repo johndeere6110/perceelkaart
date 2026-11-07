@@ -1,4 +1,4 @@
-// perceel.js versie 39 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 40 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -1103,8 +1103,8 @@
   /* ---------- Regio met een nieuwer BRP-jaar ---------- */
   // PDOK geeft live alleen het laatste definitieve jaar. Het lopende jaar (concept) staat alleen in de grote download;
   // daaruit kan een regio geknipt worden in tegels (map met index.json + tegelbestanden, zie gebruikRegio).
-  // index.json: { jaar, status, datum, lon0, lat0, dLon, dLat, nx, ny, tegels: ["i_j", ...] }; tegel "i_j.json":
-  // { features: [{ id, bbox: [x1, y1, x2, y2], properties, geometry }] } (lon/lat).
+  // index.json: { jaar, status, datum, id, lon0, lat0, dLon, dLat, nx, ny, tegels: ["i_j", ...] }; tegel "i_j.json":
+  // compact { v: 2, p, f } (zie tegelUit), of { features: [{ id, bbox, properties, geometry }] } (lon/lat).
   let regio = null;
   function gebruikRegio(url) { regio = url ? { url: String(url).replace(/\/?$/, "/"), index: null, tegels: new Map() } : null; }
   async function regioZoek(lon, lat, o) {
@@ -1116,9 +1116,20 @@
     if (!ix) return null;
     const i = Math.floor((lon - ix.lon0) / ix.dLon), j = Math.floor((lat - ix.lat0) / ix.dLat), naam = i + "_" + j;
     if (i < 0 || j < 0 || i >= ix.nx || j >= ix.ny || !ix.tegels.includes(naam)) return null;
-    if (!regio.tegels.has(naam)) regio.tegels.set(naam, json(regio.url + naam + ".json").catch(() => { regio.tegels.delete(naam); return null; }));
-    const t = await regio.tegels.get(naam);
-    return t && Array.isArray(t.features) ? t.features : null;
+    if (!regio.tegels.has(naam)) regio.tegels.set(naam, json(regio.url + naam + ".json").then(t => tegelUit(t, ix)).catch(() => { regio.tegels.delete(naam); return null; }));
+    return regio.tegels.get(naam);
+  }
+  // Tegel -> features. v 2 (compact): { p: [eigenschappen], f: [[fid, bbox, p-index, [[ring]]]] } met hele getallen in
+  // 1e-7 graad, per ring het eerste punt en daarna verschillen (zonder sluitpunt). Anders (v 1): { features }.
+  function tegelUit(t, ix) {
+    if (!t) return null;
+    if (t.v !== 2) return Array.isArray(t.features) ? t.features : null;
+    const ring = r => { const uit = []; let x = 0, y = 0; for (let i = 0; i < r.length; i += 2) { x += r[i]; y += r[i + 1]; uit.push([x / 1e7, y / 1e7]); } uit.push(uit[0].slice()); return uit; };
+    return t.f.map(([fid, bb, pi, g]) => {
+      const polys = g.map(poly => poly.map(ring));
+      return { id: (ix.id || "regio:") + fid, bbox: bb.map(v => v / 1e7), properties: t.p[pi] || {},
+        geometry: polys.length === 1 ? { type: "Polygon", coordinates: polys[0] } : { type: "MultiPolygon", coordinates: polys } };
+    });
   }
 
   // Zoek het perceel op een punt: eerst online, bij geen verbinding uit de opgeslagen percelen

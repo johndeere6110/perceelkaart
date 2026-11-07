@@ -8,5 +8,5 @@ Web-app om percelen te kiezen op de kaart (PDOK BRP gewaspercelen), het totaal i
 - Gebruik geen alert() of confirm(); gebruik armed() en een hint-tekst.
 - Bij elke wijziging: verhoog het versienummer onderaan index.html ("versie 1" -> 2 enz., in de .voet) én in sw.js (perceelkaart-v1 -> v2), anders krijgen geïnstalleerde apps de update niet.
 - Eigen app-identiteit: manifest.webmanifest met "id": "/perceelkaart/". Niet veranderen, anders ziet de telefoon hem als een andere app. De Zaaihulp heeft "/zaaihulp/".
-- brp2026/ bevat tegels met de concept-BRP van het lopende jaar voor één regio (index.json + i_j.json), gemaakt met tools/brp-regio.py uit de PDOK-download. Verversen: script opnieuw draaien met hetzelfde RD-vak. Is het jaar definitief live in PDOK, dan kan de map weg (en de regel Perceel.gebruikRegio in index.html).
+- brp2026/ bevat tegels met de concept-BRP van het lopende jaar voor één regio (index.json + i_j.json, compact formaat v2: zie tools/brp-regio.py en tegelUit in perceel.js), gemaakt met tools/brp-regio.py uit de PDOK-download. Houd de map klein: GitHub Pages brak bij 100 MB af op de 10-minutengrens. Verversen: script opnieuw draaien met hetzelfde RD-vak. Is het jaar definitief live in PDOK, dan kan de map weg (en de regel Perceel.gebruikRegio in index.html).
 - Push direct naar main, zonder pull request.

@@ -259,7 +259,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 79</div>
+  <div class="voet">versie 80</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -547,10 +547,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   function nettoUitleg(q, bf) {
     if (!bf.lengte && !bf.extra) return Array.isArray(q.water) ? "netto\ngeen water langs de rand" : "bufferstrook nog niet bekend";
     const delen = [];
-    if (bf.af >= 0.0005) delen.push("− strook " + haTxt(bf.af));
+    if (bf.af >= 0.0005) delen.push("− bufferstrook " + haTxt(bf.af));
     if (bf.extra) delen.push("+ langs water " + haTxt(bf.extra));
     if (delen.length) return "netto\nbruto " + haTxt(q.ha) + "\n" + delen.join("\n");
-    return bf.natM ? "netto\nstrook ligt buiten het perceel" : "netto\ngeen strook (droge sloot)";
+    return bf.natM ? "netto\nbufferstrook ligt buiten het perceel" : "netto\ngeen bufferstrook (droge sloot)";
   }
   const nlM = v => String(v).replace(".", ",") + " m";
   let oeverModus = false;
@@ -1044,7 +1044,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       nm.append(n1, n2);
       const bfl = leden.map(buffer), bruto = leden.reduce((t, q) => t + q.ha, 0), af = bfl.reduce((t, b) => t + b.af, 0), bij = bfl.reduce((t, b) => t + b.extra, 0);
       const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(bruto + bij - af) + " ha";
-      { const k = document.createElement("small"); k.textContent = af || bij ? "netto\nbruto " + haTxt(bruto) + (af ? "\n− strook " + haTxt(af) : "") + (bij ? "\n+ langs water " + haTxt(bij) : "") : "netto"; w.appendChild(k); }
+      { const k = document.createElement("small"); k.textContent = af || bij ? "netto\nbruto " + haTxt(bruto) + (af ? "\n− bufferstrook " + haTxt(af) : "") + (bij ? "\n+ langs water " + haTxt(bij) : "") : "netto"; w.appendChild(k); }
       kop.append(nm, w); box.appendChild(kop);
       // Pad of naad tussen de percelen: zit in de vorm voor de sporen, niet in de ha
       if (vorm) {

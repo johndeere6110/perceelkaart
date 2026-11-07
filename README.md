@@ -46,7 +46,7 @@ Twee knoppen, los aan/uit: **Spuiten** en **Mais zaaien**. Alleen de velden en t
 
 ## AB-lijn meten
 
-Tik A en B op de kaart, sleep ze (alles rekent live mee). Staan ze er allebei: een tik verplaatst het dichtstbijzijnde punt; staat één punt ver buiten beeld (bijv. van een oude lijn), dan komt dat punt naar je tik; staan ze allebei buiten beeld, dan begint een nieuwe lijn, tik coördinaten in (`52.68, 5.20` of `52,68 5,20`) of gebruik GPS. Je ziet de koers A → B en terug (4 decimalen, ware noorden), de afstand, het midden en de coördinaten, en optioneel dezelfde lijn een aantal meter naar links of rechts.
+Tik A en B op de kaart, sleep ze (alles rekent live mee). Staan ze er allebei: tik eerst op het blokje **A** of **B** en dan op de plek waar dat punt heen moet (zonder te kiezen verzet een tik niets). Staat één punt ver buiten beeld (bijv. van een oude lijn), dan komt dat punt naar je tik; staan ze allebei buiten beeld, dan begint een nieuwe lijn, tik coördinaten in (`52.68, 5.20` of `52,68 5,20`) of gebruik GPS. Je ziet de koers A → B en terug (4 decimalen, ware noorden), de afstand, het midden en de coördinaten, en optioneel dezelfde lijn een aantal meter naar links of rechts.
 
 **A+** (zoals op de GPS-kast): zet punt A en vul bij **A+ koers** een koers in die je gekregen hebt. De lijn wordt door A met die koers getrokken. Elke lijn wordt als stippellijn ver doorgetrokken, zodat je op de luchtfoto ziet of hij langs de rand of het pad loopt. Ligt A in een gekozen perceel, dan staat erbij hoeveel graden (en hoeveel meter aan het eind) de lijn afwijkt van de langste rechte kant. Ligt A in een perceel, dan kun je de lijn ook gebruiken als AB-lijn voor dat perceel.
 

@@ -93,6 +93,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .vrij .kort span { color: var(--muted); font-size: 14px; }
 .vrij .ab { margin-top: 6px; font-size: 15px; font-variant-numeric: tabular-nums; }
 .abl.vrijp { background: #e8590c; color: #fff; border-color: #fff; font-size: 15px; line-height: 22px; }
+.abl.vrijp.gekozen { background: #fff; color: #e8590c; border-color: #e8590c; box-shadow: 0 0 0 4px rgba(232, 89, 12, .45); }
 .hint { font-size: 15px; color: var(--muted); margin-top: 8px; min-height: 1.4em; }
 .hint.warn { color: var(--warn); font-weight: 600; }
 .advice { margin-top: 10px; background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
@@ -253,7 +254,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 75</div>
+  <div class="voet">versie 76</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1555,6 +1556,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       if (!vrijM[k]) {
         const m = vrijM[k] = L.marker([c[1], c[0]], { draggable: true, icon: L.divIcon({ className: "", html: '<div class="abl vrijp">' + t + "</div>", iconSize: [26, 26] }) });
         m.on("dragstart", () => { m._sleept = true; });
+        // Tik op A of B: dat punt kiezen, de volgende tik op de kaart zet het daar
+        m.on("click", () => {
+          vrijKies = vrijKies === k ? null : k; markeerKies();
+          say(vrijKies ? t + " gekozen: tik op de kaart waar " + t + " moet komen." : t + " niet meer gekozen.");
+        });
         m.on("drag", () => { const p = m.getLatLng(); vrij[k] = [p.lng, p.lat]; if (k === "a") zetAplus(); else vrij.k = ""; tekenVrij(); });
         m.on("dragend", () => { m._sleept = false; bewaarVrij(); tekenVrij(); });
         vrijLaag.addLayer(m);
@@ -1604,36 +1610,39 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       uit.appendChild(bt);
     }
   }
+  // Gekozen punt (a of b) na een tik op het blokje A of B; de volgende tik op de kaart zet het daar
+  let vrijKies = null;
+  const markeerKies = () => ["a", "b"].forEach(k => { const el = vrijM[k] && vrijM[k].getElement(); const d = el && el.querySelector(".abl"); if (d) d.classList.toggle("gekozen", vrijKies === k); });
   function vrijTik(ll) {
     const c = [ll.lng, ll.lat];
+    if (vrijKies && vrij.a && vrij.b) {
+      const k = vrijKies; vrij[k] = c; if (k === "a") zetAplus(); else vrij.k = "";
+      vrijKies = null; bewaarVrij(); tekenVrij(); markeerKies(); say((k === "a" ? "A" : "B") + " verplaatst.");
+      return;
+    }
     // A+ ingevuld: elke tik zet A, de lijn volgt de koers
     if (parse(vrij.k) != null) { vrij.a = c; zetAplus(); bewaarVrij(); tekenVrij(); return; }
     if (!vrij.a) vrij.a = c;
     else if (!vrij.b) vrij.b = c;
     else {
-      // Allebei gezet. Wat in beeld is telt: staat één punt ver weg buiten beeld (bijv. van een oude lijn), dan komt dat
-      // punt naar je tik, behalve vlak bij het punt in beeld (dat verplaats je dan). Allebei buiten beeld: nieuwe lijn.
+      // Allebei gezet en niets gekozen. Allebei buiten beeld (oude lijn ergens anders): nieuwe lijn.
       const zicht = map.getBounds(), inA = zicht.contains([vrij.a[1], vrij.a[0]]), inB = zicht.contains([vrij.b[1], vrij.b[0]]);
-      const px = p => map.latLngToContainerPoint(ll).distanceTo(map.latLngToContainerPoint([p[1], p[0]]));
       if (!inA && !inB) { vrij.a = c; vrij.b = null; bewaarVrij(); tekenVrij(); say("Nieuwe AB-lijn: A staat hier, tik nu B."); return; }
-      if (inA !== inB) {
-        const binnen = inA ? "a" : "b", buiten = inA ? "b" : "a";
-        if (px(vrij[binnen]) <= 40) vrij[binnen] = c; else vrij[buiten] = c;
-      } else {
-        const d = p => map.distance(ll, L.latLng(p[1], p[0]));
-        if (d(vrij.a) <= d(vrij.b)) vrij.a = c; else vrij.b = c;
-      }
+      // Eén punt buiten beeld (daar kun je niet op tikken): dat punt komt naar je tik
+      if (inA !== inB) vrij[inA ? "b" : "a"] = c;
+      // Allebei in beeld: niets verzetten zonder dat je A of B gekozen hebt
+      else { say("Tik eerst op A of B om hem te verplaatsen (of sleep hem).", true); return; }
     }
     bewaarVrij(); tekenVrij();
   }
   function setVrij(aan) {
     if (aan) { if (oeverModus) setOever(false); if (koppelModus) setKoppel(false); if (abModus) setAB(false); }
-    vrijModus = aan;
+    vrijModus = aan; vrijKies = null;
     $("bVrij").setAttribute("aria-pressed", aan);
     $("bVrij").textContent = aan ? "Klaar met AB-lijn" : "AB-lijn meten";
     $("vrijBox").hidden = !aan;
     $("map").classList.toggle("oever", aan);
-    say(aan ? "Tik A en B op de kaart (of GPS / intikken). Daarna kun je ze slepen; nog een tik verplaatst het dichtstbijzijnde punt." : "Tik op een perceel om het toe te voegen. Nog eens tikken haalt het weg.");
+    say(aan ? "Tik A en B op de kaart (of GPS / intikken). Daarna kun je ze slepen, of tik op A of B en dan op de nieuwe plek." : "Tik op een perceel om het toe te voegen. Nog eens tikken haalt het weg.");
     tekenVrij();
   }
   $("bVrij").addEventListener("click", () => setVrij(!vrijModus));

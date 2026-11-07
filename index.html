@@ -73,6 +73,7 @@ header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-
 .namendet summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 6px 0; }
 .namendet[open] summary { color: var(--ink); }
 .namen .binnen { margin: 6px 0 8px; }
+.log li.uitgelicht .name { color: #e8590c; font-weight: 700; }
 .namenlijst li { cursor: pointer; }
 .namenlijst .nr { color: var(--accent); font-weight: 700; }
 .namenlijst li.actief .name { color: var(--accent); font-weight: 700; }
@@ -252,7 +253,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 72</div>
+  <div class="voet">versie 73</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -353,6 +354,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   if (!Array.isArray(namen)) namen = [];
   namen = namen.filter(n => n && typeof n.naam === "string" && (Array.isArray(n.sel) || n.opKaart));
   let naamActief = store.get("kaartNaamActief", null);
+  // Staat er een naam op de kaart, dan is een tik bekijken (uitgelicht); toevoegen of weghalen alleen na Percelen wijzigen
+  let wijzigen = false, uitgelicht = null;
   // De naam die op de kaart staat, is niet dubbel bewaard: zijn percelen zijn de kaart (kaartTestSelectie)
   const opKaart = namen.find(n => n.opKaart);
   if (opKaart) naamActief = opKaart.naam;
@@ -873,6 +876,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const g = L.geoJSON(q.geometry, { style: stijl, interactive: false });
       g.bindTooltip(String(i + 1), { permanent: true, direction: "center", className: "pnr" });
       laag.addLayer(g);
+      if (uitgelicht === q.key) laag.addLayer(L.geoJSON(q.geometry, { style: { color: "#e8590c", weight: 6, fill: false }, interactive: false }));
       Perceel.zijden(q.geometry).filter(z => q.oever[z.key] != null).forEach(z => {
         const t = typeVan(q.oever[z.key]);
         laag.addLayer(L.polyline([[z.a[1], z.a[0]], [z.b[1], z.b[0]]], { color: t.c, weight: t.w, opacity: .95, dashArray: t.d || null, lineCap: "butt", interactive: false }));
@@ -881,6 +885,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const ul = $("lijst"); ul.innerHTML = "";
     sel.forEach((q, i) => {
       const li = document.createElement("li");
+      if (uitgelicht === q.key) li.className = "uitgelicht";
       const nr = document.createElement("div"); nr.className = "nr num"; nr.textContent = i + 1;
       const go = document.createElement("button"); go.type = "button"; go.className = "go";
       go.setAttribute("aria-label", "Toon perceel " + (i + 1) + " op de kaart");
@@ -996,12 +1001,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       if (kv) mt.textContent += (mt.textContent ? " · " : "") + kv.naam;
       if ((spuitAan || maisAan) && sb && !kv) { const d = spuitBlok(q.geometry, q, bewaar, sb); if (d) maakDetail().appendChild(d); }
       go.append(nm, mt);
-      go.addEventListener("click", () => map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
+      go.addEventListener("click", () => naamActief ? toonPerceel(i) : map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
       const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha + bf.extra) + " ha";
       const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "×";
       del.setAttribute("aria-label", "Haal perceel " + (i + 1) + " weg");
       del.addEventListener("click", () => { sel.splice(i, 1); bewaar(); teken(); });
-      li.append(nr, go, w, del); if (detail) li.appendChild(detail); ul.appendChild(li);
+      // Bij een naam op de kaart alleen weghalen in Percelen wijzigen
+      li.append(nr, go, w, naamActief && !wijzigen ? document.createElement("span") : del); if (detail) li.appendChild(detail); ul.appendChild(li);
     });
     const kb = $("kavelBox"); kb.innerHTML = "";
     kavels.forEach(kv => {
@@ -1058,6 +1064,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (!armed(e.currentTarget, "Tik nog eens om te wissen")) return;
     // Een actieve naam eerst loslaten: zijn percelen blijven bewaard
     bewaarNaam();
+    wijzigen = false; uitgelicht = null;
     const was = naamActief; naamActief = null; store.set("kaartNaamActief", null); zetNamen();
     sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
     say(was ? "Kaart leeg. De percelen van " + was + " blijven bewaard: tik de naam om ze terug te halen." : "Selectie gewist. Tik op een perceel om te beginnen.");
@@ -1079,6 +1086,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const n = namen.find(x => x.naam === naam);
     if (!n) return;
     bewaarNaam();
+    wijzigen = false; uitgelicht = null;
     naamActief = naam; store.set("kaartNaamActief", naam);
     sel = JSON.parse(JSON.stringify(n.sel || [])); kavels = JSON.parse(JSON.stringify(n.kavels || []));
     store.set("kaartTestSelectie", sel); store.set("kaartKavels", kavels); zetNamen();
@@ -1225,19 +1233,26 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     }
     if (naamActief) {
       const m = document.createElement("div"); m.className = "meta";
-      m.textContent = "✓ Bewaard onder " + naamActief + ". Wat je nu verandert, wordt vanzelf bijgewerkt.";
+      m.textContent = wijzigen ? "Percelen wijzigen: tik een perceel om het toe te voegen of weg te halen. Wordt vanzelf bewaard onder " + naamActief + "."
+        : "✓ Bewaard onder " + naamActief + ". Tik een perceel om het te bekijken; met Percelen wijzigen voeg je toe of haal je weg.";
       const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
       // Afronden: kaart leeg, de naam blijft bewaard; daarna percelen voor de volgende naam aantikken
       const klaar = kn("Klaar met " + naamActief, () => {
+        wijzigen = false; uitgelicht = null;
         const was = naamActief; bewaarNaam(); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
         sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
         say(was + " is bewaard. Tik percelen aan voor de volgende naam, of tik een naam om hem terug te halen.");
       });
       klaar.setAttribute("aria-pressed", "true");
       r.appendChild(klaar);
+      r.appendChild(kn(wijzigen ? "Klaar met wijzigen" : "Percelen wijzigen", () => {
+        wijzigen = !wijzigen; uitgelicht = null; teken();
+        say(wijzigen ? "Tik percelen aan om ze toe te voegen of weg te halen." : "Klaar met wijzigen. " + naamActief + " is bewaard.");
+      }, wijzigen));
       r.appendChild(kn("Delen", e => deel(e.currentTarget)));
       r.appendChild(kn("Naam weghalen", e => {
         if (!armed(e.currentTarget, "Tik nog eens om " + naamActief + " weg te halen")) return;
+        wijzigen = false; uitgelicht = null;
         const was = naamActief; namen = namen.filter(x => x.naam !== was); naamActief = null; store.set("kaartNaamActief", null); zetNamen(); teken();
         say(was + " is weggehaald. De percelen staan nog op de kaart, zonder naam.");
       }));
@@ -1251,6 +1266,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         const bestaat = namen.find(x => x.naam === naam);
         if (bestaat && !armed(e.currentTarget, naam + " overschrijven? Tik nog eens")) return;
         namen = namen.filter(x => x.naam !== naam).concat([{ naam, sel: [], kavels: [], ts: Date.now() }]);
+        wijzigen = false; uitgelicht = null;
         naamActief = naam; store.set("kaartNaamActief", naam); bewaarNaam(); teken();
         say(sel.length + (sel.length === 1 ? " perceel" : " percelen") + " bewaard onder " + naam + ". Tik de naam om ze later terug te halen.");
       });
@@ -1266,6 +1282,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 
   async function zoek(lat, lon) {
     if (map.getZoom() < 14) { map.setView([lat, lon], 16); say("Ingezoomd. Tik nog eens op het perceel."); return; }
+    // Naam op de kaart en niet aan het wijzigen: een tik laat alleen zien, er verandert niets
+    if (naamActief && !wijzigen) {
+      const i = sel.findIndex(q => Perceel.bevatPunt(q.geometry, lon, lat));
+      if (i >= 0) toonPerceel(i);
+      else say("Dit perceel hoort niet bij " + naamActief + ". Tik Percelen wijzigen om het toe te voegen.", true);
+      return;
+    }
     // Tik in een perceel dat al gekozen is: weghalen, zonder internet
     const al = sel.findIndex(q => Perceel.bevatPunt(q.geometry, lon, lat));
     if (al >= 0) {
@@ -1373,6 +1396,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       if (best && best.d <= 40) o = best.x;
     }
     return o || null;
+  }
+  // Eén perceel van de naam laten zien: oranje omlijnd, de kaart erheen, gewas en ha in de melding
+  function toonPerceel(i) {
+    const q = sel[i];
+    uitgelicht = q.key; teken();
+    map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 });
+    say("Perceel " + (i + 1) + " van " + naamActief + ": " + (q.gewas || "onbekend gewas") + ", " + haTxt(q.ha) + " ha" + (q.jaar ? " (BRP " + q.jaar + ")" : "") + ".");
   }
   function setOever(aan) {
     if (aan && vrijModus) setVrij(false);

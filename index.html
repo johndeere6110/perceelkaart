@@ -63,6 +63,11 @@ header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-
 }
 .row { display: flex; gap: 10px; }
 .namen { margin-top: 8px; }
+.tabs { display: flex; gap: 4px; margin: -4px 0 12px; border-bottom: 1px solid var(--line); }
+.tabs button { flex: 1; min-height: 46px; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); font: 600 17px "Barlow", system-ui, sans-serif; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+#paneelNamen .lbl2 { margin-top: 4px; }
+#namenHint:empty { display: none; }
 .namen .lijst { display: flex; flex-wrap: wrap; gap: 6px; }
 .namen .btn { flex: none; min-height: 40px; font-size: 15px; padding: 0 12px; }
 .namen .opslaan { display: flex; gap: 6px; margin-top: 6px; }
@@ -70,8 +75,6 @@ header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-
 .namen input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .namen .meta { margin-top: 6px; }
 .namenlijst { margin-top: 4px; }
-.namendet summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 6px 0; }
-.namendet[open] summary { color: var(--ink); }
 .namen .binnen { margin: 6px 0 8px; }
 .log li.uitgelicht .name { color: #e8590c; font-weight: 700; }
 .namenlijst li { cursor: pointer; }
@@ -193,6 +196,11 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" id="tabPerc" aria-selected="true">Percelen</button>
+    <button type="button" role="tab" id="tabNamen" aria-selected="false">Namen</button>
+  </div>
+  <div id="paneelPerc">
   <div class="row">
     <button type="button" class="btn" id="bLaag" aria-pressed="false">Luchtfoto</button>
     <button type="button" class="btn" id="bMij">Mijn locatie</button>
@@ -259,7 +267,12 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 80</div>
+  </div>
+  <div id="paneelNamen" class="namen" hidden>
+    <div class="hint" id="namenHint"></div>
+    <div id="namenLijstBox"></div>
+  </div>
+  <div class="voet">versie 81</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -269,7 +282,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 (function () {
   const $ = id => document.getElementById(id);
   const hint = $("hint"), info = $("info"), ruw = $("ruw");
-  const say = (t, warn) => { hint.textContent = t; hint.className = "hint" + (warn ? " warn" : ""); };
+  const say = (t, warn) => {
+    hint.textContent = t; hint.className = "hint" + (warn ? " warn" : "");
+    const nh = $("namenHint"); if (nh) { nh.textContent = t; nh.className = "hint" + (warn ? " warn" : ""); }
+  };
   const parse = v => { const n = parseFloat(String(v || "").replace(/\s/g, "").replace(",", ".")); return isFinite(n) ? n : null; };
   const mTxt = v => Math.round(v).toLocaleString("nl-NL") + " m";
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -1198,11 +1214,21 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     const d = leesDeel(location.hash);
     if (d) binnen = d;
   }
-  let namenOpen = store.get("kaartNamenOpen", false);
+  // Tabbladen: Percelen (kaart, percelen, spuiten en zaaien) en Namen (lijst, gedeelde link)
+  function toonTab(t) {
+    const namenTab = t === "namen";
+    $("tabPerc").setAttribute("aria-selected", !namenTab); $("tabNamen").setAttribute("aria-selected", namenTab);
+    $("paneelPerc").hidden = namenTab; $("paneelNamen").hidden = !namenTab;
+  }
+  $("tabPerc").addEventListener("click", () => toonTab("perc"));
+  $("tabNamen").addEventListener("click", () => toonTab("namen"));
+  if (binnen) toonTab("namen");
   function renderNamen() {
-    const box = $("namenBox"); box.innerHTML = "";
+    const box = $("namenBox"), lijstBox = $("namenLijstBox");
+    box.innerHTML = ""; lijstBox.innerHTML = "";
+    $("tabNamen").textContent = "Namen" + (namen.length ? " (" + namen.length + ")" : "");
     const kn = (t, f, pressed) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = t; if (pressed != null) b.setAttribute("aria-pressed", pressed); b.addEventListener("click", f); return b; };
-    // Gedeelde link binnengekomen: eerst vragen
+    // Tabblad Namen: gedeelde link die binnenkwam, de lijst, en een gedeelde link plakken
     if (binnen) {
       const d = binnen, kaart = document.createElement("div"); kaart.className = "advice binnen";
       const t = document.createElement("div");
@@ -1210,14 +1236,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
       const ja = kn("Toevoegen", () => haalDeel(d, ja)); ja.setAttribute("aria-pressed", "true");
       r.append(ja, kn("Niet nu", () => { binnen = null; try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {} teken(); }));
-      kaart.append(t, r); box.appendChild(kaart);
+      kaart.append(t, r); lijstBox.appendChild(kaart);
     }
-    {
-      // Namenlijst, uitklapbaar (altijd, ook leeg: daar plak je een gedeelde link): per naam het aantal percelen en de ha; tik een regel om die percelen op de kaart te zetten
-      const det = document.createElement("details"); det.className = "namendet"; det.open = namenOpen;
-      det.addEventListener("toggle", () => { namenOpen = det.open; store.set("kaartNamenOpen", namenOpen); });
-      const sum = document.createElement("summary");
-      sum.textContent = "Namen (" + namen.length + ")" + (naamActief ? " · op de kaart: " + naamActief : "");
+    if (namen.length) {
+      // Per naam het aantal percelen en de ha; tik een regel om die percelen op de kaart te zetten (tabblad Percelen)
       const ul = document.createElement("ul"); ul.className = "log namenlijst";
       namen.slice().sort((a, b) => a.naam.localeCompare(b.naam, "nl")).forEach(n => {
         const li = document.createElement("li"), actief = n.naam === naamActief;
@@ -1234,36 +1256,43 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         { const k = document.createElement("small"); k.textContent = "bruto"; w.appendChild(k); }
         li.append(nr, go, w, document.createElement("span"));
         li.addEventListener("click", () => {
-          if (actief) { laadNaam(n.naam); return; }
           // Niet bewaarde percelen op de kaart gaan weg: eerst bevestigen (tweede tik op dezelfde regel binnen 3 s)
-          if (!naamActief && sel.length && li.dataset.armed !== "1") {
+          if (!actief && !naamActief && sel.length && li.dataset.armed !== "1") {
             li.dataset.armed = "1"; const oud = mt.textContent; mt.textContent = "Je percelen op de kaart worden vervangen: tik nog eens"; mt.style.color = "var(--warn)";
             setTimeout(() => { li.dataset.armed = ""; mt.textContent = oud; mt.style.color = ""; }, 3000);
             return;
           }
-          laadNaam(n.naam);
+          laadNaam(n.naam); toonTab("perc"); window.scrollTo(0, 0);
         });
         ul.appendChild(li);
       });
+      lijstBox.appendChild(ul);
+    } else {
+      const m = document.createElement("div"); m.className = "meta";
+      m.textContent = "Nog geen namen. Kies percelen onder Percelen en tik daar Bewaar onder naam.";
+      lijstBox.appendChild(m);
+    }
+    {
       // Gedeelde link plakken (bijv. op een iPhone, waar een link in Safari opent en niet in de app)
+      const kop = document.createElement("div"); kop.className = "lbl2"; kop.textContent = "Gedeelde link van iemand anders";
       const pl = document.createElement("div"); pl.className = "opslaan";
       const inp = document.createElement("input"); inp.type = "text"; inp.placeholder = "Gedeelde link plakken"; inp.setAttribute("aria-label", "Gedeelde link plakken");
-      const b = kn("Ophalen", () => { const d = leesDeel(inp.value); if (!d) { say("Dat is geen gedeelde link van de Perceelkaart.", true); return; } binnen = d; namenOpen = true; teken(); });
+      const b = kn("Ophalen", () => { const d = leesDeel(inp.value); if (!d) { say("Dat is geen gedeelde link van de Perceelkaart.", true); return; } binnen = d; teken(); });
       pl.append(inp, b);
-      det.append(sum, ul, pl);
-      box.appendChild(det);
+      lijstBox.append(kop, pl);
     }
+    // Tabblad Percelen: de naam op de kaart (knoppen), of percelen bewaren onder een naam
     if (naamActief) {
       const m = document.createElement("div"); m.className = "meta";
       m.textContent = wijzigen ? "Percelen wijzigen: tik een perceel om het toe te voegen of weg te halen. Wordt vanzelf bewaard onder " + naamActief + "."
-        : "✓ Bewaard onder " + naamActief + ". Tik een perceel om het te bekijken; met Percelen wijzigen voeg je toe of haal je weg.";
+        : "✓ " + naamActief + " staat op de kaart. Tik een perceel om het te bekijken; met Percelen wijzigen voeg je toe of haal je weg.";
       const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
       // Afronden: kaart leeg, de naam blijft bewaard; daarna percelen voor de volgende naam aantikken
       const klaar = kn("Klaar met " + naamActief, () => {
         wijzigen = false; uitgelicht = null;
         const was = naamActief; bewaarNaam(); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
         sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
-        say(was + " is bewaard. Tik percelen aan voor de volgende naam, of tik een naam om hem terug te halen.");
+        say(was + " is bewaard (zie Namen). Tik percelen aan voor de volgende naam.");
       });
       klaar.setAttribute("aria-pressed", "true");
       r.appendChild(klaar);
@@ -1287,17 +1316,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         if (!naam) { say("Vul eerst een naam in.", true); inp.focus(); return; }
         const bestaat = namen.find(x => x.naam === naam);
         if (bestaat && !armed(e.currentTarget, naam + " overschrijven? Tik nog eens")) return;
-        namen = namen.filter(x => x.naam !== naam).concat([{ naam, sel: [], kavels: [], ts: Date.now() }]);
         wijzigen = false; uitgelicht = null;
+        namen = namen.filter(x => x.naam !== naam).concat([{ naam, sel: [], kavels: [], ts: Date.now() }]);
         naamActief = naam; store.set("kaartNaamActief", naam); bewaarNaam(); teken();
-        say(sel.length + (sel.length === 1 ? " perceel" : " percelen") + " bewaard onder " + naam + ". Tik de naam om ze later terug te halen.");
+        say(sel.length + (sel.length === 1 ? " perceel" : " percelen") + " bewaard onder " + naam + ". Je vindt ze terug onder Namen.");
       });
       inp.addEventListener("keydown", ev => { if (ev.key === "Enter") b.click(); });
       r.append(inp, b); box.appendChild(r);
-    } else if (namen.length) {
-      const m = document.createElement("div"); m.className = "meta";
-      m.textContent = (namenOpen ? "Tik een naam" : "Klap Namen open en tik een naam") + " om zijn percelen te zien, of tik percelen aan voor een nieuwe naam.";
-      box.appendChild(m);
     }
     box.hidden = !box.childNodes.length;
   }

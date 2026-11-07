@@ -1,9 +1,10 @@
-// perceel.js versie 36 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 37 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
 //   Perceel.zoekOpMijnLocatie().then(r => r.perceel.ha)        // GPS + PDOK, valt terug op opgeslagen percelen
 //   Perceel.zoekOpPunt(lon, lat)                                // zelfde, met een bekende positie
+//   Perceel.gebruikRegio("brp2026/")   // map met tegels van een nieuwer BRP-jaar (concept), eerst daarin zoeken
 //   Perceel.oppervlakteHa(geometry), Perceel.bevatPunt(geometry, lon, lat)
 //   Perceel.binnenPunt(geometry)   // [lon, lat] ruim binnen het perceel (ook bij een L-vorm), om op te zoeken
 //   Perceel.zijden(geometry), Perceel.rechteZijde(zijden, key)   // randstukjes en lengtes, voor bufferstroken
@@ -1080,18 +1081,41 @@
     return Array.isArray(data && data.features) ? data.features.filter(x => x && x.geometry) : [];
   }
 
+  /* ---------- Regio met een nieuwer BRP-jaar ---------- */
+  // PDOK geeft live alleen het laatste definitieve jaar. Het lopende jaar (concept) staat alleen in de grote download;
+  // daaruit kan een regio geknipt worden in tegels (map met index.json + tegelbestanden, zie gebruikRegio).
+  // index.json: { jaar, status, datum, lon0, lat0, dLon, dLat, nx, ny, tegels: ["i_j", ...] }; tegel "i_j.json":
+  // { features: [{ id, bbox: [x1, y1, x2, y2], properties, geometry }] } (lon/lat).
+  let regio = null;
+  function gebruikRegio(url) { regio = url ? { url: String(url).replace(/\/?$/, "/"), index: null, tegels: new Map() } : null; }
+  async function regioZoek(lon, lat, o) {
+    const f = o.fetch || (typeof fetch !== "undefined" ? fetch : null);
+    if (!regio || !f) return null;
+    const json = async u => { const r = await f(u); if (!r.ok) throw fout("server", "Regio: " + r.status); return r.json(); };
+    if (!regio.index) regio.index = json(regio.url + "index.json").catch(() => { regio.index = null; return null; });
+    const ix = await regio.index;
+    if (!ix) return null;
+    const i = Math.floor((lon - ix.lon0) / ix.dLon), j = Math.floor((lat - ix.lat0) / ix.dLat), naam = i + "_" + j;
+    if (i < 0 || j < 0 || i >= ix.nx || j >= ix.ny || !ix.tegels.includes(naam)) return null;
+    if (!regio.tegels.has(naam)) regio.tegels.set(naam, json(regio.url + naam + ".json").catch(() => { regio.tegels.delete(naam); return null; }));
+    const t = await regio.tegels.get(naam);
+    return t && Array.isArray(t.features) ? t.features : null;
+  }
+
   // Zoek het perceel op een punt: eerst online, bij geen verbinding uit de opgeslagen percelen
   async function zoekOpPunt(lon, lat, o) {
     o = opts(o);
-    // BRP: eerst expliciet het lopende jaar vragen (opts.jaar), want de nieuwste intekening staat er soms
-    // nog niet als standaard in. Kent PDOK die vraag niet of staat het jaar er nog niet in: gewoon verder.
-    if (!o.api || o.api === API) {
-      const jaar = o.jaar || new Date().getFullYear();
+    // BRP: eerst de regio met een nieuwer jaar (als die er is en het punt erin ligt), anders PDOK
+    if (regio && (!o.api || o.api === API)) {
       try {
-        const fj = await haalOp(lon, lat, Object.assign({}, o, { extra: "&jaar=" + jaar, timeout: Math.round(o.timeout / 2) }));
-        const hit = kies(fj.filter(f => String((f.properties || {}).jaar) === String(jaar)), lon, lat);
-        if (hit) { schrijfCache(o, fj.filter(f => !isLandschap(f))); return { perceel: perceelVan(hit, "online"), lon, lat }; }
-      } catch (e) { /* jaarvraag niet gelukt: hieronder de gewone vraag */ }
+        const fr = await regioZoek(lon, lat, o), hit = fr && kies(fr, lon, lat);
+        if (hit) {
+          // Alleen de buurpercelen bewaren voor zonder bereik, niet de hele tegel
+          const d = o.marge;
+          schrijfCache(o, fr.filter(x => !isLandschap(x) && (!x.bbox || (x.bbox[0] <= lon + d && x.bbox[2] >= lon - d && x.bbox[1] <= lat + d && x.bbox[3] >= lat - d))));
+          return { perceel: perceelVan(hit, "online"), lon, lat };
+        }
+      } catch (e) { /* regio niet gelukt: hieronder PDOK */ }
     }
     let features = null, netFout = null;
     try { features = await haalOp(lon, lat, o); } catch (e) { netFout = e; }
@@ -1135,5 +1159,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, totInsteek, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, koers, puntOpKoers, verschuifLijn, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
+  return { zoekOpMijnLocatie, zoekOpPunt, gebruikRegio, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, totInsteek, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, koers, puntOpKoers, verschuifLijn, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
 });

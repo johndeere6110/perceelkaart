@@ -10,7 +10,8 @@ Percelen kiezen op de kaart met het totaal in ha, bufferstroken langs water, spu
 - Tik op een perceel om het toe te voegen, nog eens tikken haalt het weg.
 - De oppervlakte wordt vlak in RD (Rijksdriehoeksstelsel) berekend, net als RVO en Boer&Bunder.
 - **Grenzen:** BRP-gewasperceel (zoals ingetekend bij de Gecombineerde opgave) of referentieperceel (RVO, uit de BGT: de kavel tot de slootkant). De knop zet ook de al gekozen percelen om. Per perceel zie je de andere grens met het verschil in ha en wissel je met één tik; oevers en gevonden water horen bij een grens en komen terug als je terugwisselt. Overlappen percelen (één referentieperceel over twee BRP-percelen), dan waarschuwt de app dat het totaal dubbel telt.
-- **Nieuwer BRP-jaar:** bij het openen (met bereik) kijkt de app of PDOK voor een bewaard perceel een nieuwer jaar heeft, met het verschil in ha en een knop **Overstappen**.
+- **BRP 2026 (concept):** PDOK geeft live alleen het laatste definitieve jaar (nu 2025). Voor Noord-Holland vanaf Alkmaar en Hoorn naar het noorden (Kop van Noord-Holland en West-Friesland, zonder Texel) zit de concept-BRP van 2026 in de app zelf, uitgeknipt uit de PDOK-download (map `brp2026/`, gemaakt met `tools/brp-regio.py`). Daar krijg je bij een tik het perceel van 2026 ("BRP 2026 (concept)"); daarbuiten, of als dat niet lukt, gewoon PDOK.
+- **Nieuwer BRP-jaar:** bij het openen (met bereik) kijkt de app of er voor een bewaard perceel een nieuwer jaar is (uit de regio hierboven, of zodra PDOK overstapt), met het verschil in ha en een knop **Overstappen**. Is de grens en het gewas hetzelfde gebleven, dan komt er geen melding.
 - **Percelen koppelen** maakt van percelen die tegen elkaar liggen één kavel: één buitenrand en de spuitsporen over het geheel. Een pad of naad tot ongeveer 3,5 m ertussen mag; dat telt niet mee in de ha. Ligt er een sloot tussen, dan wordt het geweigerd. Bufferstroken blijven per perceel (zoals RVO).
 
 ## Bufferstroken langs water

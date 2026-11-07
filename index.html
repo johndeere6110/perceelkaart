@@ -237,7 +237,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <summary>Ruwe data (voor het testen)</summary>
     <pre id="ruw">Nog niks opgehaald.</pre>
   </details>
-  <div class="voet">versie 65</div>
+  <div class="voet">versie 66</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -329,6 +329,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   const sleutel = p => (p.ref ? "ref:" : "") + (p.id != null ? "id:" + p.id : "g:" + JSON.stringify(p.geometry.coordinates).slice(0, 120));
 
   // Selectie: meerdere percelen bij elkaar opgeteld, wordt onthouden
+  // BRP van het lopende jaar (concept) voor een eigen regio, uitgeknipt uit de PDOK-download; daarbuiten PDOK
+  Perceel.gebruikRegio("brp2026/");
   let sel = store.get("kaartTestSelectie", []);
   if (!Array.isArray(sel)) sel = [];
   sel = sel.filter(q => q && q.geometry && typeof q.ha === "number");
@@ -390,6 +392,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         const r = await Perceel.zoekOpPunt(pt[0], pt[1]);
         if (r.perceel.bron !== "online" || !(Number(r.perceel.jaar) > oud) || !sel.includes(q) || brpVan(q) !== b) continue;
         r.perceel.ref = false;
+        // Zelfde grens en gewas als het bewaarde jaar: niets te melden
+        if (Math.abs(r.perceel.ha - b.ha) < 0.0005 && (r.perceel.gewas || "") === (b.gewas || "")) continue;
         q.nieuwer = nieuwPerceel(r.perceel); iets = true;
       } catch (e) { if (e && e.code === "offline") return; }
     }
@@ -839,7 +843,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const nm = document.createElement("div"); nm.className = "name"; nm.textContent = q.gewas || "Onbekend gewas";
       const mt = document.createElement("div"); mt.className = "meta";
       const bf = buffer(q);
-      mt.textContent = [q.ref ? "referentieperceel" : q.jaar ? "BRP " + q.jaar + (/voorlopig/i.test(q.status || "") ? " (voorlopig)" : "") : "", q.bron === "opgeslagen" ? "uit opgeslagen percelen" : ""].filter(Boolean).join(", ");
+      mt.textContent = [q.ref ? "referentieperceel" : q.jaar ? "BRP " + q.jaar + (/voorlopig|concept/i.test(q.status || "") ? " (" + q.status.toLowerCase() + ")" : "") : "", q.bron === "opgeslagen" ? "uit opgeslagen percelen" : ""].filter(Boolean).join(", ");
       // Bufferstrook- en spuituitleg onder de regel, over de volle breedte
       let detail = null;
       const maakDetail = () => detail || (detail = Object.assign(document.createElement("div"), { className: "detail" }));
@@ -866,7 +870,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         if (nw && bv) {
           const box = document.createElement("div"), vs = nw.ha - bv.ha;
           const t = document.createElement("div"); t.className = "warn4";
-          t.textContent = "BRP " + nw.jaar + " beschikbaar: " + haTxt(nw.ha) + " ha (" + (vs >= 0 ? "+" : "−") + haTxt(Math.abs(vs)) + " t.o.v. " + bv.jaar + ")" + (q.ref ? ", voor het BRP-perceel." : ".");
+          t.textContent = "BRP " + nw.jaar + (/concept|voorlopig/i.test(nw.status || "") ? " (" + nw.status.toLowerCase() + ")" : "") + " beschikbaar: " + haTxt(nw.ha) + " ha (" + (vs >= 0 ? "+" : "−") + haTxt(Math.abs(vs)) + " t.o.v. " + bv.jaar + ")" + (q.ref ? ", voor het BRP-perceel." : ".");
           const bt = document.createElement("button"); bt.type = "button"; bt.className = "btn klein"; bt.textContent = "Overstappen op " + nw.jaar;
           bt.addEventListener("click", () => {
             const water = q.ref ? false : q.wauto && Object.keys(q.wauto).length || Object.keys(q.oever || {}).length;

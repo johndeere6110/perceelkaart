@@ -176,6 +176,11 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
 .spuit .aanuit .btn { flex: 1; }
 .spuit .spoorKeus { display: flex; gap: 4px; }
 .spuit .spoorKeus .btn { min-height: 48px; padding: 0 8px; }
+.klap > summary { cursor: pointer; list-style: none; color: var(--accent); font-weight: 600; padding: 6px 0; overflow-wrap: anywhere; }
+.klap > summary::-webkit-details-marker { display: none; }
+.klap > summary::before { content: "▸ "; }
+.klap[open] > summary::before { content: "▾ "; }
+.klap > div, .klap > table { margin-top: 4px; }
 .sp .zaai { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .sp .zaai .btab td:nth-child(5) { font-weight: 600; color: var(--ink); }
 .sp .zaai .btab tr.buiten td { color: var(--warn); }
@@ -306,7 +311,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div class="hint" id="namenHint"></div>
     <div id="namenLijstBox"></div>
   </div>
-  <div class="voet">versie 85</div>
+  <div class="voet">versie 86</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -424,8 +429,6 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Versie 83 had "gedaan" bij de naam; nu per perceel
   let kmOm = false;
   namen.forEach(n => { if (n.km && n.km.gedaan) { const g = n.km.gedaan; (n.sel || []).forEach(q => { if (!(q.km && q.km.gedaan)) q.km = Object.assign({}, q.km, { gedaan: g }); }); delete n.km.gedaan; kmOm = true; } });
-  // Versie 84 had een l/ha voor de hele naam; nu alleen per perceel
-  namen.forEach(n => { if (n.km && n.km.lha != null) { const l = n.km.lha; (n.sel || []).forEach(q => { if (!(q.km && q.km.lha != null && q.km.lha !== "")) q.km = Object.assign({}, q.km, { lha: l }); }); delete n.km.lha; if (!Object.keys(n.km).length) delete n.km; kmOm = true; } });
   if (kmOm) { store.set("kaartTestSelectie", sel); try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(n => n.naam === naamActief ? Object.assign({ naam: n.naam, ts: n.ts, opKaart: true }, n.km ? { km: n.km } : {}) : n))); } catch (e) {} }
   // Eerder bewaard water was een hele rechthoek rond het perceel (honderden kB per perceel): eenmalig inkorten
   const kortWater = lijst => {
@@ -680,6 +683,17 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     return vorm;
   }
   // Spuituitleg voor een perceel of kavel; tekent ook de sporen
+  // Uitklapblokken (spuiten, zaaien, bufferstrook): onthouden welke open staan, anders klappen ze dicht bij elke teken()
+  const openBlok = new Set();
+  function klapBlok(id, kop) {
+    const det = document.createElement("details"); det.className = "klap";
+    if (openBlok.has(id)) det.open = true;
+    det.addEventListener("toggle", () => { if (det.open) openBlok.add(id); else openBlok.delete(id); });
+    const sum = document.createElement("summary"); sum.textContent = kop; det.appendChild(sum);
+    return det;
+  }
+  const blokId = obj => obj.key ? "p:" + obj.key : "k:" + obj.naam;
+  const xy5 = c => c[1].toFixed(5) + ", " + c[0].toFixed(5);
   function spuitBlok(geom, obj, opslaan, sb) {
     const s = Perceel.sporen(geom, sb, { andereKant: !!obj.spuitAnders, buitenronde, clip: window.polygonClipping, abPunt: obj.abPunt || null, abLijn: obj.abLijn || null, abRand: !!obj.abRand, sectie: parse(sectieEl.value) || 0 });
     if (!s) return null;
@@ -688,11 +702,17 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     if (!spuitAan) {
       tekenSporen(obj, s, true, true);
       const d = document.createElement("div"); d.className = "sp";
-      if (zi) d.appendChild(zaaiBlok(s, obj, opslaan, zi, sb));
+      // Dicht: alleen de AB-lijn; open: het zaaiplan
+      const det = klapBlok("s:" + blokId(obj), "AB-lijn: A " + xy5(s.a) + " · B " + xy5(s.b));
+      if (zi) det.appendChild(zaaiBlok(s, obj, opslaan, zi, sb));
+      d.appendChild(det);
       return d;
     }
     tekenSporen(obj, s, !!zi);
     const d = document.createElement("div"); d.className = "sp";
+    // Dicht: alleen de AB-lijn; open: buitenronde, gangen, secties, koers en de knoppen
+    const det = klapBlok("s:" + blokId(obj), "AB-lijn: A " + xy5(s.a) + " · B " + xy5(s.b));
+    d.appendChild(det);
     const r1 = document.createElement("div");
     const nEx = s.sporen.filter(x => x.extra).length;
     const gTxt = s.gangen + (s.gangen === 1 ? " gang" : " gangen") + " langs de lange kant (" + mTxt(s.abLengte) + ")" + (nEx ? ", waarvan " + nEx + " in het stuk aan de andere kant van de AB-lijn" : "");
@@ -716,28 +736,28 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const r3 = document.createElement("div"); r3.className = "ab";
     r3.innerHTML = "<strong>AB-lijn</strong> (" + (obj.abLijn ? "zelf getikt, " + (obj.abRand ? "spuit begint ernaast" : "is een spuitpad") : (obj.abPunt ? "zelf gekozen kant" : "langste rechte kant") + (obj.spuitAnders ? ", verschoven naar de overkant" : "")) + "): koers <strong>" + esc(gr(s.koers)) + "</strong> (van A naar B), terug " + esc(gr((s.koers + 180) % 360)) + "." +
       "<br>A: " + esc(xy(s.a)) + "<br>B: " + esc(xy(s.b));
-    d.append(r1, r2, r3);
-    if (s.ronde && !s.ronde.exact) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "De buitenronde kon bij deze vorm niet precies berekend worden. Kijk de tekening na."; d.appendChild(x); }
+    det.append(r1, r2, r3);
+    if (s.ronde && !s.ronde.exact) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "De buitenronde kon bij deze vorm niet precies berekend worden. Kijk de tekening na."; det.appendChild(x); }
     if (s.gangen && !obj.abLijn) {
       const kb = document.createElement("button"); kb.type = "button"; kb.className = "btn klein";
       kb.textContent = obj.spuitAnders ? "Begin weer aan kant A" : "Begin aan andere kant";
       kb.addEventListener("click", () => { obj.spuitAnders = !obj.spuitAnders; opslaan(); teken(); });
-      d.appendChild(kb);
+      det.appendChild(kb);
     }
     if (obj.abLijn) {
       // Zelf getikte lijn: is het een spuitpad (gangen erop) of de rand waar de spuit naast begint?
       const rk = document.createElement("button"); rk.type = "button"; rk.className = "btn klein"; rk.style.marginLeft = "6px";
       rk.textContent = obj.abRand ? "Lijn is een spuitpad" : "Spuit begint naast de lijn";
       rk.addEventListener("click", () => { obj.abRand = !obj.abRand; opslaan(); teken(); });
-      d.appendChild(rk);
+      det.appendChild(rk);
     }
     if (obj.abPunt || obj.abLijn) {
       const ak = document.createElement("button"); ak.type = "button"; ak.className = "btn klein"; ak.style.marginLeft = "6px";
       ak.textContent = "AB weer automatisch";
       ak.addEventListener("click", () => { delete obj.abPunt; delete obj.abLijn; delete obj.abRand; opslaan(); teken(); });
-      d.appendChild(ak);
+      det.appendChild(ak);
     }
-    if (zi) d.appendChild(zaaiBlok(s, obj, opslaan, zi, sb));
+    if (zi) det.appendChild(zaaiBlok(s, obj, opslaan, zi, sb));
     return d;
   }
   // Zaaiplan onder de spuituitleg: per zaaigang welke rijen dicht voor de spuitsporen
@@ -1007,15 +1027,19 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         if (ov >= 0) { const x = document.createElement("div"); x.className = "warn4"; x.textContent = "Ligt binnen perceel " + (ov + 1) + ": telt dubbel. Haal er één weg of wissel terug."; detail.appendChild(x); }
       }
       if (bf.lengte) {
-        maakDetail();
+        // Dicht: één regel met de strook die telt; open: oevers, tabel per stap, uitleg over het water
+        const bd = klapBlok("b:" + q.key, "Bufferstrook");
+        maakDetail().appendChild(bd);
         const lijst = Object.entries(bf.per).sort((x, y) => typeVan(y[0]).st[0] - typeVan(x[0]).st[0]);
         const kop = document.createElement("div");
         kop.textContent = lijst.map(([id, m]) => mTxt(m) + " oever, " + typeVan(id).t).join(" · ");
-        detail.appendChild(kop);
+        bd.appendChild(kop);
         const pct = v => (v / q.ha * 100).toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " %";
         // Eén type: breedte per stap tonen; gemengd: stapnaam
         const nat = lijst.filter(([id]) => typeVan(id).st[0] > 0);
         const label = x => nat.length === 1 ? nlM(typeVan(nat[0][0]).st[x.i]) : ["Hoofdregel", "1e herber.", "2e herber."][x.i];
+        bd.firstChild.textContent = bf.af >= 0.0005 ? "Bufferstrook " + haTxt(bf.af) + " ha (" + (nat.length === 1 ? label(bf.stappen[bf.stap]) : label(bf.stappen[bf.stap]).toLowerCase()) + " telt)"
+          : nat.length ? "Bufferstrook 0 ha (ligt buiten het perceel)" : "Bufferstrook: geen (droge sloot)";
         const tb = document.createElement("table"); tb.className = "btab";
         tb.innerHTML = "<tr><th>" + (nat.length === 1 ? "Breedte" : "Stap") + '</th><th class="r">Strook</th><th class="r">Deel perceel</th><th></th></tr>';
         bf.stappen.forEach(x => {
@@ -1026,15 +1050,15 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
           });
           tb.appendChild(tr);
         });
-        detail.appendChild(tb);
-        if (bf.stap) { const n = document.createElement("div"); n.textContent = "Meer dan 4 % (" + haTxt(bf.max) + " ha) mag niet, dan wordt de strook smaller."; detail.appendChild(n); }
-        if (bf.stap === 2 && bf.af > bf.max) { const n = document.createElement("div"); n.textContent = "Nog boven 4 %, maar smaller mag niet."; detail.appendChild(n); }
+        bd.appendChild(tb);
+        if (bf.stap) { const n = document.createElement("div"); n.textContent = "Meer dan 4 % (" + haTxt(bf.max) + " ha) mag niet, dan wordt de strook smaller."; bd.appendChild(n); }
+        if (bf.stap === 2 && bf.af > bf.max) { const n = document.createElement("div"); n.textContent = "Nog boven 4 %, maar smaller mag niet."; bd.appendChild(n); }
         if (bf.water) {
           const n = document.createElement("div"), w = bf.water;
           n.textContent = w.kant
             ? "Gevonden water (" + mTxt(w.m) + " rand): strook van " + nlM(w.breedte) + ", binnen het perceel " + m2Txt(w.kant.m2) + (w.hoofd ? " (bij " + nlM(typeVan("nat").st[0]) + ": " + m2Txt(w.hoofd.m2) + ")" : "") + ". Vanaf de perceelrand zou het " + m2Txt(w.rand) + " zijn."
             : "Gevonden water (" + mTxt(w.m) + " rand): de strook vanaf de insteek kon niet berekend worden, gerekend vanaf de perceelrand (" + m2Txt(w.rand) + "). Zoek het water opnieuw.";
-          detail.appendChild(n);
+          bd.appendChild(n);
           if (w.kant && w.kant.m2 > 0) {
             // Vanaf de insteek van het talud, of (geen talud in BGT) vanaf de waterlijn
             const k = w.kant, t = document.createElement("div"), lijn = Math.round(k.vanLijn || 0), talud = Math.round(k.vanTalud || 0);
@@ -1042,7 +1066,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
             t.textContent = !lijn ? "Gerekend vanaf de insteek van het talud (BGT)."
               : !talud ? waarom[0].toUpperCase() + waarom.slice(1) + ", gerekend vanaf de waterlijn." + (q.taludStatus === "ok" ? "" : " Zoek het water opnieuw.")
               : "Deels " + waarom + ": " + m2Txt(talud) + " vanaf de insteek van het talud, " + m2Txt(lijn) + " vanaf de waterlijn.";
-            detail.appendChild(t);
+            bd.appendChild(t);
           }
           // Talud (BGT ondersteunend waterdeel) licht bruin, de strook blauw
           if (Array.isArray(q.water)) q.water.filter(x => x.talud).forEach(x => laag.addLayer(L.geoJSON(x.geometry, { style: { stroke: false, fillColor: "#a0784a", fillOpacity: .4 }, interactive: false })));
@@ -1206,12 +1230,15 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     nettoMemo.set(q, v);
     return v;
   }
-  const lhaVan = q => q.km && q.km.lha != null && q.km.lha !== "" ? parse(q.km.lha) : null;
+  // l/ha van dit perceel: eigen waarde, anders de standaard van de naam (n.km.lha); null = niets ingevuld
+  const eigenLha = q => !!(q.km && q.km.lha != null && q.km.lha !== "");
+  const lhaVan = (q, n) => eigenLha(q) ? parse(q.km.lha) : n && n.km && n.km.lha ? parse(n.km.lha) : null;
+  let kmKaartVernieuw = null; // werkt het aangetikte perceel bij als de standaard verandert
   function naamTot(n) {
     const t = { l: 0, ha: 0, inv: 0, ged: 0, n: 0, onbekend: 0 };
     percelenVan(n).forEach(q => {
       t.n++;
-      const x = lhaVan(q);
+      const x = lhaVan(q, n);
       if (x != null) { t.inv++; if (x > 0) { const nt = nettoVan(q, n); t.l += x * nt; t.ha += nt; if (!Array.isArray(q.water)) t.onbekend++; } }
       if (q.km && q.km.gedaan) t.ged++;
     });
@@ -1222,14 +1249,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   function kmKort(n) {
     const t = naamTot(n), k = n.km || {};
     if (!t.inv && !t.ged && !k.wat) return "";
-    return [k.wat, t.l ? lTxt(t.l) : "", gedaanTxt(t)].filter(Boolean).join(" · ");
+    return [k.wat, parse(k.lha) != null ? lhaTxt(parse(k.lha)) : "", t.l ? lTxt(t.l) : "", gedaanTxt(t)].filter(Boolean).join(" · ");
   }
   // Alleen geldige velden overnemen (ook uit een gedeelde link)
   function kmSchoon(k, perceel) {
     if (!k || typeof k !== "object") return null;
     const o = {};
     if (k.wat && !perceel) o.wat = String(k.wat).slice(0, 60);
-    if (perceel && k.lha != null && String(k.lha).trim() !== "") o.lha = String(k.lha).trim().slice(0, 12);
+    if (k.lha != null && String(k.lha).trim() !== "") o.lha = String(k.lha).trim().slice(0, 12);
     if (k.noti) o.noti = String(k.noti).slice(0, 500);
     if (perceel && typeof k.gedaan === "number" && isFinite(k.gedaan)) o.gedaan = k.gedaan;
     return Object.keys(o).length ? o : null;
@@ -1243,7 +1270,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   function kmKaartTeken() {
     kmLaag.clearLayers();
     namen.forEach(n => percelenVan(n).forEach(q => {
-      const x = lhaVan(q), klaar = !!(q.km && q.km.gedaan), zelfde = kmKeus && kmKeus.naam === n.naam, gek = zelfde && kmKeus.key === q.key;
+      const x = lhaVan(q, n), klaar = !!(q.km && q.km.gedaan), zelfde = kmKeus && kmKeus.naam === n.naam, gek = zelfde && kmKeus.key === q.key;
       const kleur = klaar ? "#2b8a3e" : x > 0 ? "#2f7fd8" : x === 0 ? "#8a8f86" : "#E8B400";
       const g = L.geoJSON(q.geometry, { style: { color: gek ? "#e8590c" : kleur, weight: gek ? 6 : zelfde ? 3 : 2, fillColor: kleur, fillOpacity: zelfde ? .4 : .2 }, interactive: false });
       if (x != null) g.bindTooltip(x > 0 ? lTxt(x * nettoVan(q, n)) : "niet", { permanent: true, direction: "center", className: "kml" + (klaar ? " klaar" : "") });
@@ -1270,7 +1297,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const n = kmKeus && namen.find(x => x.naam === kmKeus.naam), lijst = n ? percelenVan(n) : [];
     const q = n && kmKeus.key ? lijst.find(x => x.key === kmKeus.key) : null;
     if (kmKeus && (!n || (kmKeus.key && !q))) kmKeus = null;
-    const kaart = $("kmKaart"); kaart.innerHTML = "";
+    const kaart = $("kmKaart"); kaart.innerHTML = ""; kmKaartVernieuw = null;
     if (!namen.length) kmSay("Nog geen namen. Kies percelen onder Percelen en bewaar ze onder een naam; dan vul je hier de kunstmest in.");
     else if (!kmKeus) kmSay("Tik een perceel op de kaart: je ziet van wie het is en vult de l/ha in.");
     else kmSay("");
@@ -1291,8 +1318,13 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const lb1 = el("label", "", "l/ha"), lb2 = el("label", "", "Notitie"); lb1.htmlFor = "kmpL"; lb2.htmlFor = "kmpN";
     vk.append(lb1, inp, lb2, ta);
     const lit = el("div", "liters");
-    const zetLit = () => { const x = lhaVan(q); lit.textContent = x > 0 ? lTxt(x * nt) : x === 0 ? "Niet" : "Vul de l/ha in"; if (x > 0) lit.appendChild(el("span", "", " voor dit perceel")); };
-    zetLit();
+    const zetLit = () => {
+      const x = lhaVan(q, n), std = n.km && n.km.lha ? parse(n.km.lha) : null;
+      inp.placeholder = std != null ? lhaTxt(std) + " (standaard)" : "bijv. 150 (0 = niet)";
+      lit.textContent = x > 0 ? lTxt(x * nt) : x === 0 ? "Niet" : "Vul de l/ha in";
+      if (x > 0) lit.appendChild(el("span", "", eigenLha(q) || std == null ? " voor dit perceel" : " voor dit perceel, met de standaard"));
+    };
+    zetLit(); kmKaartVernieuw = zetLit;
     const zet = () => {
       const km = kmSchoon(Object.assign({}, q.km, { lha: inp.value, noti: ta.value.trim() }), true);
       if (km) q.km = km; else delete q.km;
@@ -1316,13 +1348,18 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   function kmEigenaar(n, lijst, q) {
     const box = el("div", "advice eigenaar");
     box.appendChild(el("div", "wie", (q ? "Totaal " : "") + n.naam));
-    const k = n.km || {}, vk = el("div", "vk"), wat = el("input"), ta = el("textarea");
+    const k = n.km || {}, vk = el("div", "vk"), wat = el("input"), lha = el("input", "num"), ta = el("textarea");
+    lha.id = "kmLhaStd"; lha.type = "text"; lha.inputMode = "decimal"; lha.autocomplete = "off"; lha.placeholder = "bijv. 350"; lha.value = k.lha || "";
     wat.id = "kmWat"; wat.type = "text"; wat.maxLength = 60; wat.autocomplete = "off"; wat.placeholder = "bijv. UAN 30"; wat.value = k.wat || "";
     ta.id = "kmNoti"; ta.maxLength = 500; ta.placeholder = "wat de boer wil, voor alle percelen"; ta.value = k.noti || "";
-    const lb1 = el("label", "", "Middel"), lb2 = el("label", "", "Notitie"); lb1.htmlFor = "kmWat"; lb2.htmlFor = "kmNoti";
-    vk.append(lb1, wat, lb2, ta);
-    const zet = () => { const km = kmSchoon({ wat: wat.value.trim(), noti: ta.value.trim() }); if (km) n.km = km; else delete n.km; kmLater(n); };
-    wat.addEventListener("input", zet); ta.addEventListener("input", zet);
+    const lb1 = el("label", "", "Middel"), lb3 = el("label", "", "l/ha alle"), lb2 = el("label", "", "Notitie"); lb1.htmlFor = "kmWat"; lb3.htmlFor = "kmLhaStd"; lb2.htmlFor = "kmNoti";
+    vk.append(lb1, wat, lb3, lha, lb2, ta);
+    const uitleg = el("div", "meta", "l/ha alle geldt voor elk perceel van " + n.naam + ". Per perceel anders: tik het perceel aan en vul daar een eigen l/ha in (0 = niet).");
+    const zet = () => {
+      const km = kmSchoon({ wat: wat.value.trim(), lha: lha.value.trim(), noti: ta.value.trim() }); if (km) n.km = km; else delete n.km;
+      kmTotaal(n); kmRijen(n, lijst, q); if (kmKaartVernieuw) kmKaartVernieuw(); kmLater(n);
+    };
+    wat.addEventListener("input", zet); lha.addEventListener("input", zet); ta.addEventListener("input", zet);
     const uit = el("div", "uit"); uit.id = "kmTotUit";
     const ul = el("ul", "log"); ul.id = "kmRijen";
     const kn = el("div", "knoppen"), alles = el("button", "btn"), kaart = el("button", "btn", "Op de kaart");
@@ -1337,7 +1374,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     });
     kaart.addEventListener("click", () => zoomOp(lijst));
     kn.append(alles, kaart);
-    box.append(vk, uit, ul, kn);
+    box.append(vk, uitleg, uit, ul, kn);
     return box;
   }
   function kmTotaal(n) {
@@ -1361,10 +1398,10 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const ul = $("kmRijen"); if (!ul) return;
     ul.innerHTML = "";
     lijst.forEach((q, i) => {
-      const li = el("li"), x = lhaVan(q);
+      const li = el("li"), x = lhaVan(q, n);
       if (q === gek) li.className = "gekozen";
       const go = el("div");
-      go.append(el("div", "name", q.gewas || "Onbekend gewas"), el("div", "meta", haTxt(nettoVan(q, n)) + " ha · " + (x > 0 ? lhaTxt(x) : x === 0 ? "niet" : "nog niet ingevuld") + (q.km && q.km.noti ? " · " + q.km.noti : "")));
+      go.append(el("div", "name", q.gewas || "Onbekend gewas"), el("div", "meta", haTxt(nettoVan(q, n)) + " ha · " + (x > 0 ? lhaTxt(x) + (eigenLha(q) && n.km && n.km.lha ? " (eigen)" : "") : x === 0 ? "niet" : "nog niet ingevuld") + (q.km && q.km.noti ? " · " + q.km.noti : "")));
       li.append(el("div", "nr num", String(i + 1)), go, el("div", "w num", x > 0 ? lTxt(x * nettoVan(q, n)) : ""), el("div", "ok", q.km && q.km.gedaan ? "✓" : ""));
       li.addEventListener("click", () => { kmKeus = { naam: n.naam, key: q.key }; kmTab(); zoomOp([q]); });
       ul.appendChild(li);
@@ -1800,7 +1837,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const q = sel[i];
     uitgelicht = q.key; teken();
     map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 });
-    const x = lhaVan(q), n = namen.find(m => m.naam === naamActief);
+    const n = namen.find(m => m.naam === naamActief), x = lhaVan(q, n);
     const km = x == null ? "" : " Kunstmest: " + (x > 0 ? lhaTxt(x) + " = " + lTxt(x * nettoVan(q, n)) : "niet") + (q.km && q.km.gedaan ? ", gedaan" : "") + ".";
     say("Perceel " + (i + 1) + " van " + naamActief + ": " + (q.gewas || "onbekend gewas") + ", " + haTxt(q.ha) + " ha" + (q.jaar ? " (BRP " + q.jaar + ")" : "") + "." + km);
   }

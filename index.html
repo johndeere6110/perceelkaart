@@ -156,6 +156,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .leaflet-tooltip.kml { background: #fff; border: 0; color: #1C2318; font: 700 13px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; padding: 0 6px; border-radius: 999px; box-shadow: 0 0 0 1px #1C2318; }
 .leaflet-tooltip.kml.klaar { background: #2b8a3e; color: #fff; }
 .leaflet-tooltip.kml::before { display: none; }
+/* Uitgezoomd (onder 16) geen liters op de kaart: inzoomen om ze te zien */
+#map.verKm .leaflet-tooltip.kml { display: none; }
 a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; flex: none; }
 #paneelKm a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .af { color: var(--ink); font-weight: 600; margin-top: 2px; }
@@ -312,7 +314,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div class="hint" id="namenHint"></div>
     <div id="namenLijstBox"></div>
   </div>
-  <div class="voet">versie 87</div>
+  <div class="voet">versie 88</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -350,7 +352,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Uitgezoomd (onder 17) de kleine zaailabels verbergen
   // iPhone negeert user-scalable=no: knijpen buiten de kaart tegenhouden
   ["gesturestart", "gesturechange"].forEach(t => document.addEventListener(t, e => { if (!e.target.closest || !e.target.closest("#map")) e.preventDefault(); }, { passive: false }));
-  const zoomKlasse = () => $("map").classList.toggle("ver", map.getZoom() < 17);
+  const zoomKlasse = () => { $("map").classList.toggle("ver", map.getZoom() < 17); $("map").classList.toggle("verKm", map.getZoom() < 16); };
   map.on("zoomend", zoomKlasse); zoomKlasse();
 
   // PDOK-achtergronden (Web Mercator, geen key)
@@ -1269,13 +1271,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const kmBewaar = n => { if (n.naam === naamActief) bewaar(); else zetNamen(); };
   const kmLater = n => { clearTimeout(kmT); kmT = setTimeout(() => { kmBewaar(n); kmKaartTeken(); renderNamen(); }, 500); };
   const zoomOp = lijst => { if (lijst.length) map.fitBounds(L.geoJSON({ type: "FeatureCollection", features: lijst.map(q => ({ type: "Feature", properties: {}, geometry: q.geometry })) }).getBounds(), { padding: [24, 24], maxZoom: 17 }); };
-  // Kaart: geel = nog niet ingevuld, blauw = ingevuld (liters erop), grijs = niet, groen = gedaan; de gekozen naam feller
+  // Kaart: rand geel = nog niet ingevuld, blauw = ingevuld (liters erop), grijs = niet, groen = gedaan.
+  // Alles rustig (dunne rand, nauwelijks vulling); alleen het aangetikte perceel valt op.
   function kmKaartTeken() {
     kmLaag.clearLayers();
     namen.forEach(n => percelenVan(n).forEach(q => {
-      const x = lhaVan(q, n), klaar = !!(q.km && q.km.gedaan), zelfde = kmKeus && kmKeus.naam === n.naam, gek = zelfde && kmKeus.key === q.key;
+      const x = lhaVan(q, n), klaar = !!(q.km && q.km.gedaan), gek = kmKeus && kmKeus.naam === n.naam && kmKeus.key === q.key;
       const kleur = klaar ? "#2b8a3e" : x > 0 ? "#2f7fd8" : x === 0 ? "#8a8f86" : "#E8B400";
-      const g = L.geoJSON(q.geometry, { style: { color: gek ? "#e8590c" : kleur, weight: gek ? 6 : zelfde ? 3 : 2, fillColor: kleur, fillOpacity: zelfde ? .4 : .2 }, interactive: false });
+      const g = L.geoJSON(q.geometry, { style: { color: gek ? "#e8590c" : kleur, weight: gek ? 5 : 2, fillColor: gek ? "#e8590c" : kleur, fillOpacity: gek ? .25 : .06 }, interactive: false });
       if (x != null) g.bindTooltip(x > 0 ? lTxt(x * nettoVan(q, n)) : "niet", { permanent: true, direction: "center", className: "kml" + (klaar ? " klaar" : "") });
       kmLaag.addLayer(g);
     }));

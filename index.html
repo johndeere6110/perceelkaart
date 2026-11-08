@@ -141,6 +141,16 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .km .uit div { display: grid; grid-template-columns: 6.5em 1fr; gap: 8px; align-items: baseline; }
 .km .uit span { color: var(--muted); font-size: 14px; }
 .km .klein { min-height: 40px; font-size: 15px; margin-top: 8px; width: auto; padding: 0 12px; display: inline-flex; }
+.kmp { margin: 4px 0 8px; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--bg); }
+.kmp .vk { display: grid; grid-template-columns: 5em 1fr; gap: 8px; align-items: center; margin-top: 6px; }
+.kmp input, .kmp textarea { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: 16px "Barlow", system-ui, sans-serif; padding: 6px 8px; outline: none; box-sizing: border-box; }
+.kmp textarea { min-height: 60px; resize: vertical; }
+.kmp .lbl2 { margin-top: 0; color: var(--ink); font-weight: 600; }
+.kmp .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.log .kmr { color: var(--accent); font-weight: 600; }
+.log .kmr:empty { display: none; }
+.log .kmn { white-space: pre-line; }
+a.btn.klein, .kmp .klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; flex: none; }
 .km .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .af { color: var(--ink); font-weight: 600; margin-top: 2px; }
 .log .detail { grid-column: 2 / -1; font-size: 14px; color: var(--muted); margin-top: -2px; }
@@ -238,10 +248,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         <label for="kmWat">Wat</label><input id="kmWat" type="text" maxlength="60" autocomplete="off" placeholder="bijv. UAN 30">
         <label for="kmLha">l/ha</label><input id="kmLha" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 150">
         <label for="kmTank">Tank (l)</label><input id="kmTank" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 3000">
-        <label for="kmNoti">Notitie</label><textarea id="kmNoti" maxlength="500" placeholder="wat de boer wil, bijv. kopakkers niet"></textarea>
+        <label for="kmNoti">Notitie</label><textarea id="kmNoti" maxlength="500" placeholder="wat de boer wil (voor alle percelen)"></textarea>
       </div>
       <div class="uit" id="kmUit"></div>
-      <button type="button" class="btn klein" id="kmGedaan" aria-pressed="false">Gedaan</button>
+      <button type="button" class="btn klein" id="kmGedaan" aria-pressed="false">Alles gedaan</button>
     </details>
     <div class="row" style="margin-top:10px">
       <button type="button" class="btn" id="bWater">Water zoeken</button>
@@ -295,7 +305,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <div class="hint" id="namenHint"></div>
     <div id="namenLijstBox"></div>
   </div>
-  <div class="voet">versie 83</div>
+  <div class="voet">versie 84</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -410,6 +420,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   if (!Array.isArray(sel)) sel = [];
   sel = sel.filter(q => q && q.geometry && typeof q.ha === "number");
   namen.forEach(n => { if (n.opKaart) { n.sel = sel; delete n.opKaart; } });
+  // Versie 83 had "gedaan" bij de naam; nu per perceel
+  let kmOm = false;
+  namen.forEach(n => { if (n.km && n.km.gedaan) { const g = n.km.gedaan; (n.sel || []).forEach(q => { if (!(q.km && q.km.gedaan)) q.km = Object.assign({}, q.km, { gedaan: g }); }); delete n.km.gedaan; kmOm = true; } });
+  if (kmOm) { store.set("kaartTestSelectie", sel); try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(n => n.naam === naamActief ? Object.assign({ naam: n.naam, ts: n.ts, opKaart: true }, n.km ? { km: n.km } : {}) : n))); } catch (e) {} }
   // Eerder bewaard water was een hele rechthoek rond het perceel (honderden kB per perceel): eenmalig inkorten
   const kortWater = lijst => {
     let iets = false;
@@ -938,6 +952,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         laag.addLayer(L.polyline([[z.a[1], z.a[0]], [z.b[1], z.b[0]]], { color: t.c, weight: t.w, opacity: .95, dashArray: t.d || null, lineCap: "butt", interactive: false }));
       });
     });
+    // Aan het typen bij een perceel (kunstmest) en de lijst wordt opnieuw gemaakt: daarna in hetzelfde veld verder
+    const ae = document.activeElement, fokus = ae && ae.closest && ae.closest("#lijst .kmp") ? { tag: ae.tagName, van: ae.selectionStart, tot: ae.selectionEnd } : null;
     const ul = $("lijst"); ul.innerHTML = "";
     sel.forEach((q, i) => {
       const li = document.createElement("li");
@@ -948,6 +964,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const nm = document.createElement("div"); nm.className = "name"; nm.textContent = q.gewas || "Onbekend gewas";
       const mt = document.createElement("div"); mt.className = "meta";
       const bf = buffer(q);
+      nettoPer.set(q.key, q.ha + bf.extra - bf.af);
       mt.textContent = [q.ref ? "referentieperceel" : q.jaar ? "BRP " + q.jaar + (/voorlopig|concept/i.test(q.status || "") ? " (" + q.status.toLowerCase() + ")" : "") : "", q.bron === "opgeslagen" ? "uit opgeslagen percelen" : ""].filter(Boolean).join(", ");
       // Bufferstrook- en spuituitleg onder de regel, over de volle breedte
       let detail = null;
@@ -1057,6 +1074,12 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       if (kv) mt.textContent += (mt.textContent ? " · " : "") + kv.naam;
       if ((spuitAan || maisAan) && sb && !kv) { const d = spuitBlok(q.geometry, q, bewaar, sb); if (d) maakDetail().appendChild(d); }
       go.append(nm, mt);
+      // Kunstmest bij de naam: regel per perceel, notitie eronder; bij het bekeken perceel invullen
+      const kmr = kmRegel(q), kmEl1 = document.createElement("div"); kmEl1.className = "meta kmr"; kmEl1.textContent = kmr;
+      if (kmr || (naamActief && uitgelicht === q.key)) go.appendChild(kmEl1);
+      if (naamActief && q.km && q.km.noti) { const x = document.createElement("div"); x.className = "meta kmn"; x.textContent = "Notitie: " + q.km.noti; go.appendChild(x); }
+      if (naamActief && uitgelicht === q.key) maakDetail().prepend(kmPerceel(q, kmEl1));
+      if (!(naamActief && uitgelicht === q.key)) { const rk = routeKnop(q); if (rk) { const d = document.createElement("div"); d.appendChild(rk); maakDetail().appendChild(d); } }
       go.addEventListener("click", () => naamActief ? toonPerceel(i) : map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
       // Netto groot (bufferstrook eraf, langs water erbij erbij), klein eronder wat er van het bruto af of bij is
       const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha + bf.extra - bf.af) + " ha";
@@ -1069,6 +1092,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       // Het bekeken perceel bovenaan de lijst, dan hoef je het niet te zoeken
       if (uitgelicht === q.key) ul.prepend(li); else ul.appendChild(li);
     });
+    if (fokus) { const el = ul.querySelector(".uitgelicht .kmp " + fokus.tag.toLowerCase()); if (el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(fokus.van, fokus.tot); } catch (e) {} } }
     const kb = $("kavelBox"); kb.innerHTML = "";
     kavels.forEach(kv => {
       const vorm = kavelVorm(kv), leden = kv.leden.map(k => sel.find(q => q.key === k));
@@ -1106,7 +1130,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("totSub").textContent = (dubbel ? "Let op: percelen overlappen, het totaal telt dubbel. " : "") + (af || bij ? "Bruto " + haTxt(tot) + " ha" + (bij ? " + langs water " + haTxt(bij) + " ha" : "") + (af ? " − bufferstroken " + haTxt(af) + " ha" : "") + (om ? " (" + mTxt(om) + " oever)" : "")
       : om ? mTxt(om) + " oever, alleen droge sloten: geen bufferstrook." : "");
     $("info").hidden = !sel.length;
-    kmNetto = tot + bij - af; kmBekend = sel.every(q => Array.isArray(q.water));
+    kmBekend = sel.every(q => Array.isArray(q.water));
     if (kmVoor !== naamActief) { kmVoor = naamActief; kmVul(); }
     kmUit();
     if (!sel.length && oeverModus) setOever(false);
@@ -1166,76 +1190,141 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     if (sel.length) map.fitBounds(L.geoJSON({ type: "FeatureCollection", features: sel.map(q => ({ type: "Feature", properties: {}, geometry: q.geometry })) }).getBounds(), { padding: [24, 24], maxZoom: 17 });
     say(naam + ": " + sel.length + (sel.length === 1 ? " perceel, " : " percelen, ") + haTxt(haGeheel(sel)) + " ha.");
   }
-  // Vloeibare kunstmest per naam: wat, l/ha, notitie en gedaan (in n.km); de tank geldt voor alle namen.
-  // Gerekend met de netto ha zoals bovenaan (bufferstrook eraf, langs water erbij).
+  // Vloeibare kunstmest. Bij de naam (n.km): wat, standaard l/ha en een algemene notitie; de tank geldt voor alle namen.
+  // Per perceel (q.km): eigen l/ha (leeg = die van de naam, 0 = niet), notitie en gedaan.
+  // Gerekend met de netto ha per perceel (bufferstrook eraf, langs water erbij), zoals in de lijst.
   const kmEl = { wat: $("kmWat"), lha: $("kmLha"), noti: $("kmNoti") }, tankEl = $("kmTank");
   tankEl.value = store.get("kaartTankL", "");
-  let kmNetto = 0, kmBekend = true, kmVoor = undefined, kmT = 0;
+  let kmBekend = true, kmVoor = undefined, kmT = 0, kmPT = 0;
+  const nettoPer = new Map(); // netto ha per perceel, bijgewerkt in teken()
   const kmNaam = () => naamActief ? namen.find(x => x.naam === naamActief) : null;
   const datumTxt = ts => { const d = new Date(ts), nu = new Date(); return d.getDate() + "-" + (d.getMonth() + 1) + (d.getFullYear() !== nu.getFullYear() ? "-" + d.getFullYear() : ""); };
-  const lTxt = v => Math.round(v).toLocaleString("nl-NL") + " l";
+  const lTxt = v => Math.round(v).toLocaleString("nl-NL") + "\u00a0l";
   const getal1 = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  // Korte regel voor de namenlijst en de kop: "UAN 30, 150 l/ha · gedaan 12-5"
-  function kmKort(k) {
-    if (!k) return "";
-    const lha = parse(k.lha), a = [k.wat, lha > 0 ? String(k.lha).trim() + " l/ha" : ""].filter(Boolean).join(", ");
-    return [a, k.gedaan ? "✓ gedaan " + datumTxt(k.gedaan) : ""].filter(Boolean).join(" · ");
+  const lhaTxt = v => v.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + "\u00a0l/ha";
+  // l/ha voor dit perceel: eigen waarde, anders die van de naam
+  const lhaVan = (q, k) => q.km && q.km.lha != null && q.km.lha !== "" ? parse(q.km.lha) : parse((k || {}).lha);
+  const gedaanTxt = lijst => {
+    const g = lijst.filter(q => q.km && q.km.gedaan);
+    if (!g.length || !lijst.length) return "";
+    return g.length === lijst.length ? "✓ alles gedaan " + datumTxt(Math.max(...g.map(q => q.km.gedaan))) : g.length + " van " + lijst.length + " gedaan";
+  };
+  // Korte regel voor de namenlijst en de kop: "UAN 30, 150 l/ha · 2 van 4 gedaan"
+  function kmKort(n) {
+    const k = n.km || {}, lha = parse(k.lha), lijst = n.sel || [];
+    const a = [k.wat, lha > 0 ? lhaTxt(lha) : ""].filter(Boolean).join(", ");
+    return [a, (a || lijst.some(q => q.km)) ? gedaanTxt(lijst) : ""].filter(Boolean).join(" · ");
   }
   // Alleen geldige velden overnemen (ook uit een gedeelde link)
-  function kmSchoon(k) {
+  function kmSchoon(k, perceel) {
     if (!k || typeof k !== "object") return null;
     const o = {};
-    if (k.wat) o.wat = String(k.wat).slice(0, 60);
-    if (k.lha) o.lha = String(k.lha).slice(0, 12);
+    if (k.wat && !perceel) o.wat = String(k.wat).slice(0, 60);
+    if (k.lha != null && String(k.lha).trim() !== "") o.lha = String(k.lha).trim().slice(0, 12);
     if (k.noti) o.noti = String(k.noti).slice(0, 500);
-    if (typeof k.gedaan === "number" && isFinite(k.gedaan)) o.gedaan = k.gedaan;
+    if (perceel && typeof k.gedaan === "number" && isFinite(k.gedaan)) o.gedaan = k.gedaan;
     return Object.keys(o).length ? o : null;
   }
   function kmVul() {
     const k = (kmNaam() || {}).km || {};
     kmEl.wat.value = k.wat || ""; kmEl.lha.value = k.lha || ""; kmEl.noti.value = k.noti || "";
-    $("kmBox").open = !!(k.wat || k.lha || k.noti);
+    $("kmBox").open = !!(k.wat || k.lha || k.noti || sel.some(q => q.km));
   }
   function kmUit() {
     const n = kmNaam();
     $("kmBox").hidden = !n || !sel.length;
     if (!n) return;
-    const k = n.km || {}, lha = parse(k.lha), tank = parse(tankEl.value), uit = $("kmUit");
-    $("kmKop").textContent = "Vloeibare kunstmest" + (kmKort(k) ? ": " + kmKort(k) : "");
+    const k = n.km || {}, tank = parse(tankEl.value), uit = $("kmUit");
+    $("kmKop").textContent = "Vloeibare kunstmest" + (kmKort(n) ? ": " + kmKort(n) : "");
     uit.innerHTML = "";
     const rij = (a, b, c) => { const d = document.createElement("div"), x = document.createElement("span"), y = document.createElement("strong"); x.textContent = a; y.textContent = b; d.append(x, y); if (c) { const z = document.createElement("span"); z.textContent = " " + c; y.appendChild(z); } uit.appendChild(d); };
-    if (lha > 0) {
-      const tot = lha * kmNetto;
-      rij("Nodig", lTxt(tot), "voor " + haTxt(kmNetto) + " ha netto");
+    let tot = 0, ha = 0, mee = 0;
+    const lhas = new Set();
+    sel.forEach(q => { const l = lhaVan(q, k), nt = nettoPer.has(q.key) ? nettoPer.get(q.key) : q.ha; if (l > 0) { tot += l * nt; ha += nt; mee++; lhas.add(l); } });
+    if (mee) {
+      const niet = sel.length - mee;
+      rij("Nodig", lTxt(tot), "voor " + haTxt(ha) + " ha netto" + (niet ? ", " + niet + (niet === 1 ? " perceel" : " percelen") + " niet" : ""));
       if (tank > 0) {
         const vol = Math.floor(tot / tank + 1e-9), rest = tot - vol * tank;
         rij("Tanks", vol ? vol + (vol === 1 ? " volle tank" : " volle tanks") + (rest >= 1 ? " + " + lTxt(rest) : "") : lTxt(rest), vol ? "" : "minder dan een tank");
-        rij("Per tank", getal1(tank / lha) + " ha", "met een volle tank");
+        rij("Per tank", getal1(tank / (tot / ha)) + " ha", lhas.size > 1 ? "met een volle tank, gemiddeld" : "met een volle tank");
       }
       if (!kmBekend) { const w = document.createElement("div"); w.className = "warn4"; w.style.display = "block"; w.textContent = "Nog niet bij elk perceel water gezocht: de bufferstrook zit er misschien nog niet af."; uit.appendChild(w); }
     } else { const m = document.createElement("div"); m.className = "meta"; m.style.display = "block"; m.textContent = "Vul l/ha in, dan reken ik uit hoeveel je nodig hebt" + (tank > 0 ? " en hoeveel tanks." : "; met de tank erbij ook het aantal tanks."); uit.appendChild(m); }
-    const g = $("kmGedaan");
-    if (g.dataset.armed !== "1") g.textContent = k.gedaan ? "✓ Gedaan op " + datumTxt(k.gedaan) : "Gedaan";
-    g.setAttribute("aria-pressed", !!k.gedaan);
+    { const m = document.createElement("div"); m.className = "meta"; m.style.display = "block"; m.textContent = "Per perceel een andere l/ha, een notitie of gedaan: tik het perceel aan."; uit.appendChild(m); }
+    const g = $("kmGedaan"), alles = sel.length && sel.every(q => q.km && q.km.gedaan);
+    if (g.dataset.armed !== "1") g.textContent = alles ? "✓ Alles gedaan" : "Alles gedaan";
+    g.setAttribute("aria-pressed", !!alles);
   }
-  // Typen: meteen rekenen, bewaren even later (alle namen wegschrijven bij elke letter maakt het traag)
+  // Typen: meteen rekenen, bewaren even later (alles wegschrijven bij elke letter maakt het traag)
   function kmZet() {
     const n = kmNaam(); if (!n) return;
     const km = kmSchoon(Object.assign({}, n.km, { wat: kmEl.wat.value.trim(), lha: kmEl.lha.value.trim(), noti: kmEl.noti.value.trim() }));
     if (km) n.km = km; else delete n.km;
     kmUit();
-    clearTimeout(kmT); kmT = setTimeout(() => { zetNamen(); renderNamen(); }, 500);
+    clearTimeout(kmT); kmT = setTimeout(() => { zetNamen(); teken(); }, 600);
   }
   Object.values(kmEl).forEach(el => el.addEventListener("input", kmZet));
   tankEl.addEventListener("input", () => { store.set("kaartTankL", tankEl.value); kmUit(); });
   $("kmGedaan").addEventListener("click", e => {
-    const n = kmNaam(); if (!n) return;
-    if (n.km && n.km.gedaan) {
-      if (!armed(e.currentTarget, "Tik nog eens: niet gedaan")) return;
-      delete n.km.gedaan; if (!kmSchoon(n.km)) delete n.km;
-    } else n.km = Object.assign({}, n.km, { gedaan: Date.now() });
-    zetNamen(); kmUit(); renderNamen();
+    if (!kmNaam()) return;
+    if (sel.length && sel.every(q => q.km && q.km.gedaan)) {
+      if (!armed(e.currentTarget, "Tik nog eens: niets gedaan")) return;
+      sel.forEach(q => { if (q.km) { delete q.km.gedaan; if (!kmSchoon(q.km, true)) delete q.km; } });
+    } else { const nu = Date.now(); sel.forEach(q => { if (!(q.km && q.km.gedaan)) q.km = Object.assign({}, q.km, { gedaan: nu }); }); }
+    bewaar(); teken();
   });
+  // Regel onder een perceel in de lijst: "UAN 30: 150 l/ha = 250 l · ✓ gedaan 8-11", en de notitie
+  function kmRegel(q) {
+    const n = kmNaam(); if (!n) return "";
+    const k = n.km || {}, l = lhaVan(q, k), nt = nettoPer.has(q.key) ? nettoPer.get(q.key) : q.ha;
+    if (!(k.wat || k.lha || q.km)) return "";
+    const eigen = q.km && q.km.lha != null && q.km.lha !== "";
+    const a = l > 0 ? (k.wat ? k.wat + ": " : "") + lhaTxt(l) + (eigen ? " (eigen)" : "") + " = " + lTxt(l * nt) : eigen ? "geen kunstmest" : "";
+    return [a, q.km && q.km.gedaan ? "✓ gedaan " + datumTxt(q.km.gedaan) : ""].filter(Boolean).join(" · ");
+  }
+  // Invullen per perceel (bij het bekeken perceel)
+  function kmPerceel(q, regelEl) {
+    const k = (kmNaam() || {}).km || {}, box = document.createElement("div"); box.className = "kmp";
+    const kop = document.createElement("div"); kop.className = "lbl2"; kop.textContent = "Kunstmest op dit perceel";
+    const vk = document.createElement("div"); vk.className = "vk";
+    const li = document.createElement("label"), inp = document.createElement("input"), ln = document.createElement("label"), ta = document.createElement("textarea");
+    const id = "kmp" + Math.random().toString(36).slice(2, 8);
+    li.textContent = "l/ha"; li.htmlFor = id + "l"; inp.id = id + "l"; inp.className = "num"; inp.type = "text"; inp.inputMode = "decimal"; inp.autocomplete = "off";
+    inp.placeholder = parse(k.lha) > 0 ? lhaTxt(parse(k.lha)) + " (zoals de rest)" : "bijv. 150"; inp.value = (q.km && q.km.lha) || "";
+    ln.textContent = "Notitie"; ln.htmlFor = id + "n"; ta.id = id + "n"; ta.maxLength = 500; ta.placeholder = "bijv. kopakker niet, hek aan de noordkant"; ta.value = (q.km && q.km.noti) || "";
+    vk.append(li, inp, ln, ta);
+    const zet = () => {
+      const km = kmSchoon(Object.assign({}, q.km, { lha: inp.value, noti: ta.value.trim() }), true);
+      if (km) q.km = km; else delete q.km;
+      if (regelEl) regelEl.textContent = kmRegel(q);
+      kmUit();
+      clearTimeout(kmPT); kmPT = setTimeout(bewaar, 500);
+    };
+    inp.addEventListener("input", zet); ta.addEventListener("input", zet);
+    const r = document.createElement("div"); r.className = "row"; r.style.marginTop = "8px"; r.style.flexWrap = "wrap"; r.style.gap = "8px";
+    const g = document.createElement("button"); g.type = "button"; g.className = "btn klein";
+    g.textContent = q.km && q.km.gedaan ? "✓ Gedaan op " + datumTxt(q.km.gedaan) : "Gedaan"; g.setAttribute("aria-pressed", !!(q.km && q.km.gedaan));
+    g.addEventListener("click", () => {
+      clearTimeout(kmPT);
+      if (q.km && q.km.gedaan) { if (!armed(g, "Tik nog eens: niet gedaan")) return; delete q.km.gedaan; if (!kmSchoon(q.km, true)) delete q.km; }
+      else q.km = Object.assign({}, q.km, { gedaan: Date.now() });
+      bewaar(); teken();
+    });
+    r.append(g);
+    { const rk = routeKnop(q); if (rk) r.append(rk); }
+    box.append(kop, vk, r);
+    return box;
+  }
+  // Route naar het perceel in Google Maps (op de telefoon opent de app); doel is een punt in het perceel
+  function routeKnop(q) {
+    const m = Perceel.binnenPunt(q.geometry);
+    if (!m) return null;
+    const a = document.createElement("a"); a.className = "btn klein"; a.target = "_blank"; a.rel = "noopener";
+    a.href = "https://www.google.com/maps/dir/?api=1&destination=" + m[1].toFixed(6) + "," + m[0].toFixed(6);
+    a.textContent = "Route ernaartoe (Maps)";
+    return a;
+  }
   // Kaart zonder bereik: kaart en luchtfoto rond de percelen van een naam in een eigen cache; de service worker
   // geeft die tegels dan ook zonder internet. Rond het perceel tot het fijnste niveau, verder weg alleen grover.
   // Naam van de cache begint niet met "perceelkaart-" of "zaaihulp-", anders ruimt een update hem op.
@@ -1324,6 +1413,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       // Oevers horen bij de randstukjes van deze grens: alleen terugzetten als de ontvanger dezelfde grens krijgt
       if (Object.keys(hand).length) { x.o = hand; x.nz = Perceel.zijden(q.geometry).length; }
       if (q.extraWater) x.e = q.extraWater;
+      { const km = kmSchoon(q.km, true); if (km) x.km = km; }
       return abVelden(q, x);
     });
     const k = kavels.map(kv => abVelden(kv, { n: kv.naam, l: kv.leden.map(key => sel.findIndex(q => q.key === key)).filter(i => i >= 0) }));
@@ -1354,6 +1444,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         const q = abTerug(x, nieuwPerceel(r.perceel));
         if (x.o) { if (Perceel.zijden(q.geometry).length === x.nz) q.oever = x.o; else oeverMis++; }
         if (x.e) q.extraWater = x.e;
+        { const km = kmSchoon(x.km, true); if (km) q.km = km; }
         uit[i] = uit.some(y => y && y.key === q.key) ? null : q;
       } catch (e) { uit[i] = null; mis.push(i + 1); }
     }
@@ -1421,7 +1512,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         const kv = (n.kavels || []).length;
         mt.textContent = n.sel.length + (n.sel.length === 1 ? " perceel" : " percelen") + (kv ? ", " + kv + (kv === 1 ? " kavel" : " kavels") : "") + (actief ? " · nu op de kaart" : "") + (offline[n.naam] ? " · kaart offline" : "");
         go.append(nm, mt);
-        if (kmKort(n.km)) { const k = document.createElement("div"); k.className = "meta"; k.textContent = "Kunstmest: " + kmKort(n.km); go.appendChild(k); }
+        if (kmKort(n)) { const k = document.createElement("div"); k.className = "meta"; k.textContent = "Kunstmest: " + kmKort(n); go.appendChild(k); }
         const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(haGeheel(n.sel)) + " ha";
         { const k = document.createElement("small"); k.textContent = "bruto"; w.appendChild(k); }
         li.append(nr, go, w, document.createElement("span"));

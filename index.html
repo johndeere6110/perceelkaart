@@ -315,7 +315,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div class="hint" id="namenHint"></div>
     <div id="namenLijstBox"></div>
   </div>
-  <div class="voet">versie 89</div>
+  <div class="voet">versie 90</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -609,14 +609,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     return { per, lengte, hoofd: stappen[0].af, af: Math.min(stappen[stap].af, q.ha), stap, stappen, max, water, natM, extra, ti, vrij };
   }
   const m2Txt = v => Math.round(v).toLocaleString("nl-NL") + " m²";
-  // Kleine regel onder het netto per perceel: is de bufferstrook eraf, ligt hij erbuiten, of is het nog niet bekend
+  // Kleine regels onder het bruto per perceel (bruto = zoals RVO): de netto, en wat eraf of erbij gaat
   function nettoUitleg(q, bf) {
-    if (!bf.lengte && !bf.extra) return Array.isArray(q.water) ? "netto\ngeen water langs de rand" : "bufferstrook nog niet bekend";
+    if (!bf.lengte && !bf.extra) return Array.isArray(q.water) ? "bruto\ngeen water langs de rand" : "bruto\nbufferstrook nog niet bekend";
     const delen = [];
     if (bf.af >= 0.0005) delen.push("− bufferstrook " + haTxt(bf.af));
     if (bf.extra) delen.push("+ langs water " + haTxt(bf.extra));
-    if (delen.length) return "netto\nbruto " + haTxt(q.ha) + "\n" + delen.join("\n");
-    return bf.natM ? "netto\nbufferstrook ligt buiten het perceel" : "netto\ngeen bufferstrook (droge sloot)";
+    if (delen.length) return "bruto\nnetto " + haTxt(q.ha + bf.extra - bf.af) + "\n" + delen.join("\n");
+    return bf.natM ? "bruto\nbufferstrook ligt buiten het perceel" : "bruto\ngeen bufferstrook (droge sloot)";
   }
   const nlM = v => String(v).replace(".", ",") + " m";
   let oeverModus = false;
@@ -992,7 +992,6 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       const nm = document.createElement("div"); nm.className = "name"; nm.textContent = q.gewas || "Onbekend gewas";
       const mt = document.createElement("div"); mt.className = "meta";
       const bf = buffer(q);
-      nettoPer.set(q.key, q.ha + bf.extra - bf.af);
       mt.textContent = [q.ref ? "referentieperceel" : q.jaar ? "BRP " + q.jaar + (/voorlopig|concept/i.test(q.status || "") ? " (" + q.status.toLowerCase() + ")" : "") : "", q.bron === "opgeslagen" ? "uit opgeslagen percelen" : ""].filter(Boolean).join(", ");
       // Bufferstrook- en spuituitleg onder de regel, over de volle breedte
       let detail = null;
@@ -1110,8 +1109,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       { const wie = eigenaars(q); if (wie.length) go.insertBefore(Object.assign(document.createElement("div"), { className: "van", textContent: "Van " + wie.join(", ") }), nm); }
       { const rk = routeKnop(q); if (rk) { const d = document.createElement("div"); d.appendChild(rk); maakDetail().appendChild(d); } }
       go.addEventListener("click", () => naamActief ? toonPerceel(i) : map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
-      // Netto groot (bufferstrook eraf, langs water erbij erbij), klein eronder wat er van het bruto af of bij is
-      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha + bf.extra - bf.af) + " ha";
+      // Bruto groot (zoals RVO), klein eronder de netto en wat eraf (bufferstrook) of erbij (langs water) gaat
+      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha) + " ha";
       { const k = document.createElement("small"); k.textContent = nettoUitleg(q, bf); w.appendChild(k); }
       const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "×";
       del.setAttribute("aria-label", "Haal perceel " + (i + 1) + " weg");
@@ -1136,8 +1135,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       const n2 = document.createElement("div"); n2.className = "meta"; n2.textContent = "perceel " + leden.map(q => sel.indexOf(q) + 1).join(" + ");
       nm.append(n1, n2);
       const bfl = leden.map(buffer), bruto = leden.reduce((t, q) => t + q.ha, 0), af = bfl.reduce((t, b) => t + b.af, 0), bij = bfl.reduce((t, b) => t + b.extra, 0);
-      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(bruto + bij - af) + " ha";
-      { const k = document.createElement("small"); k.textContent = af || bij ? "netto\nbruto " + haTxt(bruto) + (af ? "\n− bufferstrook " + haTxt(af) : "") + (bij ? "\n+ langs water " + haTxt(bij) : "") : "netto"; w.appendChild(k); }
+      const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(bruto) + " ha";
+      { const k = document.createElement("small"); k.textContent = af || bij ? "bruto\nnetto " + haTxt(bruto + bij - af) + (af ? "\n− bufferstrook " + haTxt(af) : "") + (bij ? "\n+ langs water " + haTxt(bij) : "") : "bruto"; w.appendChild(k); }
       kop.append(nm, w); box.appendChild(kop);
       // Pad of naad tussen de percelen: zit in de vorm voor de sporen, niet in de ha
       if (vorm) {
@@ -1153,9 +1152,9 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     });
     const bfs = sel.map(buffer), tot = sel.reduce((a, q) => a + q.ha, 0), dubbel = sel.some(q => binnenAnder(q) >= 0);
     const af = bfs.reduce((a, x) => a + x.af, 0), om = bfs.reduce((a, x) => a + x.lengte, 0), bij = bfs.reduce((a, x) => a + x.extra, 0);
-    $("totLbl").textContent = (naamActief ? naamActief + ": " : "") + (sel.length === 1 ? "1 perceel" : sel.length + " percelen samen") + (af ? ", zonder bufferstrook" : "");
-    $("totHa").textContent = haTxt(tot + bij - af) + " ha";
-    $("totSub").textContent = (dubbel ? "Let op: percelen overlappen, het totaal telt dubbel. " : "") + (af || bij ? "Bruto " + haTxt(tot) + " ha" + (bij ? " + langs water " + haTxt(bij) + " ha" : "") + (af ? " − bufferstroken " + haTxt(af) + " ha" : "") + (om ? " (" + mTxt(om) + " oever)" : "")
+    $("totLbl").textContent = (naamActief ? naamActief + ": " : "") + (sel.length === 1 ? "1 perceel" : sel.length + " percelen samen") + ", bruto";
+    $("totHa").textContent = haTxt(tot) + " ha";
+    $("totSub").textContent = (dubbel ? "Let op: percelen overlappen, het totaal telt dubbel. " : "") + (af || bij ? "Netto " + haTxt(tot + bij - af) + " ha" + (af ? " (− bufferstroken " + haTxt(af) + " ha" : " (") + (bij ? (af ? ", " : "") + "+ langs water " + haTxt(bij) + " ha" : "") + ")" + (om ? ", " + mTxt(om) + " oever" : "")
       : om ? mTxt(om) + " oever, alleen droge sloten: geen bufferstrook." : "");
     $("info").hidden = !sel.length;
     if (tabNu === "km") kmKaartTeken();
@@ -1224,8 +1223,6 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const tankEl = $("kmTank");
   tankEl.value = store.get("kaartTankL", "");
   const kmLaag = L.layerGroup();
-  const nettoPer = new Map(); // netto ha per perceel op de kaart, bijgewerkt in teken()
-  const nettoMemo = new WeakMap(); // percelen van andere namen veranderen niet zolang ze niet op de kaart staan
   const datumTxt = ts => { const d = new Date(ts), nu = new Date(); return d.getDate() + "-" + (d.getMonth() + 1) + (d.getFullYear() !== nu.getFullYear() ? "-" + d.getFullYear() : ""); };
   const lTxt = v => Math.round(v).toLocaleString("nl-NL") + " l";
   const getal1 = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -1240,24 +1237,18 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     eigenCache.set(id, uit);
     return uit;
   }
-  function nettoVan(q, n) {
-    if (n.naam === naamActief && nettoPer.has(q.key)) return nettoPer.get(q.key);
-    if (nettoMemo.has(q)) return nettoMemo.get(q);
-    let v = q.ha;
-    try { const bf = buffer(q); v = q.ha + bf.extra - bf.af; } catch (e) { /* dan bruto */ }
-    nettoMemo.set(q, v);
-    return v;
-  }
+  // Kunstmest rekent met de bruto ha (zoals RVO en zoals de app hem groot laat zien)
+  const haVan = q => q.ha;
   // l/ha van dit perceel: eigen waarde, anders de standaard van de naam (n.km.lha); null = niets ingevuld
   const eigenLha = q => !!(q.km && q.km.lha != null && q.km.lha !== "");
   const lhaVan = (q, n) => eigenLha(q) ? parse(q.km.lha) : n && n.km && n.km.lha ? parse(n.km.lha) : null;
   let kmKaartVernieuw = null; // werkt het aangetikte perceel bij als de standaard verandert
   function naamTot(n) {
-    const t = { l: 0, ha: 0, inv: 0, ged: 0, n: 0, onbekend: 0 };
+    const t = { l: 0, ha: 0, inv: 0, ged: 0, n: 0 };
     percelenVan(n).forEach(q => {
       t.n++;
       const x = lhaVan(q, n);
-      if (x != null) { t.inv++; if (x > 0) { const nt = nettoVan(q, n); t.l += x * nt; t.ha += nt; if (!Array.isArray(q.water)) t.onbekend++; } }
+      if (x != null) { t.inv++; if (x > 0) { const h = haVan(q); t.l += x * h; t.ha += h; } }
       if (q.km && q.km.gedaan) t.ged++;
     });
     return t;
@@ -1293,7 +1284,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       const x = lhaVan(q, n), klaar = !!(q.km && q.km.gedaan), gek = kmKeus.key === q.key;
       const kleur = klaar ? "#2b8a3e" : x > 0 ? "#2f7fd8" : x === 0 ? "#8a8f86" : "#E8B400";
       const g = L.geoJSON(q.geometry, { style: { color: gek ? "#e8590c" : kleur, weight: gek ? 5 : 3, fillColor: gek ? "#e8590c" : kleur, fillOpacity: gek ? .25 : .12 }, interactive: false });
-      if (x != null) g.bindTooltip(x > 0 ? lTxt(x * nettoVan(q, n)) : "niet", { permanent: true, direction: "center", className: "kml" + (klaar ? " klaar" : "") });
+      if (x != null) g.bindTooltip(x > 0 ? lTxt(x * haVan(q)) : "niet", { permanent: true, direction: "center", className: "kml" + (klaar ? " klaar" : "") });
       kmLaag.addLayer(g);
     }));
     // Percelen op de kaart zonder naam: gestippeld
@@ -1329,8 +1320,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   function kmPerceelKaart(q, n, lijst) {
     const box = el("div", "advice kmk"), kop = el("div", "kop"), l = el("div");
     l.append(el("div", "wie", n.naam), el("div", "meta", "Perceel " + (lijst.indexOf(q) + 1) + " · " + (q.gewas || "onbekend gewas")));
-    const nt = nettoVan(q, n), w = el("div", "w num", haTxt(nt) + " ha");
-    w.appendChild(el("small", "", Array.isArray(q.water) ? "netto" : "netto (water nog niet gezocht)"));
+    const nt = haVan(q), w = el("div", "w num", haTxt(nt) + " ha");
+    w.appendChild(el("small", "", "bruto"));
     kop.append(l, w);
     const vk = el("div", "vk"), inp = el("input", "num"), ta = el("textarea");
     inp.id = "kmpL"; inp.type = "text"; inp.inputMode = "decimal"; inp.autocomplete = "off"; inp.placeholder = "bijv. 150 (0 = niet)"; inp.value = (q.km && q.km.lha) || "";
@@ -1414,7 +1405,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const t = naamTot(n), tank = parse(tankEl.value);
     uit.innerHTML = "";
     const rij = (a, b, c) => { const d = el("div"), y = el("strong", "", b); if (c) y.appendChild(el("span", "", " " + c)); d.append(el("span", "", a), y); uit.appendChild(d); };
-    rij("Totaal", lTxt(t.l), t.l ? "op " + haTxt(t.ha) + " ha netto" : "");
+    rij("Totaal", lTxt(t.l), t.l ? "op " + haTxt(t.ha) + " ha" : "");
     if (t.inv < t.n) rij("Ingevuld", t.inv + " van " + t.n + " percelen");
     if (t.l && tank > 0) {
       const vol = Math.floor(t.l / tank + 1e-9), rest = t.l - vol * tank;
@@ -1422,7 +1413,6 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       rij("Per tank", getal1(tank / (t.l / t.ha)) + " ha", "met een volle tank");
     }
     rij("Gedaan", t.ged + " van " + t.n);
-    if (t.onbekend) { const w = el("div", "warn4", "Bij " + t.onbekend + (t.onbekend === 1 ? " perceel" : " percelen") + " is nog geen water gezocht: de bufferstrook zit er misschien nog niet af."); w.style.display = "block"; uit.appendChild(w); }
     // Knop "Alle percelen op …": alleen met een standaard en percelen met een eigen l/ha
     const gl = $("kmGelijk");
     if (gl && gl.dataset.armed !== "1") {
@@ -1440,8 +1430,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       const li = el("li"), x = lhaVan(q, n);
       if (q === gek) li.className = "gekozen";
       const go = el("div");
-      go.append(el("div", "name", q.gewas || "Onbekend gewas"), el("div", "meta", haTxt(nettoVan(q, n)) + " ha · " + (x > 0 ? lhaTxt(x) + (eigenLha(q) && n.km && n.km.lha ? " (eigen)" : "") : x === 0 ? "niet" : "nog niet ingevuld") + (q.km && q.km.noti ? " · " + q.km.noti : "")));
-      li.append(el("div", "nr num", String(i + 1)), go, el("div", "w num", x > 0 ? lTxt(x * nettoVan(q, n)) : ""), el("div", "ok", q.km && q.km.gedaan ? "✓" : ""));
+      go.append(el("div", "name", q.gewas || "Onbekend gewas"), el("div", "meta", haTxt(haVan(q)) + " ha · " + (x > 0 ? lhaTxt(x) + (eigenLha(q) && n.km && n.km.lha ? " (eigen)" : "") : x === 0 ? "niet" : "nog niet ingevuld") + (q.km && q.km.noti ? " · " + q.km.noti : "")));
+      li.append(el("div", "nr num", String(i + 1)), go, el("div", "w num", x > 0 ? lTxt(x * haVan(q)) : ""), el("div", "ok", q.km && q.km.gedaan ? "✓" : ""));
       li.addEventListener("click", () => { kmKeus = { naam: n.naam, key: q.key }; kmTab(); zoomOp([q]); });
       ul.appendChild(li);
     });
@@ -1878,7 +1868,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     uitgelicht = q.key; teken();
     map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 });
     const n = namen.find(m => m.naam === naamActief), x = lhaVan(q, n);
-    const km = x == null ? "" : " Kunstmest: " + (x > 0 ? lhaTxt(x) + " = " + lTxt(x * nettoVan(q, n)) : "niet") + (q.km && q.km.gedaan ? ", gedaan" : "") + ".";
+    const km = x == null ? "" : " Kunstmest: " + (x > 0 ? lhaTxt(x) + " = " + lTxt(x * haVan(q)) : "niet") + (q.km && q.km.gedaan ? ", gedaan" : "") + ".";
     say("Perceel " + (i + 1) + " van " + naamActief + ": " + (q.gewas || "onbekend gewas") + ", " + haTxt(q.ha) + " ha" + (q.jaar ? " (BRP " + q.jaar + ")" : "") + "." + km);
   }
   function setOever(aan) {

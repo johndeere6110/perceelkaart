@@ -145,6 +145,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 #paneelKm .uit div { display: grid; grid-template-columns: 6em 1fr; gap: 8px; align-items: baseline; }
 #paneelKm .uit span { color: var(--muted); font-size: 14px; }
 #paneelKm .knoppen { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+#paneelKm .knoppen[hidden] { display: none; }
 #paneelKm .btn { flex: none; min-height: 44px; font-size: 15px; padding: 0 12px; }
 #paneelKm .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 #paneelKm .log li { grid-template-columns: 30px 1fr auto 24px; cursor: pointer; }
@@ -311,7 +312,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div class="hint" id="namenHint"></div>
     <div id="namenLijstBox"></div>
   </div>
-  <div class="voet">versie 86</div>
+  <div class="voet">versie 87</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -693,7 +694,9 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     return det;
   }
   const blokId = obj => obj.key ? "p:" + obj.key : "k:" + obj.naam;
-  const xy5 = c => c[1].toFixed(5) + ", " + c[0].toFixed(5);
+  // Dichte regel: de koers in graden (zoals je hem in de A+ van het scherm intikt), heen en terug
+  const grd = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + "°";
+  const abKop = s => "AB-lijn " + grd(s.koers) + " · terug " + grd((s.koers + 180) % 360);
   function spuitBlok(geom, obj, opslaan, sb) {
     const s = Perceel.sporen(geom, sb, { andereKant: !!obj.spuitAnders, buitenronde, clip: window.polygonClipping, abPunt: obj.abPunt || null, abLijn: obj.abLijn || null, abRand: !!obj.abRand, sectie: parse(sectieEl.value) || 0 });
     if (!s) return null;
@@ -702,16 +705,16 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     if (!spuitAan) {
       tekenSporen(obj, s, true, true);
       const d = document.createElement("div"); d.className = "sp";
-      // Dicht: alleen de AB-lijn; open: het zaaiplan
-      const det = klapBlok("s:" + blokId(obj), "AB-lijn: A " + xy5(s.a) + " · B " + xy5(s.b));
+      // Dicht: alleen de AB-lijn in graden; open: het zaaiplan
+      const det = klapBlok("s:" + blokId(obj), abKop(s));
       if (zi) det.appendChild(zaaiBlok(s, obj, opslaan, zi, sb));
       d.appendChild(det);
       return d;
     }
     tekenSporen(obj, s, !!zi);
     const d = document.createElement("div"); d.className = "sp";
-    // Dicht: alleen de AB-lijn; open: buitenronde, gangen, secties, koers en de knoppen
-    const det = klapBlok("s:" + blokId(obj), "AB-lijn: A " + xy5(s.a) + " · B " + xy5(s.b));
+    // Dicht: alleen de AB-lijn in graden; open: buitenronde, gangen, secties, koers en de knoppen
+    const det = klapBlok("s:" + blokId(obj), abKop(s));
     d.appendChild(det);
     const r1 = document.createElement("div");
     const nEx = s.sporen.filter(x => x.extra).length;
@@ -1374,7 +1377,19 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     });
     kaart.addEventListener("click", () => zoomOp(lijst));
     kn.append(alles, kaart);
-    box.append(vk, uitleg, uit, ul, kn);
+    // Percelen met een eigen l/ha volgen de standaard niet: met deze knop gaan ze allemaal terug naar de standaard
+    const gelijk = el("button", "btn"); gelijk.type = "button"; gelijk.id = "kmGelijk";
+    gelijk.addEventListener("click", () => {
+      const std = n.km && n.km.lha ? parse(n.km.lha) : null, eigen = lijst.filter(eigenLha);
+      if (std == null || !eigen.length) return;
+      if (!armed(gelijk, "Tik nog eens: " + eigen.length + (eigen.length === 1 ? " perceel" : " percelen") + " ook op " + lhaTxt(std))) return;
+      clearTimeout(kmT);
+      eigen.forEach(x => { delete x.km.lha; if (!kmSchoon(x.km, true)) delete x.km; });
+      kmBewaar(n); kmTab(); renderNamen();
+      kmSay("Alle percelen van " + n.naam + " staan nu op " + lhaTxt(std) + ".");
+    });
+    const gr = el("div", "knoppen"); gr.appendChild(gelijk);
+    box.append(vk, gr, uitleg, uit, ul, kn);
     return box;
   }
   function kmTotaal(n) {
@@ -1391,7 +1406,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     }
     rij("Gedaan", t.ged + " van " + t.n);
     if (t.onbekend) { const w = el("div", "warn4", "Bij " + t.onbekend + (t.onbekend === 1 ? " perceel" : " percelen") + " is nog geen water gezocht: de bufferstrook zit er misschien nog niet af."); w.style.display = "block"; uit.appendChild(w); }
-    const alles = document.querySelector("#paneelKm .eigenaar .knoppen .btn");
+    // Knop "Alle percelen op …": alleen met een standaard en percelen met een eigen l/ha
+    const gl = $("kmGelijk");
+    if (gl && gl.dataset.armed !== "1") {
+      const std = n.km && n.km.lha ? parse(n.km.lha) : null, eigen = percelenVan(n).filter(eigenLha).length;
+      gl.parentNode.hidden = std == null || !eigen;
+      if (std != null) gl.textContent = "Alle percelen op " + lhaTxt(std) + " (" + eigen + " eigen)";
+    }
+    const alles = document.querySelector("#paneelKm .eigenaar > .knoppen:last-child .btn");
     if (alles && alles.dataset.armed !== "1") { const a = t.n && t.ged === t.n; alles.textContent = a ? "✓ Alles gedaan" : "Alles gedaan"; alles.setAttribute("aria-pressed", !!a); }
   }
   function kmRijen(n, lijst, gek) {

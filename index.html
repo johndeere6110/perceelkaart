@@ -113,6 +113,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .log .nr { font-size: 18px; color: var(--muted); text-align: center; }
 .log .go { border: 0; background: none; color: inherit; text-align: left; padding: 0; font: inherit; min-width: 0; }
 .log .name { font-weight: 500; overflow-wrap: anywhere; }
+.log .van { display: inline-block; font-size: 13px; font-weight: 600; color: var(--accent-ink); background: var(--accent); border-radius: 999px; padding: 0 8px; margin-bottom: 2px; }
 .log .meta { font-size: 14px; color: var(--muted); }
 .log .w { font-size: 21px; text-align: right; }
 .log .w small, .kavel .w small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); line-height: 1.3; white-space: pre-line; }
@@ -314,7 +315,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div class="hint" id="namenHint"></div>
     <div id="namenLijstBox"></div>
   </div>
-  <div class="voet">versie 88</div>
+  <div class="voet">versie 89</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -420,6 +421,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   if (!Array.isArray(namen)) namen = [];
   namen = namen.filter(n => n && typeof n.naam === "string" && (Array.isArray(n.sel) || n.opKaart));
   let naamActief = store.get("kaartNaamActief", null);
+  const eigenCache = new Map(); // perceel -> namen (niet de naam op de kaart) waar het ook onder staat; leeg bij elke wijziging van de namen
   // Staat er een naam op de kaart, dan is een tik bekijken (uitgelicht); toevoegen of weghalen alleen na Percelen wijzigen
   let wijzigen = false, uitgelicht = null;
   // De naam die op de kaart staat, is niet dubbel bewaard: zijn percelen zijn de kaart (kaartTestSelectie)
@@ -1104,6 +1106,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       if (kv) mt.textContent += (mt.textContent ? " · " : "") + kv.naam;
       if ((spuitAan || maisAan) && sb && !kv) { const d = spuitBlok(q.geometry, q, bewaar, sb); if (d) maakDetail().appendChild(d); }
       go.append(nm, mt);
+      // Staat dit perceel al onder een (andere) naam: kopje met van wie het is
+      { const wie = eigenaars(q); if (wie.length) go.insertBefore(Object.assign(document.createElement("div"), { className: "van", textContent: "Van " + wie.join(", ") }), nm); }
       { const rk = routeKnop(q); if (rk) { const d = document.createElement("div"); d.appendChild(rk); maakDetail().appendChild(d); } }
       go.addEventListener("click", () => naamActief ? toonPerceel(i) : map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
       // Netto groot (bufferstrook eraf, langs water erbij erbij), klein eronder wat er van het bruto af of bij is
@@ -1189,6 +1193,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     return o;
   }
   function zetNamen() {
+    eigenCache.clear();
     try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(naarOpslag))); return true; }
     catch (e) { say("De opslag is vol: de namen zijn niet bijgewerkt. Haal een naam of percelen weg.", true); return false; }
   }
@@ -1227,6 +1232,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const lhaTxt = v => v.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + " l/ha";
   const el = (tag, cls, tekst) => { const e = document.createElement(tag); if (cls) e.className = cls; if (tekst != null) e.textContent = tekst; return e; };
   const percelenVan = n => n.naam === naamActief ? sel : (n.sel || []);
+  // Onder welke andere namen staat dit perceel (zelfde sleutel, of het midden ligt in een perceel van die naam)?
+  function eigenaars(q) {
+    const id = q.key + "|" + (naamActief || "");
+    if (eigenCache.has(id)) return eigenCache.get(id);
+    const m = midden(q), uit = namen.filter(n => n.naam !== naamActief && (n.sel || []).some(x => x.key === q.key || (m && Perceel.bevatPunt(x.geometry, m[0], m[1])))).map(n => n.naam);
+    eigenCache.set(id, uit);
+    return uit;
+  }
   function nettoVan(q, n) {
     if (n.naam === naamActief && nettoPer.has(q.key)) return nettoPer.get(q.key);
     if (nettoMemo.has(q)) return nettoMemo.get(q);
@@ -1271,14 +1284,15 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const kmBewaar = n => { if (n.naam === naamActief) bewaar(); else zetNamen(); };
   const kmLater = n => { clearTimeout(kmT); kmT = setTimeout(() => { kmBewaar(n); kmKaartTeken(); renderNamen(); }, 500); };
   const zoomOp = lijst => { if (lijst.length) map.fitBounds(L.geoJSON({ type: "FeatureCollection", features: lijst.map(q => ({ type: "Feature", properties: {}, geometry: q.geometry })) }).getBounds(), { padding: [24, 24], maxZoom: 17 }); };
-  // Kaart: rand geel = nog niet ingevuld, blauw = ingevuld (liters erop), grijs = niet, groen = gedaan.
-  // Alles rustig (dunne rand, nauwelijks vulling); alleen het aangetikte perceel valt op.
+  // Kaart: alleen de gekozen boer in kleur (rand geel = nog niet ingevuld, blauw = ingevuld met liters erop, grijs = niet,
+  // groen = gedaan; het aangetikte perceel oranje). Andere boeren: dun grijs randje, wel aan te tikken.
   function kmKaartTeken() {
     kmLaag.clearLayers();
     namen.forEach(n => percelenVan(n).forEach(q => {
-      const x = lhaVan(q, n), klaar = !!(q.km && q.km.gedaan), gek = kmKeus && kmKeus.naam === n.naam && kmKeus.key === q.key;
+      if (!kmKeus || kmKeus.naam !== n.naam) { kmLaag.addLayer(L.geoJSON(q.geometry, { style: { color: "#9aa09a", weight: 1, opacity: .7, fillOpacity: 0 }, interactive: false })); return; }
+      const x = lhaVan(q, n), klaar = !!(q.km && q.km.gedaan), gek = kmKeus.key === q.key;
       const kleur = klaar ? "#2b8a3e" : x > 0 ? "#2f7fd8" : x === 0 ? "#8a8f86" : "#E8B400";
-      const g = L.geoJSON(q.geometry, { style: { color: gek ? "#e8590c" : kleur, weight: gek ? 5 : 2, fillColor: gek ? "#e8590c" : kleur, fillOpacity: gek ? .25 : .06 }, interactive: false });
+      const g = L.geoJSON(q.geometry, { style: { color: gek ? "#e8590c" : kleur, weight: gek ? 5 : 3, fillColor: gek ? "#e8590c" : kleur, fillOpacity: gek ? .25 : .12 }, interactive: false });
       if (x != null) g.bindTooltip(x > 0 ? lTxt(x * nettoVan(q, n)) : "niet", { permanent: true, direction: "center", className: "kml" + (klaar ? " klaar" : "") });
       kmLaag.addLayer(g);
     }));
@@ -1770,7 +1784,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         sel.push({ key, gewas: p.gewas || (p.ref ? "Referentieperceel" : ""), jaar: p.jaar, status: p.status || "", ha: p.ha, bron: p.bron, ref: !!p.ref, geometry: p.geometry, oever: {} });
         bewaar(); teken();
       }
-      say((p.gewas || "Perceel") + " (" + haTxt(p.ha) + " ha) toegevoegd." + (p.bron === "opgeslagen" ? " Geen verbinding: uit opgeslagen percelen." : ""), p.bron === "opgeslagen");
+      const nq = sel.find(q => q.key === key), wie = nq ? eigenaars(nq) : [];
+      say((p.gewas || "Perceel") + " (" + haTxt(p.ha) + " ha) toegevoegd." + (wie.length ? " Let op: dit perceel staat al onder " + wie.join(" en ") + "." : "") + (p.bron === "opgeslagen" ? " Geen verbinding: uit opgeslagen percelen." : ""), p.bron === "opgeslagen" || wie.length > 0);
       ruw.textContent = JSON.stringify({ punt: [+lon.toFixed(6), +lat.toFixed(6)], bron: p.bron, id: p.id, properties: p.eigenschappen,
         geometrie: p.geometry.type + ", " + (p.geometry.type === "Polygon" ? p.geometry.coordinates[0].length : "?") + " punten",
         opgeslagen: Perceel.aantalOpgeslagen() + (Perceel.aantalOpgeslagen() === 1 ? " perceel" : " percelen") }, null, 2);

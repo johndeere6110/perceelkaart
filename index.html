@@ -130,6 +130,18 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .seg4 button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .seg4 button[aria-pressed="true"] small { color: var(--accent-ink); }
 .warn4 { color: var(--warn); font-weight: 600; }
+/* Vloeibare kunstmest per naam */
+.km { margin-top: 10px; padding-top: 4px; border-top: 1px dashed var(--line); }
+.km summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
+.km .vk { display: grid; grid-template-columns: 6.5em 1fr; gap: 8px; align-items: center; margin-top: 4px; }
+.km input, .km textarea { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 16px "Barlow", system-ui, sans-serif; padding: 6px 8px; outline: none; box-sizing: border-box; }
+.km textarea { min-height: 64px; resize: vertical; }
+.km input:focus, .km textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.km .uit { display: grid; gap: 3px; margin: 10px 0 2px; font-size: 17px; color: var(--ink); }
+.km .uit div { display: grid; grid-template-columns: 6.5em 1fr; gap: 8px; align-items: baseline; }
+.km .uit span { color: var(--muted); font-size: 14px; }
+.km .klein { min-height: 40px; font-size: 15px; margin-top: 8px; width: auto; padding: 0 12px; display: inline-flex; }
+.km .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .af { color: var(--ink); font-weight: 600; margin-top: 2px; }
 .log .detail { grid-column: 2 / -1; font-size: 14px; color: var(--muted); margin-top: -2px; }
 .btab { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 15px; font-variant-numeric: tabular-nums; }
@@ -220,6 +232,17 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   <div class="advice" id="info" aria-live="polite" hidden>
     <div class="tot"><span id="totLbl"></span><span class="adv-main num" id="totHa"></span></div>
     <div class="meta" id="totSub"></div>
+    <details class="km" id="kmBox" hidden>
+      <summary id="kmKop">Vloeibare kunstmest</summary>
+      <div class="vk">
+        <label for="kmWat">Wat</label><input id="kmWat" type="text" maxlength="60" autocomplete="off" placeholder="bijv. UAN 30">
+        <label for="kmLha">l/ha</label><input id="kmLha" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 150">
+        <label for="kmTank">Tank (l)</label><input id="kmTank" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 3000">
+        <label for="kmNoti">Notitie</label><textarea id="kmNoti" maxlength="500" placeholder="wat de boer wil, bijv. kopakkers niet"></textarea>
+      </div>
+      <div class="uit" id="kmUit"></div>
+      <button type="button" class="btn klein" id="kmGedaan" aria-pressed="false">Gedaan</button>
+    </details>
     <div class="row" style="margin-top:10px">
       <button type="button" class="btn" id="bWater">Water zoeken</button>
       <button type="button" class="btn" id="bOever" aria-pressed="false">Oevers aanwijzen</button>
@@ -272,7 +295,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     <div class="hint" id="namenHint"></div>
     <div id="namenLijstBox"></div>
   </div>
-  <div class="voet">versie 82</div>
+  <div class="voet">versie 83</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -315,8 +338,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 
   // PDOK-achtergronden (Web Mercator, geen key)
   const attr = 'Kaart: <a href="https://www.pdok.nl">PDOK</a>, Kadaster';
-  const brt = L.tileLayer("https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png", { minZoom: 7, maxNativeZoom: 19, maxZoom: 22, attribution: attr });
-  const foto = L.tileLayer("https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg", { minZoom: 7, maxNativeZoom: 19, maxZoom: 22, attribution: "Luchtfoto: " + attr });
+  const BRT_URL = "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png";
+  const FOTO_URL = "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg";
+  const brt = L.tileLayer(BRT_URL, { minZoom: 7, maxNativeZoom: 19, maxZoom: 22, attribution: attr });
+  const foto = L.tileLayer(FOTO_URL, { minZoom: 7, maxNativeZoom: 19, maxZoom: 22, attribution: "Luchtfoto: " + attr });
   let isFoto = store.get("kaartTestFoto", false);
   const setLaag = () => {
     (isFoto ? brt : foto).remove(); (isFoto ? foto : brt).addTo(map);
@@ -397,7 +422,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
   if (kortWater(sel)) store.set("kaartTestSelectie", sel);
   let namenKort = false;
   namen.forEach(n => { if (n.sel !== sel && kortWater(n.sel)) namenKort = true; });
-  if (namenKort) try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(n => n.naam === naamActief ? { naam: n.naam, ts: n.ts, opKaart: true } : n))); } catch (e) {}
+  if (namenKort) try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(naarOpslag))); } catch (e) {}
   // Oppervlakte opnieuw uit de grens (eerder bewaard op 2 decimalen)
   sel.forEach(q => { try { q.ha = Perceel.oppervlakteHa(q.geometry); if (q.alt && q.alt.geometry) q.alt.ha = Perceel.oppervlakteHa(q.alt.geometry); } catch (e) {} });
   const nieuwPerceel = p => ({ key: sleutel(p), gewas: p.gewas || (p.ref ? "Referentieperceel" : ""), jaar: p.jaar, status: p.status || "", ha: p.ha, bron: p.bron, ref: !!p.ref, geometry: p.geometry, oever: {} });
@@ -1081,6 +1106,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     $("totSub").textContent = (dubbel ? "Let op: percelen overlappen, het totaal telt dubbel. " : "") + (af || bij ? "Bruto " + haTxt(tot) + " ha" + (bij ? " + langs water " + haTxt(bij) + " ha" : "") + (af ? " − bufferstroken " + haTxt(af) + " ha" : "") + (om ? " (" + mTxt(om) + " oever)" : "")
       : om ? mTxt(om) + " oever, alleen droge sloten: geen bufferstrook." : "");
     $("info").hidden = !sel.length;
+    kmNetto = tot + bij - af; kmBekend = sel.every(q => Array.isArray(q.water));
+    if (kmVoor !== naamActief) { kmVoor = naamActief; kmVul(); }
+    kmUit();
     if (!sel.length && oeverModus) setOever(false);
     // AB-kant kiezen: de AB-lijn meteen dik oranje laten zien (ook met Spuiten of Mais aan), zonder eerst een kant te tikken;
     // A en B alleen als de sporen ze niet al tekenen
@@ -1107,8 +1135,15 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     say(was ? "Kaart leeg. De percelen van " + was + " blijven bewaard: tik de naam om ze terug te halen." : "Selectie gewist. Tik op een perceel om te beginnen.");
   });
   // Namen bewaren en terughalen
+  // De naam op de kaart: alleen naam en kunstmest bewaren, zijn percelen staan al in kaartTestSelectie
+  function naarOpslag(n) {
+    if (n.naam !== naamActief) return n;
+    const o = { naam: n.naam, ts: n.ts, opKaart: true };
+    if (n.km) o.km = n.km;
+    return o;
+  }
   function zetNamen() {
-    try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(n => n.naam === naamActief ? { naam: n.naam, ts: n.ts, opKaart: true } : n))); return true; }
+    try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(naarOpslag))); return true; }
     catch (e) { say("De opslag is vol: de namen zijn niet bijgewerkt. Haal een naam of percelen weg.", true); return false; }
   }
   function bewaarNaam() {
@@ -1130,6 +1165,136 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     setOever(false); setKoppel(false); setAB(false); teken();
     if (sel.length) map.fitBounds(L.geoJSON({ type: "FeatureCollection", features: sel.map(q => ({ type: "Feature", properties: {}, geometry: q.geometry })) }).getBounds(), { padding: [24, 24], maxZoom: 17 });
     say(naam + ": " + sel.length + (sel.length === 1 ? " perceel, " : " percelen, ") + haTxt(haGeheel(sel)) + " ha.");
+  }
+  // Vloeibare kunstmest per naam: wat, l/ha, notitie en gedaan (in n.km); de tank geldt voor alle namen.
+  // Gerekend met de netto ha zoals bovenaan (bufferstrook eraf, langs water erbij).
+  const kmEl = { wat: $("kmWat"), lha: $("kmLha"), noti: $("kmNoti") }, tankEl = $("kmTank");
+  tankEl.value = store.get("kaartTankL", "");
+  let kmNetto = 0, kmBekend = true, kmVoor = undefined, kmT = 0;
+  const kmNaam = () => naamActief ? namen.find(x => x.naam === naamActief) : null;
+  const datumTxt = ts => { const d = new Date(ts), nu = new Date(); return d.getDate() + "-" + (d.getMonth() + 1) + (d.getFullYear() !== nu.getFullYear() ? "-" + d.getFullYear() : ""); };
+  const lTxt = v => Math.round(v).toLocaleString("nl-NL") + " l";
+  const getal1 = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  // Korte regel voor de namenlijst en de kop: "UAN 30, 150 l/ha · gedaan 12-5"
+  function kmKort(k) {
+    if (!k) return "";
+    const lha = parse(k.lha), a = [k.wat, lha > 0 ? String(k.lha).trim() + " l/ha" : ""].filter(Boolean).join(", ");
+    return [a, k.gedaan ? "✓ gedaan " + datumTxt(k.gedaan) : ""].filter(Boolean).join(" · ");
+  }
+  // Alleen geldige velden overnemen (ook uit een gedeelde link)
+  function kmSchoon(k) {
+    if (!k || typeof k !== "object") return null;
+    const o = {};
+    if (k.wat) o.wat = String(k.wat).slice(0, 60);
+    if (k.lha) o.lha = String(k.lha).slice(0, 12);
+    if (k.noti) o.noti = String(k.noti).slice(0, 500);
+    if (typeof k.gedaan === "number" && isFinite(k.gedaan)) o.gedaan = k.gedaan;
+    return Object.keys(o).length ? o : null;
+  }
+  function kmVul() {
+    const k = (kmNaam() || {}).km || {};
+    kmEl.wat.value = k.wat || ""; kmEl.lha.value = k.lha || ""; kmEl.noti.value = k.noti || "";
+    $("kmBox").open = !!(k.wat || k.lha || k.noti);
+  }
+  function kmUit() {
+    const n = kmNaam();
+    $("kmBox").hidden = !n || !sel.length;
+    if (!n) return;
+    const k = n.km || {}, lha = parse(k.lha), tank = parse(tankEl.value), uit = $("kmUit");
+    $("kmKop").textContent = "Vloeibare kunstmest" + (kmKort(k) ? ": " + kmKort(k) : "");
+    uit.innerHTML = "";
+    const rij = (a, b, c) => { const d = document.createElement("div"), x = document.createElement("span"), y = document.createElement("strong"); x.textContent = a; y.textContent = b; d.append(x, y); if (c) { const z = document.createElement("span"); z.textContent = " " + c; y.appendChild(z); } uit.appendChild(d); };
+    if (lha > 0) {
+      const tot = lha * kmNetto;
+      rij("Nodig", lTxt(tot), "voor " + haTxt(kmNetto) + " ha netto");
+      if (tank > 0) {
+        const vol = Math.floor(tot / tank + 1e-9), rest = tot - vol * tank;
+        rij("Tanks", vol ? vol + (vol === 1 ? " volle tank" : " volle tanks") + (rest >= 1 ? " + " + lTxt(rest) : "") : lTxt(rest), vol ? "" : "minder dan een tank");
+        rij("Per tank", getal1(tank / lha) + " ha", "met een volle tank");
+      }
+      if (!kmBekend) { const w = document.createElement("div"); w.className = "warn4"; w.style.display = "block"; w.textContent = "Nog niet bij elk perceel water gezocht: de bufferstrook zit er misschien nog niet af."; uit.appendChild(w); }
+    } else { const m = document.createElement("div"); m.className = "meta"; m.style.display = "block"; m.textContent = "Vul l/ha in, dan reken ik uit hoeveel je nodig hebt" + (tank > 0 ? " en hoeveel tanks." : "; met de tank erbij ook het aantal tanks."); uit.appendChild(m); }
+    const g = $("kmGedaan");
+    if (g.dataset.armed !== "1") g.textContent = k.gedaan ? "✓ Gedaan op " + datumTxt(k.gedaan) : "Gedaan";
+    g.setAttribute("aria-pressed", !!k.gedaan);
+  }
+  // Typen: meteen rekenen, bewaren even later (alle namen wegschrijven bij elke letter maakt het traag)
+  function kmZet() {
+    const n = kmNaam(); if (!n) return;
+    const km = kmSchoon(Object.assign({}, n.km, { wat: kmEl.wat.value.trim(), lha: kmEl.lha.value.trim(), noti: kmEl.noti.value.trim() }));
+    if (km) n.km = km; else delete n.km;
+    kmUit();
+    clearTimeout(kmT); kmT = setTimeout(() => { zetNamen(); renderNamen(); }, 500);
+  }
+  Object.values(kmEl).forEach(el => el.addEventListener("input", kmZet));
+  tankEl.addEventListener("input", () => { store.set("kaartTankL", tankEl.value); kmUit(); });
+  $("kmGedaan").addEventListener("click", e => {
+    const n = kmNaam(); if (!n) return;
+    if (n.km && n.km.gedaan) {
+      if (!armed(e.currentTarget, "Tik nog eens: niet gedaan")) return;
+      delete n.km.gedaan; if (!kmSchoon(n.km)) delete n.km;
+    } else n.km = Object.assign({}, n.km, { gedaan: Date.now() });
+    zetNamen(); kmUit(); renderNamen();
+  });
+  // Kaart zonder bereik: kaart en luchtfoto rond de percelen van een naam in een eigen cache; de service worker
+  // geeft die tegels dan ook zonder internet. Rond het perceel tot het fijnste niveau, verder weg alleen grover.
+  // Naam van de cache begint niet met "perceelkaart-" of "zaaihulp-", anders ruimt een update hem op.
+  const TEGELS = "tegels-perceelkaart";
+  let offline = store.get("kaartOffline", {});
+  if (!offline || typeof offline !== "object" || Array.isArray(offline)) offline = {};
+  let tegelBezig = null;
+  const tegelXY = (lon, lat, z) => { const n = 2 ** z, r = lat * Math.PI / 180; return [Math.floor((lon + 180) / 360 * n), Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n)]; };
+  function tegelLijst(lijst) {
+    const marge = { 10: 15000, 11: 10000, 12: 6000, 13: 4000, 14: 2500, 15: 1200, 16: 600, 17: 300, 18: 150, 19: 60 }, uit = new Set();
+    lijst.forEach(q => {
+      const b = L.geoJSON(q.geometry).getBounds(), cos = Math.cos(b.getCenter().lat * Math.PI / 180);
+      for (let z = 10; z <= 19; z++) {
+        const dLat = marge[z] / 111320, dLon = marge[z] / (111320 * cos);
+        const [x0, y0] = tegelXY(b.getWest() - dLon, b.getNorth() + dLat, z), [x1, y1] = tegelXY(b.getEast() + dLon, b.getSouth() - dLat, z);
+        for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) uit.add(z + "/" + x + "/" + y);
+      }
+    });
+    return [...uit];
+  }
+  const mbTxt = b => (b / 1048576).toLocaleString("nl-NL", { maximumFractionDigits: b < 10485760 ? 1 : 0 }) + " MB";
+  const offlineLabel = naam => tegelBezig ? (tegelBezig.naam === naam ? "Kaart bewaren… " + Math.floor(100 * tegelBezig.klaar / tegelBezig.tot) + "%" : "Kaart bewaren…")
+    : offline[naam] ? "Offline kaart vernieuwen" : "Kaart offline bewaren";
+  async function bewaarOffline(naam) {
+    if (tegelBezig || !sel.length) return;
+    if (!("caches" in window)) { say("Deze browser kan de kaart niet bewaren.", true); return; }
+    const urls = [];
+    tegelLijst(sel).forEach(k => { const [z, x, y] = k.split("/"); [BRT_URL, FOTO_URL].forEach(t => urls.push(t.replace("{z}", z).replace("{x}", x).replace("{y}", y))); });
+    tegelBezig = { naam, klaar: 0, tot: urls.length };
+    let i = 0, mis = 0, bytes = 0, vol = false, cache;
+    const knop = () => { const b = $("bOffline"); if (b) b.textContent = offlineLabel(naamActief); };
+    knop(); say("Kaart rond " + naam + " bewaren (" + urls.length + " stukjes). Je kunt intussen gewoon doorwerken.");
+    try { cache = await caches.open(TEGELS); } catch (e) { tegelBezig = null; knop(); say("De kaart kan niet bewaard worden op deze telefoon.", true); return; }
+    // Zes tegelijk: snel genoeg, en de kaart zelf blijft vlot
+    const werker = async () => {
+      while (i < urls.length && !vol) {
+        const u = urls[i++];
+        try {
+          const r = await fetch(u, { mode: "cors" });
+          if (r.ok) { bytes += +r.headers.get("content-length") || 0; await cache.put(u, r); }
+          else if (r.status !== 404) mis++;
+        } catch (e) { if (e && e.name === "QuotaExceededError") vol = true; mis++; }
+        tegelBezig.klaar++;
+        if (tegelBezig.klaar % 20 === 0) knop();
+      }
+    };
+    await Promise.all(Array.from({ length: 6 }, werker));
+    tegelBezig = null;
+    if (vol) { say("De opslag van de telefoon is vol: de kaart van " + naam + " is maar half bewaard.", true); teken(); return; }
+    if (mis > urls.length * 0.02) { say("Kaart van " + naam + " niet helemaal bewaard (" + mis + " stukjes misten, slecht bereik?). Tik nog eens met goed bereik.", true); teken(); return; }
+    offline[naam] = { ts: Date.now(), n: urls.length - mis };
+    store.set("kaartOffline", offline);
+    say("Kaart en luchtfoto rond " + naam + " bewaard (" + mbTxt(bytes) + "): werkt nu ook zonder bereik.");
+    teken();
+  }
+  async function wisOffline() {
+    try { if ("caches" in window) await caches.delete(TEGELS); } catch (e) {}
+    offline = {}; store.set("kaartOffline", offline); teken();
+    say("Offline kaarten gewist. De percelen zelf blijven bewaard.");
   }
   // Delen via een link: per perceel een punt erin (de ontvanger haalt het perceel zelf op), de grens (BRP of referentie),
   // zelf aangewezen oevers, AB-keuzes en kavels. Gevonden water gaat niet mee (Water zoeken bij de ontvanger).
@@ -1162,7 +1327,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       return abVelden(q, x);
     });
     const k = kavels.map(kv => abVelden(kv, { n: kv.naam, l: kv.leden.map(key => sel.findIndex(q => q.key === key)).filter(i => i >= 0) }));
-    const json = JSON.stringify({ v: 1, n: naamActief, p, k });
+    const d = { v: 1, n: naamActief, p, k }, km = kmSchoon((kmNaam() || {}).km);
+    if (km) d.km = km;
+    const json = JSON.stringify(d);
     const b64 = btoa(unescape(encodeURIComponent(json))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     return new URL("./", location.href).href + "#deel=" + b64;
   }
@@ -1197,7 +1364,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
     binnen = null;
     try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
     if (!lijst.length) { teken(); say("De gedeelde percelen konden niet opgehaald worden" + (mis.length ? " (geen verbinding?)" : "") + ".", true); return; }
-    namen.push({ naam, sel: lijst, kavels: k, ts: Date.now() });
+    const nw = { naam, sel: lijst, kavels: k, ts: Date.now() }, km = kmSchoon(d.km);
+    if (km) nw.km = km;
+    namen.push(nw);
     zetNamen(); teken();
     say(naam + " toegevoegd: " + lijst.length + (lijst.length === 1 ? " perceel" : " percelen") + ". Tik de naam om ze te zien; zoek daar het water opnieuw." +
       (mis.length ? " Niet gevonden: perceel " + mis.join(", ") + "." : "") + (oeverMis ? " Bij " + oeverMis + " perceel is de grens anders, de zelf aangewezen oevers zijn niet overgenomen." : ""), !!(mis.length || oeverMis));
@@ -1250,8 +1419,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         const nm = document.createElement("div"); nm.className = "name"; nm.textContent = n.naam;
         const mt = document.createElement("div"); mt.className = "meta";
         const kv = (n.kavels || []).length;
-        mt.textContent = n.sel.length + (n.sel.length === 1 ? " perceel" : " percelen") + (kv ? ", " + kv + (kv === 1 ? " kavel" : " kavels") : "") + (actief ? " · nu op de kaart" : "");
+        mt.textContent = n.sel.length + (n.sel.length === 1 ? " perceel" : " percelen") + (kv ? ", " + kv + (kv === 1 ? " kavel" : " kavels") : "") + (actief ? " · nu op de kaart" : "") + (offline[n.naam] ? " · kaart offline" : "");
         go.append(nm, mt);
+        if (kmKort(n.km)) { const k = document.createElement("div"); k.className = "meta"; k.textContent = "Kunstmest: " + kmKort(n.km); go.appendChild(k); }
         const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(haGeheel(n.sel)) + " ha";
         { const k = document.createElement("small"); k.textContent = "bruto"; w.appendChild(k); }
         li.append(nr, go, w, document.createElement("span"));
@@ -1271,6 +1441,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
       const m = document.createElement("div"); m.className = "meta";
       m.textContent = "Nog geen namen. Kies percelen onder Percelen en tik daar Bewaar onder naam.";
       lijstBox.appendChild(m);
+    }
+    if (Object.keys(offline).length) {
+      const m = document.createElement("div"); m.className = "meta";
+      m.textContent = "Kaart offline bewaard voor: " + Object.keys(offline).sort((a, b) => a.localeCompare(b, "nl")).join(", ") + ".";
+      const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
+      r.appendChild(kn("Offline kaarten wissen", e => { if (armed(e.currentTarget, "Tik nog eens om te wissen")) wisOffline(); }));
+      lijstBox.append(m, r);
     }
     {
       // Gedeelde link plakken (bijv. op een iPhone, waar een link in Safari opent en niet in de app)
@@ -1301,10 +1478,13 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         say(wijzigen ? "Tik percelen aan om ze toe te voegen of weg te halen." : "Klaar met wijzigen. " + naamActief + " is bewaard.");
       }, wijzigen));
       r.appendChild(kn("Delen", e => deel(e.currentTarget)));
+      { const b = kn(offlineLabel(naamActief), () => bewaarOffline(naamActief)); b.id = "bOffline"; r.appendChild(b); }
       r.appendChild(kn("Naam weghalen", e => {
         if (!armed(e.currentTarget, "Tik nog eens om " + naamActief + " weg te halen")) return;
         wijzigen = false; uitgelicht = null;
-        const was = naamActief; namen = namen.filter(x => x.naam !== was); naamActief = null; store.set("kaartNaamActief", null); zetNamen(); teken();
+        const was = naamActief; namen = namen.filter(x => x.naam !== was); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
+        if (offline[was]) { delete offline[was]; store.set("kaartOffline", offline); }
+        teken();
         say(was + " is weggehaald. De percelen staan nog op de kaart, zonder naam.");
       }));
       box.append(m, r);
@@ -1317,7 +1497,9 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
         const bestaat = namen.find(x => x.naam === naam);
         if (bestaat && !armed(e.currentTarget, naam + " overschrijven? Tik nog eens")) return;
         wijzigen = false; uitgelicht = null;
-        namen = namen.filter(x => x.naam !== naam).concat([{ naam, sel: [], kavels: [], ts: Date.now() }]);
+        const nw = { naam, sel: [], kavels: [], ts: Date.now() };
+        if (bestaat && bestaat.km) nw.km = bestaat.km;
+        namen = namen.filter(x => x.naam !== naam).concat([nw]);
         naamActief = naam; store.set("kaartNaamActief", naam); bewaarNaam(); teken();
         say(sel.length + (sel.length === 1 ? " perceel" : " percelen") + " bewaard onder " + naam + ". Je vindt ze terug onder Namen.");
       });

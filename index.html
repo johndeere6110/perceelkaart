@@ -159,7 +159,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 #paneelKm .log .ok { color: var(--accent); font-weight: 700; text-align: center; }
 #paneelKm .tankrij { margin-top: 14px; }
 #kmHint:empty { display: none; }
-.leaflet-tooltip.kml { background: #fff; border: 0; color: #1C2318; font: 700 13px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; padding: 0 6px; border-radius: 999px; box-shadow: 0 0 0 1px #1C2318; }
+.leaflet-tooltip.kml { background: #fff; border: 0; color: #1C2318; font: 700 13px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; padding: 1px 6px; border-radius: 8px; box-shadow: 0 0 0 1px #1C2318; text-align: center; line-height: 1.15; }
+.leaflet-tooltip.kml small { display: block; font-size: 11px; font-weight: 500; }
 .leaflet-tooltip.kml.klaar { background: #2b8a3e; color: #fff; }
 .leaflet-tooltip.kml::before { display: none; }
 /* Ver uitgezoomd (onder 15) geen liters op de kaart: inzoomen om ze te zien */
@@ -336,7 +337,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 96</div>
+  <div class="voet">versie 97</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1330,6 +1331,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const zoomOp = lijst => { if (lijst.length) map.fitBounds(L.geoJSON({ type: "FeatureCollection", features: lijst.map(q => ({ type: "Feature", properties: {}, geometry: q.geometry })) }).getBounds(), { padding: [24, 24], maxZoom: 17 }); };
   // Kaart: alleen de gekozen boer in kleur (rand geel = nog niet ingevuld, blauw = ingevuld met liters erop, grijs = niet,
   // groen = gedaan; het aangetikte perceel oranje). Andere boeren: dun grijs randje, wel aan te tikken.
+  // Label op de kaart: liters, klein eronder de ha (om onderweg te controleren); alleen getallen, dus veilig als HTML
+  const kmLabel = (liters, ha) => liters + "<small>" + haTxt(ha) + " ha</small>";
   function kmKaartTeken() {
     kmLaag.clearLayers();
     namen.forEach(n => {
@@ -1339,7 +1342,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         const kleur = klaar ? "#2b8a3e" : x > 0 ? "#2f7fd8" : x === 0 ? "#8a8f86" : "#E8B400";
         const g = L.geoJSON(q.geometry, { style: { color: gek ? "#e8590c" : kleur, weight: gek ? 5 : 3, fillColor: gek ? "#e8590c" : kleur, fillOpacity: gek ? .25 : .12 }, interactive: false });
         // Een perceel in een kavel krijgt geen eigen label: de kavel krijgt er één
-        if (x != null && !kavelVanKey(n, q.key)) g.bindTooltip(x > 0 ? lTxt(x * haVan(q)) : "niet", { permanent: true, direction: "center", className: "kml" + (klaar ? " klaar" : "") });
+        if (x != null && !kavelVanKey(n, q.key)) g.bindTooltip(kmLabel(x > 0 ? lTxt(x * haVan(q)) : "niet", haVan(q)), { permanent: true, direction: "center", className: "kml" + (klaar ? " klaar" : "") });
         kmLaag.addLayer(g);
       });
       if (!kmKeus || kmKeus.naam !== n.naam) return;
@@ -1348,7 +1351,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         if (!leden.length || leden.every(q => lhaVan(q, n) == null)) return;
         const l = stukLiters(n, leden), klaar = leden.every(q => q.km && q.km.gedaan);
         const c = L.geoJSON({ type: "FeatureCollection", features: leden.map(q => ({ type: "Feature", properties: {}, geometry: q.geometry })) }).getBounds().getCenter();
-        kmLaag.addLayer(L.tooltip({ direction: "center", className: "kml" + (klaar ? " klaar" : "") }).setLatLng(c).setContent(l > 0 ? lTxt(l) : "niet"));
+        kmLaag.addLayer(L.tooltip({ direction: "center", className: "kml" + (klaar ? " klaar" : "") }).setLatLng(c).setContent(kmLabel(l > 0 ? lTxt(l) : "niet", leden.reduce((t, q) => t + haVan(q), 0))));
       });
     });
     // Percelen op de kaart zonder naam: gestippeld

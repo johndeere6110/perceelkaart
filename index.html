@@ -315,6 +315,9 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div id="kmKaart"></div>
     <div id="kmOverzicht"></div>
     <div class="vk tankrij"><label for="kmTank">Tank (l)</label><input id="kmTank" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 3000"></div>
+    <div class="hint" id="kmZoomTxt"></div>
+    <div class="knoppen"><button type="button" class="btn" id="kmZoomZet">Tot deze hoogte</button></div>
+    <div class="meta">Zoom de kaart uit tot waar je de liters nog wilt zien en tik op Tot deze hoogte. Verder uitgezoomd verdwijnen ze.</div>
   </div>
   <div id="paneelNamen" class="namen" hidden>
     <div class="hint" id="namenHint"></div>
@@ -333,7 +336,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 94</div>
+  <div class="voet">versie 95</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -371,7 +374,12 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Uitgezoomd (onder 17) de kleine zaailabels verbergen
   // iPhone negeert user-scalable=no: knijpen buiten de kaart tegenhouden
   ["gesturestart", "gesturechange"].forEach(t => document.addEventListener(t, e => { if (!e.target.closest || !e.target.closest("#map")) e.preventDefault(); }, { passive: false }));
-  const zoomKlasse = () => { $("map").classList.toggle("ver", map.getZoom() < 17); $("map").classList.toggle("verKm", map.getZoom() < 15); };
+  // Kunstmest: liters op de kaart tot een eigen hoogte (instelbaar onder Kunstmest, standaard zoom 15)
+  let kmZoom = store.get("kaartKmZoom", 15);
+  if (!(kmZoom >= 7 && kmZoom <= 22)) kmZoom = 15;
+  const kmZoomTxt = () => { const z = map.getZoom(); $("kmZoomTxt").textContent = "Liters op de kaart tot zoom " + kmZoom + (z !== kmZoom ? " (de kaart staat nu op " + z + ")" : " (zoals nu)"); };
+  const zoomKlasse = () => { $("map").classList.toggle("ver", map.getZoom() < 17); $("map").classList.toggle("verKm", map.getZoom() < kmZoom); kmZoomTxt(); };
+  $("kmZoomZet").addEventListener("click", () => { kmZoom = map.getZoom(); store.set("kaartKmZoom", kmZoom); zoomKlasse(); const b = $("kmZoomZet"); b.textContent = "Ingesteld: zoom " + kmZoom; setTimeout(() => { b.textContent = "Tot deze hoogte"; }, 1500); });
   map.on("zoomend", zoomKlasse); zoomKlasse();
 
   // PDOK-achtergronden (Web Mercator, geen key)

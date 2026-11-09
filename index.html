@@ -162,7 +162,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .leaflet-tooltip.kml { background: #fff; border: 0; color: #1C2318; font: 700 13px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; padding: 0 6px; border-radius: 999px; box-shadow: 0 0 0 1px #1C2318; }
 .leaflet-tooltip.kml.klaar { background: #2b8a3e; color: #fff; }
 .leaflet-tooltip.kml::before { display: none; }
-/* Ver uitgezoomd (onder 14) geen liters op de kaart: inzoomen om ze te zien */
+/* Ver uitgezoomd (onder 15) geen liters op de kaart: inzoomen om ze te zien */
 #map.verKm .leaflet-tooltip.kml { display: none; }
 a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; flex: none; }
 #paneelKm a.btn { display: inline-flex; align-items: center; text-decoration: none; }
@@ -333,7 +333,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 93</div>
+  <div class="voet">versie 94</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -371,7 +371,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Uitgezoomd (onder 17) de kleine zaailabels verbergen
   // iPhone negeert user-scalable=no: knijpen buiten de kaart tegenhouden
   ["gesturestart", "gesturechange"].forEach(t => document.addEventListener(t, e => { if (!e.target.closest || !e.target.closest("#map")) e.preventDefault(); }, { passive: false }));
-  const zoomKlasse = () => { $("map").classList.toggle("ver", map.getZoom() < 17); $("map").classList.toggle("verKm", map.getZoom() < 14); };
+  const zoomKlasse = () => { $("map").classList.toggle("ver", map.getZoom() < 17); $("map").classList.toggle("verKm", map.getZoom() < 15); };
   map.on("zoomend", zoomKlasse); zoomKlasse();
 
   // PDOK-achtergronden (Web Mercator, geen key)

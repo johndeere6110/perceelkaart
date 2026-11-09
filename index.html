@@ -353,7 +353,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 100</div>
+  <div class="voet">versie 101</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1283,29 +1283,40 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const metSoort = (soort, f) => { const was = KV; KV = soort; try { return f(); } finally { KV = was; } };
   // Grenzen tegen typfouten: kunstmest minstens 50 l/ha (0 = niet), mest hoogstens 200 m³/ha
   const KM_MIN = 50, MEST_MAX = 200;
+  // Geeft { tekst, vraag }: vraag = mag wel, maar eerst bevestigen (veel mest); anders kan het niet
   function lhaFout(v) {
-    const t = String(v || "").trim(); if (!t) return "";
+    const t = String(v || "").trim(); if (!t) return null;
     const x = parse(t);
-    if (x == null || x < 0) return "Dat is geen getal.";
-    if (isM3() && x > MEST_MAX) return "Meer dan " + MEST_MAX + " m³/ha kan niet: typfout?";
-    if (!isM3() && x > 0 && x < KM_MIN) return "Onder " + KM_MIN + " l/ha kan niet (0 = niet): typfout?";
-    return "";
+    if (x == null || x < 0) return { tekst: "Dat is geen getal." };
+    if (isM3() && x > MEST_MAX) return { tekst: t + " m³/ha is wel veel. Klopt het?", vraag: true };
+    if (!isM3() && x > 0 && x < KM_MIN) return { tekst: "Onder " + KM_MIN + " l/ha kan niet (0 = niet): typfout?" };
+    return null;
   }
-  // Invulveld voor hoeveel per ha: een foute waarde wordt niet overgenomen (veld rood, uitleg eronder);
-  // verlaat je het veld zo, dan komt de waarde van daarvoor terug
+  // Invulveld voor hoeveel per ha: een foute waarde wordt niet overgenomen (veld rood, uitleg eronder). Veel mest mag
+  // wel, na "Ja, klopt". Verlaat je het veld zonder dat, dan komt de waarde van daarvoor terug.
   function bewaakLha(inp, foutEl, opslaan) {
-    let voor = inp.value;
+    let voor = inp.value, bevestigd = "";
+    const tekst = el("span"), ja = el("button", "btn", "Ja, klopt");
+    ja.type = "button"; ja.style.marginLeft = "8px"; ja.style.minHeight = "36px";
+    foutEl.append(tekst, ja);
+    const toon = f => { inp.classList.toggle("fout", !!f); tekst.textContent = f ? f.tekst : ""; ja.hidden = !(f && f.vraag); foutEl.hidden = !f; };
+    // Knop houdt de focus in het veld (anders gaat het veld eerst terug), en bewaart de waarde
+    ja.addEventListener("mousedown", e => e.preventDefault());
+    ja.addEventListener("click", () => { bevestigd = inp.value; voor = inp.value; toon(null); opslaan(inp.value); });
     inp.addEventListener("focus", () => { voor = inp.value; });
     inp.addEventListener("input", () => {
       const f = lhaFout(inp.value);
-      inp.classList.toggle("fout", !!f); foutEl.textContent = f; foutEl.hidden = !f;
+      if (f && f.vraag && inp.value === bevestigd) { toon(null); opslaan(inp.value); return; }
+      toon(f);
       if (!f) opslaan(inp.value);
     });
-    inp.addEventListener("blur", () => {
-      if (!lhaFout(inp.value)) { voor = inp.value; return; }
-      const fout = inp.value; inp.value = voor; inp.classList.remove("fout"); opslaan(voor);
-      foutEl.textContent = fout + " kan niet, " + (voor ? "terug naar " + voor : "weer leeg") + "."; foutEl.hidden = false;
-    });
+    inp.addEventListener("blur", () => setTimeout(() => {
+      const f = lhaFout(inp.value);
+      if (!f || (f.vraag && inp.value === bevestigd)) { voor = inp.value; return; }
+      if (document.activeElement === inp) return; // weer terug in het veld
+      const fout = inp.value; inp.value = voor; opslaan(voor); toon(null);
+      tekst.textContent = fout + (f.vraag ? " niet bevestigd, " : " kan niet, ") + (voor ? "terug naar " + voor : "weer leeg") + "."; ja.hidden = true; foutEl.hidden = false;
+    }, 250));
   }
   const ehTxt = n => isM3(n) ? "m³/ha" : "l/ha";
   const hv = (n, v) => isM3(n) ? v.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "\u00a0m³" : lTxt(v);

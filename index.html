@@ -68,6 +68,11 @@ header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 #paneelNamen .lbl2 { margin-top: 4px; }
 #namenHint:empty { display: none; }
+.groep { margin-top: 18px; padding-top: 10px; border-top: 1px solid var(--line); }
+.groep .chk { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; font-size: 16px; color: var(--ink); }
+.groep .chk input { width: 22px; height: 22px; min-height: 0; flex: none; margin: 0; padding: 0; accent-color: var(--accent); }
+.groep .vk { display: grid; grid-template-columns: 7em 1fr; gap: 8px; align-items: center; }
+.groep [hidden] { display: none !important; }
 .namen .lijst { display: flex; flex-wrap: wrap; gap: 6px; }
 .namen .btn { flex: none; min-height: 40px; font-size: 15px; padding: 0 12px; }
 .namen .opslaan { display: flex; gap: 6px; margin-top: 6px; }
@@ -314,8 +319,21 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   <div id="paneelNamen" class="namen" hidden>
     <div class="hint" id="namenHint"></div>
     <div id="namenLijstBox"></div>
+    <div class="groep">
+      <div class="lbl2">Groep</div>
+      <div class="hint" id="grNiet" hidden>De groep is nog niet ingesteld in deze versie van de app.</div>
+      <div id="grBlok">
+        <label class="chk"><input type="checkbox" id="grAan"> <span>Meedoen met de groep: alle namen delen met de anderen</span></label>
+        <div id="grVelden" class="vk">
+          <label for="grNaam">Je naam</label><input id="grNaam" type="text" maxlength="40" autocomplete="off" placeholder="bv. Jan">
+          <label for="grCode">Groepscode</label><input id="grCode" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="code">
+        </div>
+        <div class="hint" id="grStatus"></div>
+        <div class="lijst" style="margin-top:6px"><button type="button" class="btn" id="grSync">Nu bijwerken</button><button type="button" class="btn" id="grLink">Stuur groepslink</button></div>
+      </div>
+    </div>
   </div>
-  <div class="voet">versie 90</div>
+  <div class="voet">versie 91</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -421,6 +439,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   if (!Array.isArray(namen)) namen = [];
   namen = namen.filter(n => n && typeof n.naam === "string" && (Array.isArray(n.sel) || n.opKaart));
   let naamActief = store.get("kaartNaamActief", null);
+  let groepPlanFn = () => {}; // groep bijwerken na een wijziging (wordt verderop ingevuld)
   const eigenCache = new Map(); // perceel -> namen (niet de naam op de kaart) waar het ook onder staat; leeg bij elke wijziging van de namen
   // Staat er een naam op de kaart, dan is een tik bekijken (uitgelicht); toevoegen of weghalen alleen na Percelen wijzigen
   let wijzigen = false, uitgelicht = null;
@@ -1189,10 +1208,11 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     if (n.naam !== naamActief) return n;
     const o = { naam: n.naam, ts: n.ts, opKaart: true };
     if (n.km) o.km = n.km;
+    if (n.wacht) o.wacht = n.wacht;
     return o;
   }
   function zetNamen() {
-    eigenCache.clear();
+    eigenCache.clear(); groepPlanFn();
     try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(naarOpslag))); return true; }
     catch (e) { say("De opslag is vol: de namen zijn niet bijgewerkt. Haal een naam of percelen weg.", true); return false; }
   }
@@ -1542,18 +1562,40 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     if (x.za != null) o.zaaiAnders = !!x.za;
     return o;
   };
+  // Wat van een perceel gedeeld wordt (deellink en groep): een punt erin om hem op te halen, de grens, zelf aangewezen
+  // oevers, langs water erbij, AB-keuzes en kunstmest. Niet de vorm en niet het gevonden water.
+  function perceelDeel(q) {
+    const x = { pt: punt7(midden(q) || Perceel.binnenPunt(q.geometry)) };
+    if (q.ref) x.r = 1;
+    const hand = {};
+    Object.keys(q.oever || {}).forEach(k => { if (!(q.wauto && q.wauto[k])) hand[k] = q.oever[k]; });
+    // Oevers horen bij de randstukjes van deze grens: alleen terugzetten als de ontvanger dezelfde grens krijgt
+    if (Object.keys(hand).length) { x.o = hand; x.nz = Perceel.zijden(q.geometry).length; }
+    if (q.extraWater) x.e = q.extraWater;
+    { const km = kmSchoon(q.km, true); if (km) x.km = km; }
+    return abVelden(q, x);
+  }
+  // Een gedeeld perceel ophalen (vorm uit BRP of referentiepercelen) en de gedeelde velden erop zetten
+  async function perceelUitDeel(x) {
+    const r = await Perceel.zoekOpPunt(x.pt[0], x.pt[1], x.r ? { api: Perceel.API_REF, cacheKey: "perceelCacheRef" } : undefined);
+    r.perceel.ref = !!x.r;
+    const q = nieuwPerceel(r.perceel);
+    return { q, oeverOk: zetGedeeld(q, x) };
+  }
+  // Gedeelde velden op een perceel zetten; gevonden oevers (wauto) blijven. Geeft false als de oevers niet pasten.
+  function zetGedeeld(q, x) {
+    const auto = {};
+    Object.keys(q.oever || {}).forEach(k => { if (q.wauto && q.wauto[k]) auto[k] = q.oever[k]; });
+    const past = !x.o || Perceel.zijden(q.geometry).length === x.nz;
+    q.oever = Object.assign(auto, past && x.o ? x.o : {});
+    if (x.e) q.extraWater = x.e; else delete q.extraWater;
+    ["abPunt", "abLijn", "abRand", "spuitAnders", "zaaiAnders"].forEach(k => delete q[k]);
+    abTerug(x, q);
+    const km = kmSchoon(x.km, true); if (km) q.km = km; else delete q.km;
+    return past;
+  }
   function deelLink() {
-    const p = sel.map(q => {
-      const m = Perceel.binnenPunt(q.geometry), x = { pt: punt7(m) };
-      if (q.ref) x.r = 1;
-      const hand = {};
-      Object.keys(q.oever || {}).forEach(k => { if (!(q.wauto && q.wauto[k])) hand[k] = q.oever[k]; });
-      // Oevers horen bij de randstukjes van deze grens: alleen terugzetten als de ontvanger dezelfde grens krijgt
-      if (Object.keys(hand).length) { x.o = hand; x.nz = Perceel.zijden(q.geometry).length; }
-      if (q.extraWater) x.e = q.extraWater;
-      { const km = kmSchoon(q.km, true); if (km) x.km = km; }
-      return abVelden(q, x);
-    });
+    const p = sel.map(perceelDeel);
     const k = kavels.map(kv => abVelden(kv, { n: kv.naam, l: kv.leden.map(key => sel.findIndex(q => q.key === key)).filter(i => i >= 0) }));
     const d = { v: 1, n: naamActief, p, k }, km = kmSchoon((namen.find(x => x.naam === naamActief) || {}).km);
     if (km) d.km = km;
@@ -1577,12 +1619,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     let oeverMis = 0;
     for (const [i, x] of d.p.entries()) {
       try {
-        const r = await Perceel.zoekOpPunt(x.pt[0], x.pt[1], x.r ? { api: Perceel.API_REF, cacheKey: "perceelCacheRef" } : undefined);
-        r.perceel.ref = !!x.r;
-        const q = abTerug(x, nieuwPerceel(r.perceel));
-        if (x.o) { if (Perceel.zijden(q.geometry).length === x.nz) q.oever = x.o; else oeverMis++; }
-        if (x.e) q.extraWater = x.e;
-        { const km = kmSchoon(x.km, true); if (km) q.km = km; }
+        const { q, oeverOk } = await perceelUitDeel(x);
+        if (!oeverOk) oeverMis++;
         uit[i] = uit.some(y => y && y.key === q.key) ? null : q;
       } catch (e) { uit[i] = null; mis.push(i + 1); }
     }
@@ -1608,6 +1646,206 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       else say(url);
     } catch (e) { if (e && e.name !== "AbortError") say(url); }
   }
+  // ---------- Groep: namen delen via een Google Sheet (zie groep/HANDLEIDING.md) ----------
+  // Per naam één regel in de sheet (id "naam:<naam in kleine letters>"), met wat de deellink ook deelt. Iedereen mag aanpassen.
+  // Samenvoegen per onderdeel (km = kunstmest van de naam, k = kavels, p:<sleutel> = een perceel) tegen de vorige
+  // gezamenlijke stand (kaartGroepBasis): alleen hier veranderd -> naar de groep, alleen daar veranderd -> hierheen,
+  // allebei veranderd -> wie nu bijwerkt wint. Een naam die bij een ander weg is, gaat hier ook weg als hij hier niet veranderde.
+  const GROEP_URL_VAST = ""; // web-app-URL van het Apps Script van de Perceelkaart-groep (eindigt op /exec)
+  const groepUrl = () => store.get("kaartGroepUrl", "") || GROEP_URL_VAST;
+  const groep = Object.assign({ aan: false, naam: "", code: "" }, store.get("kaartGroep", {}));
+  if (!groep.apparaat) { groep.apparaat = Date.now().toString(36) + Math.random().toString(36).slice(2, 7); store.set("kaartGroep", groep); }
+  let groepBasis = store.get("kaartGroepBasis", {});
+  if (!groepBasis || typeof groepBasis !== "object" || !groepBasis.n) groepBasis = { bron: "", n: {} };
+  const groepInfo = store.get("kaartGroepData", {}) || {};
+  let groepBezig = false, groepFout = "", groepLaatst = groepInfo.ts || 0, groepVan = groepInfo.van || {}, groepTimer = null, groepStil = false, groepNieuw = 0;
+  const groepActief = () => !!(groep.aan && String(groep.naam || "").trim());
+  const groepOk = () => !!(groepUrl() && groepActief() && String(groep.code || "").trim());
+  const naamId = naam => "naam:" + String(naam).trim().toLowerCase();
+  // Vaste volgorde van sleutels, zodat dezelfde inhoud altijd dezelfde tekst (hash) geeft
+  const vast = o => Array.isArray(o) ? "[" + o.map(vast).join(",") + "]" : o && typeof o === "object" ? "{" + Object.keys(o).sort().map(k => JSON.stringify(k) + ":" + vast(o[k])).join(",") + "}" : JSON.stringify(o);
+  // Het punt (pt) hoort niet bij de inhoud: dat rekent elke telefoon uit zijn eigen vorm
+  const itemHash = (k, v) => vast(k.startsWith("p:") ? Object.assign({}, v, { pt: undefined }) : v);
+  const percelenNaam = n => n.naam === naamActief ? sel : (n.sel || []);
+  // Een naam als onderdelen: { km, k, "p:<sleutel>" }; nog op te halen percelen (n.wacht) tellen mee
+  function naamItems(n) {
+    const it = {}, km = kmSchoon(n.km), kv = n.naam === naamActief ? kavels : (n.kavels || []);
+    if (km) it.km = km;
+    if (kv.length) it.k = kv.map(v => abVelden(v, { n: v.naam, l: v.leden.slice() }));
+    percelenNaam(n).forEach(q => { it["p:" + q.key] = perceelDeel(q); });
+    (n.wacht || []).forEach(w => { if (!it["p:" + w.key]) it["p:" + w.key] = w.x; });
+    return it;
+  }
+  const hashes = it => Object.fromEntries(Object.entries(it).map(([k, v]) => [k, itemHash(k, v)]));
+  const docUit = (naam, it) => ({ v: 1, n: naam, km: it.km || null, k: it.k || [], p: Object.fromEntries(Object.entries(it).filter(([k]) => k.startsWith("p:")).map(([k, v]) => [k.slice(2), v])) });
+  const docItems = d => { const it = {}; if (d.km) it.km = d.km; if (Array.isArray(d.k) && d.k.length) it.k = d.k; Object.entries(d.p || {}).forEach(([k, v]) => { if (v && Array.isArray(v.pt)) it["p:" + k] = v; }); return it; };
+  function voegSamen(L, R, B) {
+    const uit = {}, keys = new Set([...Object.keys(L), ...Object.keys(R), ...Object.keys(B)]);
+    keys.forEach(k => {
+      const lh = k in L ? itemHash(k, L[k]) : null, rh = k in R ? itemHash(k, R[k]) : null, bh = k in B ? B[k] : null;
+      const v = lh === bh ? R[k] : L[k]; // hier niet veranderd: die van de groep; anders (ook als allebei) die van hier
+      if (v !== undefined) uit[k] = v;
+    });
+    return uit;
+  }
+  // Samengevoegde onderdelen op een naam zetten: kunstmest, kavels, gedeelde velden per perceel; nieuwe percelen in n.wacht
+  function zetNaam(n, it) {
+    const km = kmSchoon(it.km); if (km) n.km = km; else delete n.km;
+    const kv = (it.k || []).map(v => abTerug(v, { naam: v.n, leden: (v.l || []).slice() }));
+    const lijst = percelenNaam(n), wil = Object.keys(it).filter(k => k.startsWith("p:")).map(k => k.slice(2));
+    const blijft = lijst.filter(q => wil.includes(q.key));
+    blijft.forEach(q => zetGedeeld(q, it["p:" + q.key]));
+    n.wacht = wil.filter(key => !blijft.some(q => q.key === key)).map(key => ({ key, x: it["p:" + key] }));
+    if (!n.wacht.length) delete n.wacht;
+    if (n.naam === naamActief) {
+      if (blijft.length !== sel.length) { sel.splice(0, sel.length, ...blijft); }
+      kavels = kv; store.set("kaartTestSelectie", sel); store.set("kaartKavels", kavels);
+    } else { n.sel = blijft; n.kavels = kv; }
+  }
+  const omschrijving = n => {
+    const lijst = percelenNaam(n), aantal = lijst.length + (n.wacht || []).length, k = n.km || {}, t = naamTot(n);
+    return [n.naam, aantal + (aantal === 1 ? " perceel" : " percelen") + ", " + haTxt(haGeheel(lijst)) + " ha", k.wat || "", t.l ? lTxt(t.l) : "", gedaanTxt(t)].filter(Boolean).join(" · ");
+  };
+  async function groepVraag(opts) {
+    const ac = typeof AbortController === "function" ? new AbortController() : null, t = ac ? setTimeout(() => ac.abort(), 20000) : null;
+    try { const res = await fetch(groepUrl() + (opts ? "" : "?code=" + encodeURIComponent(groep.code.trim())), Object.assign({ signal: ac ? ac.signal : undefined, cache: "no-store" }, opts || {})); return await res.json(); }
+    finally { if (t) clearTimeout(t); }
+  }
+  // Is er hier iets veranderd sinds de vorige keer? (dan meteen bijwerken; anders wacht het tot de volgende ronde)
+  const hierVeranderd = () => namen.some(n => { const b = groepBasis.n[naamId(n.naam)]; return !b || vast(hashes(naamItems(n))) !== vast(b); }) ||
+    Object.keys(groepBasis.n).some(id => !namen.some(n => naamId(n.naam) === id));
+  async function groepSync() {
+    if (!groepOk() || groepBezig) return renderGroep();
+    if (navigator.onLine === false) { groepFout = "Geen bereik: wordt bijgewerkt zodra er weer internet is."; return renderGroep(); }
+    groepBezig = true; groepFout = ""; renderGroep();
+    try {
+      const bron = groepUrl() + "|" + groep.code.trim();
+      if (groepBasis.bron !== bron) groepBasis = { bron, n: {} }; // andere sheet of code: alles opnieuw samenvoegen
+      const a = await groepVraag();
+      if (!a || !a.ok || !Array.isArray(a.rijen)) throw new Error(a && a.fout === "code" ? "code" : "server");
+      const remote = {}, van = {};
+      a.rijen.forEach(r => { if (r.soort !== "naam") return; let d = r.data; if (typeof d === "string") { try { d = JSON.parse(d); } catch (e) { d = null; } } if (d && typeof d.n === "string" && d.p) { remote[r.id] = d; van[r.id] = r.van || ""; } });
+      // Samenvoegen (synchroon: wat je intussen aanpast, gaat de volgende keer mee)
+      const stuur = [], ids = new Set([...Object.keys(remote), ...Object.keys(groepBasis.n), ...namen.map(n => naamId(n.naam))]);
+      let binnen = 0;
+      groepStil = true;
+      ids.forEach(id => {
+        const n = namen.find(x => naamId(x.naam) === id), R = remote[id], B = groepBasis.n[id];
+        if (!n && !R) { delete groepBasis.n[id]; return; }
+        if (!n) {
+          // Hier weggehaald? Dan bij de groep ook weg, tenzij een ander hem intussen aanpaste
+          if (B && vast(hashes(docItems(R))) === vast(B)) { stuur.push({ id, apparaat: groep.apparaat, weg: true }); delete groepBasis.n[id]; return; }
+          let naam = R.n.trim() || "Gedeeld", nr = 2;
+          while (namen.some(x => x.naam === naam)) naam = R.n + " (" + nr++ + ")";
+          const nw = { naam, sel: [], kavels: [], ts: Date.now() };
+          namen.push(nw); zetNaam(nw, docItems(R)); binnen++;
+          groepBasis.n[id] = hashes(naamItems(nw));
+          return;
+        }
+        const L = naamItems(n);
+        if (!R) {
+          // Bij een ander weggehaald (of in de sheet op weg gezet) en hier niet veranderd: hier ook weg
+          if (B && vast(hashes(L)) === vast(B)) {
+            if (n.naam === naamActief) { naamActief = null; store.set("kaartNaamActief", null); wijzigen = false; uitgelicht = null; }
+            namen = namen.filter(x => x !== n); delete groepBasis.n[id]; binnen++;
+            return;
+          }
+          stuur.push({ id, soort: "naam", apparaat: groep.apparaat, van: groep.naam.trim(), omschrijving: omschrijving(n), data: docUit(n.naam, L) });
+          groepBasis.n[id] = hashes(L);
+          return;
+        }
+        const M = voegSamen(L, docItems(R), B || {});
+        if (vast(hashes(M)) !== vast(hashes(L))) { zetNaam(n, M); binnen++; }
+        // Wat hier na het samenvoegen staat is de nieuwe basis (pasten oevers niet op de vorm hier, dan blijft dat zo)
+        groepBasis.n[id] = hashes(naamItems(n));
+        if (vast(hashes(M)) !== vast(hashes(docItems(R)))) stuur.push({ id, soort: "naam", apparaat: groep.apparaat, van: groep.naam.trim(), omschrijving: omschrijving(n), data: docUit(n.naam, M) });
+      });
+      zetNamen(); store.set("kaartGroepBasis", groepBasis);
+      groepStil = false;
+      for (let i = 0; i < stuur.length; i += 100) {
+        const b = await groepVraag({ method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ code: groep.code.trim(), rijen: stuur.slice(i, i + 100) }) });
+        if (!b || !b.ok) throw new Error(b && b.fout === "code" ? "code" : "server");
+      }
+      stuur.forEach(r => { if (!r.weg) van[r.id] = r.van; });
+      groepLaatst = Date.now(); groepVan = van; groepNieuw = binnen;
+      store.set("kaartGroepData", { ts: groepLaatst, van });
+      if (binnen) teken();
+      haalWacht();
+    } catch (e) {
+      groepStil = false;
+      groepFout = e && e.message === "code" ? "De groepscode klopt niet." : "Bijwerken lukte niet (geen verbinding of de groep is even niet bereikbaar). Later opnieuw.";
+    }
+    groepBezig = false; renderGroep();
+  }
+  // Percelen die uit de groep kwamen: vorm ophalen (BRP of referentieperceel); lukt het niet, dan de volgende keer
+  let wachtBezig = false;
+  async function haalWacht() {
+    if (wachtBezig) return;
+    wachtBezig = true;
+    let iets = false;
+    for (const n of namen.slice()) {
+      for (const w of (n.wacht || []).slice()) {
+        try {
+          const { q } = await perceelUitDeel(w.x);
+          q.key = w.key; // zelfde sleutel als in de groep, ook als de bron hem net anders noemt
+          if (!namen.includes(n) || !(n.wacht || []).includes(w)) continue; // intussen veranderd
+          const lijst = percelenNaam(n);
+          if (!lijst.some(x => x.key === q.key)) lijst.push(q);
+          // Zo staat hij hier (pasten de oevers niet op de vorm hier, dan zonder): dat is geen wijziging om terug te sturen
+          const b = groepBasis.n[naamId(n.naam)]; if (b) { b["p:" + q.key] = itemHash("p:" + q.key, perceelDeel(q)); store.set("kaartGroepBasis", groepBasis); }
+          n.wacht = n.wacht.filter(x => x !== w); if (!n.wacht.length) delete n.wacht;
+          iets = true;
+        } catch (e) { /* geen verbinding: volgende keer */ }
+      }
+    }
+    if (iets) { groepStil = true; if (naamActief) store.set("kaartTestSelectie", sel); zetNamen(); groepStil = false; teken(); }
+    wachtBezig = false;
+  }
+  // Na een wijziging hier: na 3 s bijwerken als er echt iets veranderde
+  groepPlanFn = () => { if (groepStil || !groepOk()) return; clearTimeout(groepTimer); groepTimer = setTimeout(() => { if (hierVeranderd()) groepSync(); }, 3000); };
+  function renderGroep() {
+    const ingesteld = !!groepUrl();
+    $("grNiet").hidden = ingesteld; $("grBlok").hidden = !ingesteld;
+    if (!ingesteld) return;
+    $("grAan").checked = !!groep.aan; $("grVelden").hidden = !groep.aan;
+    $("grSync").disabled = !groepOk() || groepBezig; $("grLink").disabled = !(groep.aan && String(groep.code || "").trim());
+    const st = $("grStatus");
+    st.className = "hint";
+    if (!groep.aan) { st.textContent = "Je doet niet mee: je namen blijven alleen op deze telefoon."; return; }
+    if (!String(groep.naam || "").trim()) { st.textContent = "Vul je naam in. Zonder naam deelt de app niks en haalt ook niks op."; st.className = "hint warn"; return; }
+    if (!String(groep.code || "").trim()) { st.textContent = "Vul de groepscode in (of open de groepslink die je kreeg)."; st.className = "hint warn"; return; }
+    const tijd = groepLaatst ? new Date(groepLaatst).toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+    const wacht = namen.reduce((t, n) => t + (n.wacht || []).length, 0);
+    if (groepFout) st.className = "hint warn";
+    st.textContent = groepBezig ? "Bezig met bijwerken…" : (groepFout ? groepFout + " " : "") +
+      (groepLaatst ? "Bijgewerkt " + tijd + ": " + namen.length + (namen.length === 1 ? " naam" : " namen") + " in de groep." + (groepNieuw ? " " + groepNieuw + (groepNieuw === 1 ? " naam" : " namen") + " bijgewerkt uit de groep." : "") : "Nog niet bijgewerkt.") +
+      (wacht ? " " + wacht + (wacht === 1 ? " perceel wordt" : " percelen worden") + " nog opgehaald." : "");
+  }
+  const bewaarGroep = () => { store.set("kaartGroep", groep); renderGroep(); };
+  $("grAan").addEventListener("change", e => { groep.aan = e.target.checked; bewaarGroep(); if (groep.aan) groepSync(); });
+  $("grNaam").addEventListener("input", e => { groep.naam = e.target.value; bewaarGroep(); clearTimeout(groepTimer); groepTimer = setTimeout(groepSync, 3000); });
+  $("grCode").addEventListener("input", e => { groep.code = e.target.value.trim(); bewaarGroep(); clearTimeout(groepTimer); groepTimer = setTimeout(groepSync, 3000); });
+  $("grSync").addEventListener("click", () => groepSync());
+  // Groepslink: de app met de code erin, dan hoeft niemand iets over te typen
+  $("grLink").addEventListener("click", async () => {
+    const url = location.origin + location.pathname + "?groep=" + encodeURIComponent(groep.code.trim());
+    try { if (navigator.share) { await navigator.share({ title: "Perceelkaart groep", text: "Doe mee met onze Perceelkaart-groep (open de link, vul je naam in):", url }); return; } } catch (er) { if (er && er.name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(url); say("Groepslink gekopieerd: stuur hem via WhatsApp of mail."); } catch (er) { say("Stuur deze link: " + url); }
+  });
+  // Geopend via een groepslink: code overnemen en meedoen, tabblad Namen tonen
+  let viaGroepslink = false;
+  try {
+    const q = new URLSearchParams(location.search), c = q.get("groep");
+    if (c) { groep.code = c.trim(); groep.aan = true; store.set("kaartGroep", groep); viaGroepslink = true; history.replaceState(null, "", location.pathname + location.hash); }
+  } catch (e) {}
+  $("grNaam").value = groep.naam || ""; $("grCode").value = groep.code || "";
+  window.addEventListener("online", () => groepSync());
+  // Bijwerken als je de app weer opent, en elke 5 minuten zolang hij openstaat
+  const groepAlsOud = ms => { if (document.visibilityState !== "hidden" && Date.now() - groepLaatst > ms) groepSync(); };
+  document.addEventListener("visibilitychange", () => groepAlsOud(30000));
+  setInterval(() => groepAlsOud(4 * 60000), 60000);
+  if (viaGroepslink) toonTab("namen");
+  renderGroep(); setTimeout(groepSync, 1500);
   {
     const d = leesDeel(location.hash);
     if (d) binnen = d;
@@ -1654,7 +1892,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         const nm = document.createElement("div"); nm.className = "name"; nm.textContent = n.naam;
         const mt = document.createElement("div"); mt.className = "meta";
         const kv = (n.kavels || []).length;
-        mt.textContent = n.sel.length + (n.sel.length === 1 ? " perceel" : " percelen") + (kv ? ", " + kv + (kv === 1 ? " kavel" : " kavels") : "") + (actief ? " · nu op de kaart" : "") + (offline[n.naam] ? " · kaart offline" : "");
+        mt.textContent = n.sel.length + (n.sel.length === 1 ? " perceel" : " percelen") + (kv ? ", " + kv + (kv === 1 ? " kavel" : " kavels") : "") + (actief ? " · nu op de kaart" : "") + (offline[n.naam] ? " · kaart offline" : "") +
+          ((n.wacht || []).length ? " · " + n.wacht.length + " nog ophalen" : "") + (groepActief() && groepVan[naamId(n.naam)] && groepVan[naamId(n.naam)] !== groep.naam.trim() ? " · laatst door " + groepVan[naamId(n.naam)] : "");
         go.append(nm, mt);
         if (kmKort(n)) { const k = document.createElement("div"); k.className = "meta"; k.textContent = "Kunstmest: " + kmKort(n); go.appendChild(k); }
         const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(haGeheel(n.sel)) + " ha";

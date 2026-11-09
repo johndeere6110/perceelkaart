@@ -5,6 +5,7 @@ Web-app om percelen te kiezen op de kaart (PDOK BRP gewaspercelen), het totaal i
 - Leaflet en de lettertypen staan in vendor/ en fonts/: niets van een CDN of Google laden.
 - Taal in de app: Nederlands, komma als decimaalteken.
 - Gegevens staan in localStorage (sleutels kaartTest*, perceelCache). Verander bestaande sleutels niet. Let op: deze app deelt de opslag met de Zaaihulp (zelfde github.io-domein).
+- Groep (namen delen): groep/apps-script.gs in een eigen Google Sheet, web-app-URL in GROEP_URL_VAST in index.html (los van de Zaaihulp-groep). Opslag: kaartGroep (naam, code, apparaat), kaartGroepBasis (laatste gezamenlijke stand per naam, om samen te voegen), kaartGroepData. Niet de sleutels groep*/groepUrl gebruiken: die zijn van de Zaaihulp.
 - Offline kaarttegels staan in de cache "tegels-perceelkaart" (Cache Storage); sw.js geeft ze. Die naam mag niet met "perceelkaart-" of "zaaihulp-" beginnen, want die caches ruimen de service workers bij een update op.
 - Gebruik geen alert() of confirm(); gebruik armed() en een hint-tekst.
 - Bij elke wijziging: verhoog het versienummer onderaan index.html ("versie 1" -> 2 enz., in de .voet) én in sw.js (perceelkaart-v1 -> v2), anders krijgen geïnstalleerde apps de update niet.

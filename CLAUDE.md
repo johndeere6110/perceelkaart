@@ -6,7 +6,7 @@ Web-app om percelen te kiezen op de kaart (PDOK BRP gewaspercelen), het totaal i
 - Taal in de app: Nederlands, komma als decimaalteken.
 - Gegevens staan in localStorage (sleutels kaartTest*, perceelCache). Verander bestaande sleutels niet. Let op: deze app deelt de opslag met de Zaaihulp (zelfde github.io-domein).
 - Groep (namen delen): groep/apps-script.gs in een eigen Google Sheet, web-app-URL in GROEP_URL_VAST in index.html (los van de Zaaihulp-groep). Opslag: kaartGroep (naam, code, apparaat), kaartGroepBasis (laatste gezamenlijke stand per naam, om samen te voegen), kaartGroepData. Niet de sleutels groep*/groepUrl gebruiken: die zijn van de Zaaihulp.
-- Kunstmest: per perceel q.km {lha, noti, gedaan}, per naam n.km {wat, lha (standaard), noti, eh ("m3" = kuub)}. Instellingen: kaartTankL, kaartTankM3, kaartKmZoom, kaartKmLabel.
+- Bemesten: kunstmest per perceel q.km {lha, noti, gedaan} en per naam n.km {wat, lha (standaard), noti}; mest hetzelfde in q.mest / n.mest (lha = m³/ha). De code in het tabblad werkt met q[KV] (KV = "km" of "mest"). Grenzen: kunstmest ≥ 50 l/ha (of 0), mest ≤ 200 m³/ha. Instellingen: kaartBemSoort, kaartTankL, kaartTankM3, kaartKmZoom, kaartKmLabel.
 - Offline kaarttegels staan in de cache "tegels-perceelkaart" (Cache Storage); sw.js geeft ze. Die naam mag niet met "perceelkaart-" of "zaaihulp-" beginnen, want die caches ruimen de service workers bij een update op.
 - Gebruik geen alert() of confirm(); gebruik armed() en een hint-tekst.
 - Bij elke wijziging: verhoog het versienummer onderaan index.html ("versie 1" -> 2 enz., in de .voet) én in sw.js (perceelkaart-v1 -> v2), anders krijgen geïnstalleerde apps de update niet.

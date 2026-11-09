@@ -30,7 +30,7 @@ telefoon zelf), offline kaarten en de instellingen (spuitbreedte, tank enz.).
    vast in de app; daarna hoeft niemand meer iets met die URL te doen.
 
 ## 4. Meedoen
-- In de app, tabblad **Namen** → onderaan **Groep** → *Meedoen met de groep*, je naam en de groepscode invullen.
+- In de app, tabblad **Bedrijven** → onderaan **Groep** → *Meedoen met de groep*, je naam en de groepscode invullen.
 - Of: één persoon tikt op **Stuur groepslink** en stuurt die naar de rest. Wie de link opent, doet meteen mee
   (alleen zijn naam nog invullen).
 - Alle namen op je telefoon gaan naar de groep, en die van de anderen komen erbij. Een naam die al bestond

@@ -250,7 +250,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
 <div class="panel">
   <div class="tabs" role="tablist">
     <button type="button" role="tab" id="tabPerc" aria-selected="true">Percelen</button>
-    <button type="button" role="tab" id="tabNamen" aria-selected="false">Namen</button>
+    <button type="button" role="tab" id="tabNamen" aria-selected="false">Bedrijven</button>
     <button type="button" role="tab" id="tabKm" aria-selected="false">Bemesten</button>
   </div>
   <div id="paneelPerc">
@@ -343,7 +343,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div class="lbl2">Groep</div>
       <div class="hint" id="grNiet" hidden>De groep is nog niet ingesteld in deze versie van de app.</div>
       <div id="grBlok">
-        <label class="chk"><input type="checkbox" id="grAan"> <span>Meedoen met de groep: alle namen delen met de anderen</span></label>
+        <label class="chk"><input type="checkbox" id="grAan"> <span>Meedoen met de groep: alle bedrijven delen met de anderen</span></label>
         <div id="grVelden" class="vk">
           <label for="grNaam">Je naam</label><input id="grNaam" type="text" maxlength="40" autocomplete="off" placeholder="bv. Jan">
           <label for="grCode">Groepscode</label><input id="grCode" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="code">
@@ -353,7 +353,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 101</div>
+  <div class="voet">versie 102</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -373,7 +373,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const haTxt = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false });
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { say("De opslag van de telefoon is vol: dit is NIET bewaard. Haal percelen of namen weg.", true); return false; } }
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { say("De opslag van de telefoon is vol: dit is NIET bewaard. Haal percelen of bedrijven weg.", true); return false; } }
   };
   if (!window.L) { say("Kaart kon niet laden. Heb je internet?", true); return; }
   if (!window.Perceel) { say("perceel.js kon niet laden.", true); return; }
@@ -1227,7 +1227,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     wijzigen = false; uitgelicht = null;
     const was = naamActief; naamActief = null; store.set("kaartNaamActief", null); zetNamen();
     sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
-    say(was ? "Kaart leeg. De percelen van " + was + " blijven bewaard: tik de naam om ze terug te halen." : "Selectie gewist. Tik op een perceel om te beginnen.");
+    say(was ? "Kaart leeg. De percelen van " + was + " blijven bewaard: tik het bedrijf aan onder Bedrijven om ze terug te halen." : "Selectie gewist. Tik op een perceel om te beginnen.");
   });
   // Namen bewaren en terughalen
   // De naam op de kaart: alleen naam en kunstmest bewaren, zijn percelen staan al in kaartTestSelectie
@@ -1242,7 +1242,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   function zetNamen() {
     eigenCache.clear(); groepPlanFn();
     try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(naarOpslag))); return true; }
-    catch (e) { say("De opslag is vol: de namen zijn niet bijgewerkt. Haal een naam of percelen weg.", true); return false; }
+    catch (e) { say("De opslag is vol: de bedrijven zijn niet bijgewerkt. Haal een bedrijf of percelen weg.", true); return false; }
   }
   function bewaarNaam() {
     const n = naamActief && namen.find(x => x.naam === naamActief);
@@ -1437,8 +1437,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const hits = [];
     namen.forEach(n => percelenVan(n).forEach(q => { if (Perceel.bevatPunt(q.geometry, lon, lat)) hits.push({ naam: n.naam, key: stukKey(n, q) }); }));
     if (!hits.length) {
-      kmSay(!naamActief && sel.some(q => Perceel.bevatPunt(q.geometry, lon, lat)) ? "Dit perceel staat nog niet onder een naam. Bewaar het eerst onder Percelen."
-        : "Hier ligt geen perceel van een naam. Percelen kies je onder Percelen en bewaar je daar onder een naam.", true);
+      kmSay(!naamActief && sel.some(q => Perceel.bevatPunt(q.geometry, lon, lat)) ? "Dit perceel staat nog niet onder een bedrijf. Bewaar het eerst onder Percelen."
+        : "Hier ligt geen perceel van een bedrijf. Percelen kies je onder Percelen en bewaar je daar onder een bedrijf.", true);
       return;
     }
     // Staat het onder twee namen: nog eens tikken wisselt
@@ -1453,7 +1453,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     if (kmKeus && (!n || (kmKeus.key && !stuk))) kmKeus = null;
     const kaart = $("kmKaart"); kaart.innerHTML = ""; kmKaartVernieuw = null;
     { const m3 = isM3(); tankEl.dataset.eh = m3 ? "m3" : "l"; tankEl.value = store.get(m3 ? "kaartTankM3" : "kaartTankL", ""); tankEl.placeholder = m3 ? "bijv. 20" : "bijv. 3000"; $("kmTankLbl").textContent = m3 ? "Mesttank (m³)" : "Tank (l)"; }
-    if (!namen.length) kmSay("Nog geen namen. Kies percelen onder Percelen en bewaar ze onder een naam; dan vul je hier de kunstmest in.");
+    if (!namen.length) kmSay("Nog geen bedrijven. Kies percelen onder Percelen en bewaar ze onder een bedrijf; dan vul je hier de bemesting in.");
     else if (!kmKeus) kmSay("Tik een perceel op de kaart: je ziet van wie het is en vult in hoeveel per ha.");
     else kmSay("");
     if (kmKeus) { if (stuk) kaart.appendChild(kmStukKaart(stuk, n, lijst)); kaart.appendChild(kmEigenaar(n, lijst, stuk)); kmTotaal(n); kmRijen(n, lijst, stuk); }
@@ -1607,7 +1607,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const box = $("kmOverzicht"); box.innerHTML = "";
     const met = namen.filter(n => percelenVan(n).length);
     if (!met.length) return;
-    box.appendChild(el("div", "lbl2", "Alle namen"));
+    box.appendChild(el("div", "lbl2", "Alle bedrijven"));
     const ul = el("ul", "log");
     met.slice().sort((a, b) => a.naam.localeCompare(b.naam, "nl")).forEach(n => {
       const li = el("li"), t = naamTot(n), go = el("div");
@@ -1785,13 +1785,13 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     { const m = kmSchoon(d.mest); if (m) nw.mest = m; }
     namen.push(nw);
     zetNamen(); teken();
-    say(naam + " toegevoegd: " + lijst.length + (lijst.length === 1 ? " perceel" : " percelen") + ". Tik de naam om ze te zien; zoek daar het water opnieuw." +
+    say(naam + " toegevoegd: " + lijst.length + (lijst.length === 1 ? " perceel" : " percelen") + ". Tik het bedrijf aan om ze te zien; zoek daar het water opnieuw." +
       (mis.length ? " Niet gevonden: perceel " + mis.join(", ") + "." : "") + (oeverMis ? " Bij " + oeverMis + " perceel is de grens anders, de zelf aangewezen oevers zijn niet overgenomen." : ""), !!(mis.length || oeverMis));
   }
   async function deel(btn) {
     const url = deelLink(), titel = "Percelen van " + naamActief;
     try {
-      if (navigator.share) { await navigator.share({ title: titel, text: titel + " (Perceelkaart):", url }); say("Gedeeld. De ontvanger tikt de link aan (of plakt hem bij Namen) en krijgt " + naamActief + " in zijn lijst."); }
+      if (navigator.share) { await navigator.share({ title: titel, text: titel + " (Perceelkaart):", url }); say("Gedeeld. De ontvanger tikt de link aan (of plakt hem bij Bedrijven) en krijgt " + naamActief + " in zijn lijst."); }
       else if (navigator.clipboard) { await navigator.clipboard.writeText(url); say("Link gekopieerd: plak hem in WhatsApp of een mail."); }
       else say(url);
     } catch (e) { if (e && e.name !== "AbortError") say(url); }
@@ -1964,14 +1964,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     $("grSync").disabled = !groepOk() || groepBezig; $("grLink").disabled = !(groep.aan && String(groep.code || "").trim());
     const st = $("grStatus");
     st.className = "hint";
-    if (!groep.aan) { st.textContent = "Je doet niet mee: je namen blijven alleen op deze telefoon."; return; }
+    if (!groep.aan) { st.textContent = "Je doet niet mee: je bedrijven blijven alleen op deze telefoon."; return; }
     if (!String(groep.naam || "").trim()) { st.textContent = "Vul je naam in. Zonder naam deelt de app niks en haalt ook niks op."; st.className = "hint warn"; return; }
     if (!String(groep.code || "").trim()) { st.textContent = "Vul de groepscode in (of open de groepslink die je kreeg)."; st.className = "hint warn"; return; }
     const tijd = groepLaatst ? new Date(groepLaatst).toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
     const wacht = namen.reduce((t, n) => t + (n.wacht || []).length, 0);
     if (groepFout) st.className = "hint warn";
     st.textContent = groepBezig ? "Bezig met bijwerken…" : (groepFout ? groepFout + " " : "") +
-      (groepLaatst ? "Bijgewerkt " + tijd + ": " + namen.length + (namen.length === 1 ? " naam" : " namen") + " in de groep." + (groepNieuw ? " " + groepNieuw + (groepNieuw === 1 ? " naam" : " namen") + " bijgewerkt uit de groep." : "") : "Nog niet bijgewerkt.") +
+      (groepLaatst ? "Bijgewerkt " + tijd + ": " + namen.length + (namen.length === 1 ? " bedrijf" : " bedrijven") + " in de groep." + (groepNieuw ? " " + groepNieuw + (groepNieuw === 1 ? " bedrijf" : " bedrijven") + " bijgewerkt uit de groep." : "") : "Nog niet bijgewerkt.") +
       (wacht ? " " + wacht + (wacht === 1 ? " perceel wordt" : " percelen worden") + " nog opgehaald." : "");
   }
   const bewaarGroep = () => { store.set("kaartGroep", groep); renderGroep(); };
@@ -2021,13 +2021,13 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   function renderNamen() {
     const box = $("namenBox"), lijstBox = $("namenLijstBox");
     box.innerHTML = ""; lijstBox.innerHTML = "";
-    $("tabNamen").textContent = "Namen" + (namen.length ? " (" + namen.length + ")" : "");
+    $("tabNamen").textContent = "Bedrijven" + (namen.length ? " (" + namen.length + ")" : "");
     const kn = (t, f, pressed) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = t; if (pressed != null) b.setAttribute("aria-pressed", pressed); b.addEventListener("click", f); return b; };
     // Tabblad Namen: gedeelde link die binnenkwam, de lijst, en een gedeelde link plakken
     if (binnen) {
       const d = binnen, kaart = document.createElement("div"); kaart.className = "advice binnen";
       const t = document.createElement("div");
-      t.textContent = "Gedeeld: " + d.n + ", " + d.p.length + (d.p.length === 1 ? " perceel" : " percelen") + ". Toevoegen aan je namen?";
+      t.textContent = "Gedeeld: " + d.n + ", " + d.p.length + (d.p.length === 1 ? " perceel" : " percelen") + ". Toevoegen aan je bedrijven?";
       const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
       const ja = kn("Toevoegen", () => haalDeel(d, ja)); ja.setAttribute("aria-pressed", "true");
       r.append(ja, kn("Niet nu", () => { binnen = null; try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {} teken(); }));
@@ -2066,7 +2066,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       lijstBox.appendChild(ul);
     } else {
       const m = document.createElement("div"); m.className = "meta";
-      m.textContent = "Nog geen namen. Kies percelen onder Percelen en tik daar Bewaar onder naam.";
+      m.textContent = "Nog geen bedrijven. Kies percelen onder Percelen en tik daar Bewaar onder bedrijf.";
       lijstBox.appendChild(m);
     }
     if (Object.keys(offline).length) {
@@ -2096,7 +2096,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         wijzigen = false; uitgelicht = null;
         const was = naamActief; bewaarNaam(); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
         sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
-        say(was + " is bewaard (zie Namen). Tik percelen aan voor de volgende naam.");
+        say(was + " is bewaard (zie Bedrijven). Tik percelen aan voor het volgende bedrijf.");
       });
       klaar.setAttribute("aria-pressed", "true");
       r.appendChild(klaar);
@@ -2106,21 +2106,21 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       }, wijzigen));
       r.appendChild(kn("Delen", e => deel(e.currentTarget)));
       { const b = kn(offlineLabel(naamActief), () => bewaarOffline(naamActief)); b.id = "bOffline"; r.appendChild(b); }
-      r.appendChild(kn("Naam weghalen", e => {
+      r.appendChild(kn("Bedrijf weghalen", e => {
         if (!armed(e.currentTarget, "Tik nog eens om " + naamActief + " weg te halen")) return;
         wijzigen = false; uitgelicht = null;
         const was = naamActief; namen = namen.filter(x => x.naam !== was); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
         if (offline[was]) { delete offline[was]; store.set("kaartOffline", offline); }
         teken();
-        say(was + " is weggehaald. De percelen staan nog op de kaart, zonder naam.");
+        say(was + " is weggehaald. De percelen staan nog op de kaart, zonder bedrijf.");
       }));
       box.append(m, r);
     } else if (sel.length) {
       const r = document.createElement("div"); r.className = "opslaan";
-      const inp = document.createElement("input"); inp.type = "text"; inp.maxLength = 40; inp.placeholder = "Naam, bijv. Jouke"; inp.setAttribute("aria-label", "Naam voor deze percelen");
-      const b = kn("Bewaar onder naam", e => {
+      const inp = document.createElement("input"); inp.type = "text"; inp.maxLength = 40; inp.placeholder = "Bedrijf, bijv. Jouke"; inp.setAttribute("aria-label", "Bedrijf voor deze percelen");
+      const b = kn("Bewaar onder bedrijf", e => {
         const naam = inp.value.trim().replace(/\s+/g, " ");
-        if (!naam) { say("Vul eerst een naam in.", true); inp.focus(); return; }
+        if (!naam) { say("Vul eerst een bedrijf in.", true); inp.focus(); return; }
         const bestaat = namen.find(x => x.naam === naam);
         if (bestaat && !armed(e.currentTarget, naam + " overschrijven? Tik nog eens")) return;
         wijzigen = false; uitgelicht = null;
@@ -2129,7 +2129,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         if (bestaat && bestaat.mest) nw.mest = bestaat.mest;
         namen = namen.filter(x => x.naam !== naam).concat([nw]);
         naamActief = naam; store.set("kaartNaamActief", naam); bewaarNaam(); teken();
-        say(sel.length + (sel.length === 1 ? " perceel" : " percelen") + " bewaard onder " + naam + ". Je vindt ze terug onder Namen.");
+        say(sel.length + (sel.length === 1 ? " perceel" : " percelen") + " bewaard onder " + naam + ". Je vindt ze terug onder Bedrijven.");
       });
       inp.addEventListener("keydown", ev => { if (ev.key === "Enter") b.click(); });
       r.append(inp, b); box.appendChild(r);

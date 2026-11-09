@@ -333,7 +333,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 91</div>
+  <div class="voet">versie 92</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1651,7 +1651,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Samenvoegen per onderdeel (km = kunstmest van de naam, k = kavels, p:<sleutel> = een perceel) tegen de vorige
   // gezamenlijke stand (kaartGroepBasis): alleen hier veranderd -> naar de groep, alleen daar veranderd -> hierheen,
   // allebei veranderd -> wie nu bijwerkt wint. Een naam die bij een ander weg is, gaat hier ook weg als hij hier niet veranderde.
-  const GROEP_URL_VAST = ""; // web-app-URL van het Apps Script van de Perceelkaart-groep (eindigt op /exec)
+  const GROEP_URL_VAST = "https://script.google.com/macros/s/AKfycbwvpJ9aJ9BlLKfXnX-a8X6Hk7NOIiJP6vvBKVMMVMqVA5obgfalAXxWQtTRpVGwgNUptQ/exec"; // web-app-URL van het Apps Script van de Perceelkaart-groep (eindigt op /exec)
   const groepUrl = () => store.get("kaartGroepUrl", "") || GROEP_URL_VAST;
   const groep = Object.assign({ aan: false, naam: "", code: "" }, store.get("kaartGroep", {}));
   if (!groep.apparaat) { groep.apparaat = Date.now().toString(36) + Math.random().toString(36).slice(2, 7); store.set("kaartGroep", groep); }

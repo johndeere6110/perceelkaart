@@ -398,7 +398,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 106</div>
+  <div class="voet">versie 107</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1752,8 +1752,9 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Paneel: oppervlakte, zaad, knoppen, bewaarde metingen (licht = alleen getallen bijwerken, tijdens slepen)
   function metPaneel(licht) {
     const r = akt(), ok = metOk(), m2 = totM2(), kr = metVlakken.some(kruist), veel = ok.length + (r.length && r.length < 3 ? 1 : 0) > 1;
-    $("metOpp").textContent = !ok.length ? (r.length ? r.length + (r.length === 1 ? " punt" : " punten") + ": tik nog " + (3 - r.length) + " hoek" + (3 - r.length === 1 ? "" : "en") : "Tik de hoeken van het stuk op de kaart") : m2Fmt(m2);
-    $("metOppSub").textContent = !ok.length ? "" : haTxt(m2 / 10000) + " ha" + (ok.length > 1 ? " · " + ok.length + " stukken samen" : " · omtrek " + Math.round(metOmtrek(ok[0])).toLocaleString("nl-NL") + " m");
+    // Groot alleen een getal; de uitleg klein eronder
+    $("metOpp").textContent = m2Fmt(m2);
+    $("metOppSub").textContent = !ok.length ? (r.length ? r.length + (r.length === 1 ? " punt" : " punten") + ": tik nog " + (3 - r.length) + " hoek" + (3 - r.length === 1 ? "" : "en") : "Tik de hoeken van het stuk op de kaart.") : haTxt(m2 / 10000) + " ha" + (ok.length > 1 ? " · " + ok.length + " stukken samen" : " · omtrek " + Math.round(metOmtrek(ok[0])).toLocaleString("nl-NL") + " m");
     $("metKruis").hidden = !kr;
     // Stukken van deze klus (bij meer dan één): oppervlakte per stuk, tik = bewerken, × = weghalen
     const sb = $("metStukken"); sb.innerHTML = "";
@@ -1779,7 +1780,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     if (licht) return;
     $("metTerug").disabled = !r.length; $("metWis").disabled = !metVlakken.some(v => v.length);
     $("metNieuw").disabled = r.length < 3;
-    $("metFoto").disabled = !ok.length; $("metBewaar").disabled = !ok.length;
+    $("metFoto").disabled = !ok.length; $("metBewaar").disabled = !ok.length; $("metWeg").disabled = !metId;
     $("metBewaar").textContent = metId ? "Meting bijwerken" : "Bewaren";
     // Bewaarde metingen
     const box = $("metLijst"); box.innerHTML = "";

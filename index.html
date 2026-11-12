@@ -398,7 +398,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 107</div>
+  <div class="voet">versie 108</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1849,7 +1849,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     let z = 19;
     for (; z > 10; z--) { const a = tegelXYf(Math.min(...lons), Math.max(...lats), z), b = tegelXYf(Math.max(...lons), Math.min(...lats), z); if (b[0] - a[0] <= B - 2 * rand && b[1] - a[1] <= kaartH - 2 * rand) break; }
     const a = tegelXYf(Math.min(...lons), Math.max(...lats), z), b = tegelXYf(Math.max(...lons), Math.min(...lats), z);
-    const ox = (a[0] + b[0]) / 2 - B / 2, oy = (a[1] + b[1]) / 2 - kaartH / 2;
+    const ox = Math.round((a[0] + b[0]) / 2 - B / 2), oy = Math.round((a[1] + b[1]) / 2 - kaartH / 2); // hele pixels: geen naden tussen de kaartstukjes
     const cv = document.createElement("canvas"); cv.width = B; cv.height = H;
     const c = cv.getContext("2d");
     c.fillStyle = "#dfe3d8"; c.fillRect(0, 0, B, kaartH);
@@ -1864,12 +1864,23 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       r.forEach((p, i) => { const q = tegelXYf(p[0], p[1], z); if (i) c.lineTo(q[0] - ox, q[1] - oy); else c.moveTo(q[0] - ox, q[1] - oy); });
       c.closePath(); c.fillStyle = "rgba(232,89,12,.22)"; c.fill(); c.lineWidth = 6; c.strokeStyle = "#e8590c"; c.lineJoin = "round"; c.stroke();
     });
-    if (vl.length > 1) vl.forEach((r, j) => {
-      const m = middenVan(r), q = tegelXYf(m[0], m[1], z), x = q[0] - ox, y = q[1] - oy;
-      c.beginPath(); c.arc(x, y, 30, 0, 2 * Math.PI); c.fillStyle = "#ffffff"; c.fill(); c.lineWidth = 3; c.strokeStyle = "#1C2318"; c.stroke();
-      c.fillStyle = "#1C2318"; c.font = "700 34px Barlow, system-ui, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(String(j + 1), x, y + 1);
+    // Nummers klein (r 14), en uit elkaar geschoven als ze over elkaar zouden vallen
+    if (vl.length > 1) {
+      const R = 14, plek = vl.map(r => { const m = middenVan(r), q = tegelXYf(m[0], m[1], z); return [q[0] - ox, q[1] - oy]; });
+      for (let ronde = 0; ronde < 30; ronde++) {
+        let bewogen = false;
+        for (let i = 0; i < plek.length; i++) for (let j = i + 1; j < plek.length; j++) {
+          const dx = plek[j][0] - plek[i][0], dy = plek[j][1] - plek[i][1], d = Math.hypot(dx, dy) || 0.01, min = 2 * R + 4;
+          if (d < min) { const f = (min - d) / 2 / d, ux = dx * f || f, uy = dy * f; plek[i][0] -= ux; plek[i][1] -= uy; plek[j][0] += ux; plek[j][1] += uy; bewogen = true; }
+        }
+        if (!bewogen) break;
+      }
+      plek.forEach(([x, y], j) => {
+        c.beginPath(); c.arc(x, y, R, 0, 2 * Math.PI); c.fillStyle = "rgba(255,255,255,.92)"; c.fill(); c.lineWidth = 2; c.strokeStyle = "#1C2318"; c.stroke();
+        c.fillStyle = "#1C2318"; c.font = "700 " + (j + 1 >= 10 ? 15 : 18) + "px Barlow, system-ui, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(String(j + 1), x, y + 1);
+      });
       c.textAlign = "start"; c.textBaseline = "alphabetic";
-    });
+    }
     // Tekst onder de kaart
     const m2 = totM2(), k = metKg(m2, metZaad), naam = $("metNaam").value.trim() || "Meting";
     c.fillStyle = "#ffffff"; c.fillRect(0, kaartH, B, H - kaartH);

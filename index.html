@@ -174,6 +174,12 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 #paneelMet .log li { grid-template-columns: 8px 1fr auto 8px; cursor: pointer; }
 #paneelMet .log li.gekozen .name { color: #e8590c; font-weight: 700; }
 #paneelMet [hidden] { display: none !important; }
+#metStukken { display: grid; gap: 6px; margin-top: 8px; }
+#metStukken:empty { display: none; }
+#metStukken .stuk { display: flex; gap: 6px; }
+#metStukken .stuknaam { flex: 1; text-align: left; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 500 16px "Barlow", system-ui, sans-serif; padding: 0 10px; }
+#metStukken .stuk.actief .stuknaam { border: 2px solid #e8590c; font-weight: 700; }
+#metStukken .stukweg { flex: none; min-width: 44px; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font: 600 18px "Barlow", system-ui, sans-serif; }
 .metpunt { width: 26px; height: 26px; border-radius: 50%; background: #e8590c; color: #fff; font: 700 13px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; box-sizing: border-box; box-shadow: 0 0 0 1px #1C2318; }
 .metplus { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,.85); color: #e8590c; font: 700 17px/19px "Barlow", system-ui, sans-serif; text-align: center; border: 2px solid #e8590c; box-sizing: border-box; }
 #paneelKm .kmbalk { display: flex; align-items: flex-start; gap: 8px; min-height: 40px; margin-bottom: 6px; }
@@ -360,7 +366,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div class="tot"><span>Oppervlakte</span><span class="adv-main num" id="metOpp"></span></div>
       <div class="meta" id="metOppSub"></div>
       <div class="warn4" id="metKruis" hidden>De lijnen kruisen elkaar: zet de punten rondom in volgorde, anders klopt de oppervlakte niet.</div>
-      <div class="knoppen"><button type="button" class="btn" id="metTerug">Laatste punt weg</button><button type="button" class="btn" id="metWis">Opnieuw</button></div>
+      <div id="metStukken"></div>
+      <div class="knoppen"><button type="button" class="btn" id="metNieuw">Stuk erbij</button><button type="button" class="btn" id="metTerug">Laatste punt weg</button><button type="button" class="btn" id="metWis">Opnieuw</button></div>
       <div class="lbl2">Zaad</div>
       <div class="vk">
         <label for="metMengsel">Mengsel</label><input id="metMengsel" type="text" maxlength="40" autocomplete="off" placeholder="bijv. SV7">
@@ -391,7 +398,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 105</div>
+  <div class="voet">versie 106</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1658,12 +1665,19 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     box.appendChild(ul);
   }
   tankEl.addEventListener("input", () => { store.set(tankEl.dataset.eh === "m3" ? "kaartTankM3" : "kaartTankL", tankEl.value); if (kmKeus) { const n = namen.find(x => x.naam === kmKeus.naam); if (n) kmTotaal(n); } });
-  // ---------- Tabblad Meten: een stuk zonder RVO-perceel (tuin, weide) meten door hoeken te tikken, zaad uitrekenen ----------
-  // Tik op de kaart = hoekpunt erbij; punten slepen; bolletje tussen twee punten = punt ertussen. Concept in kaartMetConcept,
-  // bewaarde metingen (alleen hoekpunten en getallen) in kaartMetingen; "Foto" maakt een plaatje van luchtfoto + stuk + zaad.
+  // ---------- Tabblad Meten: stukken zonder RVO-perceel (tuin, weide) meten door hoeken te tikken, zaad uitrekenen ----------
+  // Eén meting (klus) kan meerdere stukken hebben (Stuk erbij); zaad over het totaal. Tik op de kaart = hoekpunt erbij in het
+  // stuk dat je bewerkt; punten slepen; bolletje tussen twee punten = punt ertussen; tik een ander stuk om dat te bewerken.
+  // Concept in kaartMetConcept (lijst stukken; vroeger één stuk), bewaarde metingen in kaartMetingen; "Foto" = plaatje.
   const metLaag = L.layerGroup();
-  let metRing = store.get("kaartMetConcept", []), metId = null;
-  if (!Array.isArray(metRing)) metRing = [];
+  let metVlakken = store.get("kaartMetConcept", []), metAct = 0, metId = null;
+  if (!Array.isArray(metVlakken)) metVlakken = [];
+  if (metVlakken.length && Array.isArray(metVlakken[0]) && typeof metVlakken[0][0] === "number") metVlakken = [metVlakken]; // oud: één stuk
+  metVlakken = metVlakken.filter(r => Array.isArray(r));
+  if (!metVlakken.length) metVlakken = [[]];
+  metAct = metVlakken.length - 1;
+  const akt = () => metVlakken[metAct];
+  const metOk = () => metVlakken.filter(r => r.length >= 3);
   let metingen = store.get("kaartMetingen", []);
   if (!Array.isArray(metingen)) metingen = [];
   // Standaard: SV7 in zakken van 15 kg (wat jullie meestal zaaien); kg/ha onthoudt hij van de vorige keer
@@ -1690,42 +1704,82 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     return { kg: kg * (1 + ex / 100), ex, zak: parse(z.zak) > 0 ? parse(z.zak) : 0 };
   }
   const zaadTxt = z => { const w = parse(z.waarde); return w > 0 ? w.toLocaleString("nl-NL") + (z.eh === "gm2" ? " g/m²" : " kg/ha") : ""; };
-  const bewaarConcept = () => store.set("kaartMetConcept", metRing);
+  const bewaarConcept = () => store.set("kaartMetConcept", metVlakken);
+  const totM2 = () => metOk().reduce((t, r) => t + metOpp(r), 0);
+  const middenVan = r => { const lo = r.map(p => p[0]), la = r.map(p => p[1]); return [(Math.min(...lo) + Math.max(...lo)) / 2, (Math.min(...la) + Math.max(...la)) / 2]; };
+  // Stuk kiezen om te bewerken; lege stukken (behalve het gekozen) vallen weg
+  function kiesStuk(j) {
+    const r = metVlakken[j]; metVlakken = metVlakken.filter((x, i) => x.length || i === j); metAct = metVlakken.indexOf(r);
+    bewaarConcept(); metTeken(); metPaneel();
+  }
   function metTeken() {
     metLaag.clearLayers();
-    const r = metRing;
-    if (r.length >= 2) metLaag.addLayer(L.polygon(r.map(p => [p[1], p[0]]), { color: "#e8590c", weight: 3, fillColor: "#e8590c", fillOpacity: r.length >= 3 ? .2 : 0, interactive: false }));
+    const veel = metVlakken.filter(r => r.length).length > 1;
+    // Andere stukken: lichter, tik = dat stuk bewerken
+    metVlakken.forEach((r, j) => {
+      if (j === metAct || r.length < 2) return;
+      const pg = L.polygon(r.map(p => [p[1], p[0]]), { color: "#e8590c", weight: 2, dashArray: "6 5", fillColor: "#e8590c", fillOpacity: r.length >= 3 ? .12 : 0 });
+      pg.on("click", e => { L.DomEvent.stop(e); kiesStuk(j); metSay("Stuk " + (j + 1) + " gekozen: tik hoeken erbij of sleep een punt."); });
+      if (r.length >= 3) pg.bindTooltip(String(j + 1), { permanent: true, direction: "center", className: "kml" });
+      metLaag.addLayer(pg);
+    });
+    const r = akt();
+    if (r.length >= 2) {
+      const pg = L.polygon(r.map(p => [p[1], p[0]]), { color: "#e8590c", weight: 3, fillColor: "#e8590c", fillOpacity: r.length >= 3 ? .2 : 0, interactive: false });
+      if (veel && r.length >= 3) pg.bindTooltip(String(metAct + 1), { permanent: true, direction: "center", className: "kml" });
+      metLaag.addLayer(pg);
+    }
     // Bolletjes tussen de punten: tik = punt ertussen
     if (r.length >= 2) r.forEach((p, i) => {
       if (r.length === 2 && i === 1) return;
       const q = r[(i + 1) % r.length], m = L.marker([(p[1] + q[1]) / 2, (p[0] + q[0]) / 2], { icon: L.divIcon({ className: "", html: '<div class="metplus">+</div>', iconSize: [24, 24] }), keyboard: false });
-      m.on("click", e => { L.DomEvent.stop(e); metRing.splice(i + 1, 0, [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]); bewaarConcept(); metTeken(); metPaneel(); metSay("Punt ertussen gezet: sleep hem naar de goede plek."); });
+      m.on("click", e => { L.DomEvent.stop(e); akt().splice(i + 1, 0, [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]); bewaarConcept(); metTeken(); metPaneel(); metSay("Punt ertussen gezet: sleep hem naar de goede plek."); });
       metLaag.addLayer(m);
     });
     r.forEach((p, i) => {
       const m = L.marker([p[1], p[0]], { draggable: true, icon: L.divIcon({ className: "", html: '<div class="metpunt">' + (i + 1) + '</div>', iconSize: [26, 26] }), keyboard: false });
       m.on("click", e => L.DomEvent.stop(e));
-      m.on("drag", e => { const ll = e.target.getLatLng(); metRing[i] = [ll.lng, ll.lat]; const pg = metLaag.getLayers().find(x => x instanceof L.Polygon); if (pg) pg.setLatLngs(metRing.map(x => [x[1], x[0]])); metPaneel(true); });
+      m.on("drag", e => { const ll = e.target.getLatLng(); akt()[i] = [ll.lng, ll.lat]; const pg = metLaag.getLayers().find(x => x instanceof L.Polygon && !x.options.interactive); if (pg) pg.setLatLngs(akt().map(x => [x[1], x[0]])); metPaneel(true); });
       m.on("dragend", () => { bewaarConcept(); metTeken(); metPaneel(); });
       metLaag.addLayer(m);
     });
   }
   function metTik(ll) {
-    metRing.push([ll.lng, ll.lat]); bewaarConcept(); metTeken(); metPaneel();
-    metSay(metRing.length < 3 ? "Punt " + metRing.length + " gezet. Tik de volgende hoek." : "Tik de volgende hoek, of sleep een punt. Klaar? Vul hieronder het zaad in.");
+    const r = akt(); r.push([ll.lng, ll.lat]); bewaarConcept(); metTeken(); metPaneel();
+    const st = metVlakken.length > 1 ? "Stuk " + (metAct + 1) + ": " : "";
+    metSay(st + (r.length < 3 ? "punt " + r.length + " gezet. Tik de volgende hoek." : "tik de volgende hoek, of sleep een punt. Nog een stuk op deze klus? Tik Stuk erbij."));
   }
   // Paneel: oppervlakte, zaad, knoppen, bewaarde metingen (licht = alleen getallen bijwerken, tijdens slepen)
   function metPaneel(licht) {
-    const r = metRing, m2 = metOpp(r), kr = kruist(r);
-    $("metOpp").textContent = r.length < 3 ? (r.length ? r.length + (r.length === 1 ? " punt" : " punten") + ": tik nog " + (3 - r.length) + " hoek" + (3 - r.length === 1 ? "" : "en") : "Tik de hoeken van het stuk op de kaart") : m2Fmt(m2);
-    $("metOppSub").textContent = r.length >= 3 ? haTxt(m2 / 10000) + " ha · omtrek " + Math.round(metOmtrek(r)).toLocaleString("nl-NL") + " m" + (kr ? "" : "") : "";
+    const r = akt(), ok = metOk(), m2 = totM2(), kr = metVlakken.some(kruist), veel = ok.length + (r.length && r.length < 3 ? 1 : 0) > 1;
+    $("metOpp").textContent = !ok.length ? (r.length ? r.length + (r.length === 1 ? " punt" : " punten") + ": tik nog " + (3 - r.length) + " hoek" + (3 - r.length === 1 ? "" : "en") : "Tik de hoeken van het stuk op de kaart") : m2Fmt(m2);
+    $("metOppSub").textContent = !ok.length ? "" : haTxt(m2 / 10000) + " ha" + (ok.length > 1 ? " · " + ok.length + " stukken samen" : " · omtrek " + Math.round(metOmtrek(ok[0])).toLocaleString("nl-NL") + " m");
     $("metKruis").hidden = !kr;
+    // Stukken van deze klus (bij meer dan één): oppervlakte per stuk, tik = bewerken, × = weghalen
+    const sb = $("metStukken"); sb.innerHTML = "";
+    if (veel) {
+      metVlakken.forEach((v, j) => {
+        if (!v.length) return;
+        const rij = el("div", "stuk" + (j === metAct ? " actief" : "")), t = el("button", "stuknaam", "Stuk " + (j + 1) + ": " + (v.length >= 3 ? m2Fmt(metOpp(v)) : v.length + (v.length === 1 ? " punt" : " punten")));
+        t.type = "button";
+        t.addEventListener("click", () => { kiesStuk(j); const k2 = metVlakken[metAct]; if (k2.length >= 2) map.fitBounds(L.polygon(k2.map(p => [p[1], p[0]])).getBounds(), { padding: [40, 40], maxZoom: 20 }); metSay("Stuk " + (metAct + 1) + " gekozen: tik hoeken erbij of sleep een punt."); });
+        const x = el("button", "stukweg", "×"); x.type = "button"; x.setAttribute("aria-label", "Stuk " + (j + 1) + " weghalen");
+        x.addEventListener("click", () => {
+          if (!armed(x, "Weg?")) return;
+          metVlakken.splice(j, 1); if (!metVlakken.length) metVlakken = [[]];
+          metAct = Math.min(metAct > j ? metAct - 1 : metAct, metVlakken.length - 1);
+          bewaarConcept(); metTeken(); metPaneel(); metSay("Stuk weggehaald.");
+        });
+        rij.append(t, x); sb.appendChild(rij);
+      });
+    }
     const k = metKg(m2, metZaad), uit = $("metZaadUit");
     uit.textContent = k ? (metZaad.mengsel ? metZaad.mengsel.trim() + ": " : "") + kgFmt(k.kg) + (metZaad.mengsel ? "" : " zaad") : "";
     if (k) { const s = el("span", "", (k.ex ? " (incl. " + k.ex.toLocaleString("nl-NL") + " % extra)" : "") + (k.zak ? " = " + Math.ceil(k.kg / k.zak - 1e-9) + (Math.ceil(k.kg / k.zak - 1e-9) === 1 ? " zak" : " zakken") + " van " + k.zak.toLocaleString("nl-NL") + " kg" : "")); uit.appendChild(s); }
     if (licht) return;
-    $("metTerug").disabled = !r.length; $("metWis").disabled = !r.length;
-    $("metFoto").disabled = r.length < 3; $("metBewaar").disabled = r.length < 3;
+    $("metTerug").disabled = !r.length; $("metWis").disabled = !metVlakken.some(v => v.length);
+    $("metNieuw").disabled = r.length < 3;
+    $("metFoto").disabled = !ok.length; $("metBewaar").disabled = !ok.length;
     $("metBewaar").textContent = metId ? "Meting bijwerken" : "Bewaren";
     // Bewaarde metingen
     const box = $("metLijst"); box.innerHTML = "";
@@ -1736,11 +1790,13 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       const li = el("li"), go = el("div"), kk = metKg(mt.m2, mt.zaad || {});
       if (mt.id === metId) li.className = "gekozen";
       go.append(el("div", "name", mt.naam), el("div", "meta", new Date(mt.ts).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" }) + ((mt.zaad || {}).mengsel ? " · " + mt.zaad.mengsel : "") + (zaadTxt(mt.zaad || {}) ? " · " + zaadTxt(mt.zaad) : "")));
+      const nv = (mt.vlakken || [mt.ring]).length;
       const w = el("div", "w num", m2Fmt(mt.m2)); if (kk) w.appendChild(el("small", "", kgFmt(kk.kg)));
+      if (nv > 1) go.lastChild.textContent += " · " + nv + " stukken";
       li.append(el("div", "nr", ""), go, w, el("span"));
       li.addEventListener("click", () => {
-        metRing = mt.ring.map(p => p.slice()); metId = mt.id; Object.assign(metZaad, mt.zaad || {}); if (metZaad.eh === "gm2") { const w = parse(metZaad.waarde); metZaad.waarde = w > 0 ? String(Math.round(w * 100) / 10).replace(".", ",") : ""; metZaad.eh = "kgha"; } zetZaadVelden(); $("metNaam").value = mt.naam;
-        bewaarConcept(); metTeken(); metPaneel(); map.fitBounds(L.polygon(metRing.map(p => [p[1], p[0]])).getBounds(), { padding: [30, 30], maxZoom: 19 });
+        metVlakken = (mt.vlakken || [mt.ring]).map(v => v.map(p => p.slice())); metAct = metVlakken.length - 1; metId = mt.id; Object.assign(metZaad, mt.zaad || {}); if (metZaad.eh === "gm2") { const w = parse(metZaad.waarde); metZaad.waarde = w > 0 ? String(Math.round(w * 100) / 10).replace(".", ",") : ""; metZaad.eh = "kgha"; } zetZaadVelden(); $("metNaam").value = mt.naam;
+        bewaarConcept(); metTeken(); metPaneel(); map.fitBounds(L.polygon(metVlakken.map(v => v.map(p => [p[1], p[0]]))).getBounds(), { padding: [30, 30], maxZoom: 19 });
         metSay(mt.naam + " staat op de kaart. Pas punten of zaad aan en tik Meting bijwerken, of maak een foto.");
       });
       ul.appendChild(li);
@@ -1753,15 +1809,26 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   }
   const bewaarZaad = () => { store.set("kaartMetZaad", metZaad); metPaneel(true); };
   [["metMengsel", "mengsel"], ["metZaadW", "waarde"], ["metExtra", "extra"], ["metZak", "zak"]].forEach(([id, k]) => $(id).addEventListener("input", e => { metZaad[k] = e.target.value; bewaarZaad(); }));
-  $("metTerug").addEventListener("click", () => { metRing.pop(); bewaarConcept(); metTeken(); metPaneel(); });
+  $("metTerug").addEventListener("click", () => {
+    akt().pop();
+    // Leeg stuk en er zijn er meer: weg, verder met het vorige
+    if (!akt().length && metVlakken.length > 1) { metVlakken.splice(metAct, 1); metAct = metVlakken.length - 1; }
+    bewaarConcept(); metTeken(); metPaneel();
+  });
+  $("metNieuw").addEventListener("click", () => {
+    if (akt().length < 3) { metSay("Maak eerst dit stuk af: minstens 3 hoeken.", true); return; }
+    metVlakken = metVlakken.filter(v => v.length); metVlakken.push([]); metAct = metVlakken.length - 1;
+    bewaarConcept(); metTeken(); metPaneel();
+    metSay("Stuk " + (metAct + 1) + ": tik de hoeken van het volgende stuk. Het zaad gaat over alle stukken samen.");
+  });
   $("metWis").addEventListener("click", e => {
     if (!armed(e.currentTarget, "Tik nog eens: opnieuw")) return;
-    metRing = []; metId = null; $("metNaam").value = ""; bewaarConcept(); metTeken(); metPaneel(); metSay("Leeg. Tik de hoeken van het stuk op de kaart.");
+    metVlakken = [[]]; metAct = 0; metId = null; $("metNaam").value = ""; bewaarConcept(); metTeken(); metPaneel(); metSay("Leeg. Tik de hoeken van het stuk op de kaart.");
   });
   $("metBewaar").addEventListener("click", () => {
-    if (metRing.length < 3) return;
+    if (!metOk().length) return;
     const naam = $("metNaam").value.trim().replace(/\s+/g, " ") || "Meting " + new Date().toLocaleDateString("nl-NL");
-    const r = { id: metId || Date.now().toString(36), naam, ts: Date.now(), ring: metRing.map(p => [Math.round(p[0] * 1e7) / 1e7, Math.round(p[1] * 1e7) / 1e7]), m2: Math.round(metOpp(metRing)), zaad: Object.assign({}, metZaad) };
+    const r = { id: metId || Date.now().toString(36), naam, ts: Date.now(), vlakken: metOk().map(v => v.map(p => [Math.round(p[0] * 1e7) / 1e7, Math.round(p[1] * 1e7) / 1e7])), m2: Math.round(totM2()), zaad: Object.assign({}, metZaad) };
     metingen = metingen.filter(x => x.id !== r.id).concat([r]); metId = r.id;
     if (store.set("kaartMetingen", metingen)) metSay(naam + " bewaard: " + m2Fmt(r.m2) + ". Je vindt hem hieronder terug.");
     metPaneel();
@@ -1770,14 +1837,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     if (!metId) { metSay("Deze meting is nog niet bewaard.", true); return; }
     if (!armed(e.currentTarget, "Tik nog eens om weg te halen")) return;
     metingen = metingen.filter(x => x.id !== metId); store.set("kaartMetingen", metingen);
-    metId = null; metRing = []; $("metNaam").value = ""; bewaarConcept(); metTeken(); metPaneel(); metSay("Meting weggehaald.");
+    metId = null; metVlakken = [[]]; metAct = 0; $("metNaam").value = ""; bewaarConcept(); metTeken(); metPaneel(); metSay("Meting weggehaald.");
   });
   // Foto: luchtfoto (of kaart) van het stuk met de lijnen en de getallen eronder, om te delen of te bewaren
   const tegelXYf = (lon, lat, z) => { const n = 256 * 2 ** z, r = lat * Math.PI / 180; return [(lon + 180) / 360 * n, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n]; };
   async function metFoto() {
-    const r = metRing; if (r.length < 3) return;
+    const vl = metOk(); if (!vl.length) return;
     const B = 1080, H = 1350, kaartH = 1080, rand = 90;
-    const lons = r.map(p => p[0]), lats = r.map(p => p[1]);
+    const lons = vl.flat().map(p => p[0]), lats = vl.flat().map(p => p[1]);
     let z = 19;
     for (; z > 10; z--) { const a = tegelXYf(Math.min(...lons), Math.max(...lats), z), b = tegelXYf(Math.max(...lons), Math.min(...lats), z); if (b[0] - a[0] <= B - 2 * rand && b[1] - a[1] <= kaartH - 2 * rand) break; }
     const a = tegelXYf(Math.min(...lons), Math.max(...lats), z), b = tegelXYf(Math.max(...lons), Math.min(...lats), z);
@@ -1790,16 +1857,24 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const klussen = [];
     for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) klussen.push(laad(x, y).then(im => { if (im) c.drawImage(im, x * 256 - ox, y * 256 - oy); }));
     await Promise.all(klussen);
-    // Het stuk
-    c.beginPath();
-    r.forEach((p, i) => { const q = tegelXYf(p[0], p[1], z); if (i) c.lineTo(q[0] - ox, q[1] - oy); else c.moveTo(q[0] - ox, q[1] - oy); });
-    c.closePath(); c.fillStyle = "rgba(232,89,12,.22)"; c.fill(); c.lineWidth = 6; c.strokeStyle = "#e8590c"; c.lineJoin = "round"; c.stroke();
+    // De stukken (genummerd als het er meer zijn)
+    vl.forEach(r => {
+      c.beginPath();
+      r.forEach((p, i) => { const q = tegelXYf(p[0], p[1], z); if (i) c.lineTo(q[0] - ox, q[1] - oy); else c.moveTo(q[0] - ox, q[1] - oy); });
+      c.closePath(); c.fillStyle = "rgba(232,89,12,.22)"; c.fill(); c.lineWidth = 6; c.strokeStyle = "#e8590c"; c.lineJoin = "round"; c.stroke();
+    });
+    if (vl.length > 1) vl.forEach((r, j) => {
+      const m = middenVan(r), q = tegelXYf(m[0], m[1], z), x = q[0] - ox, y = q[1] - oy;
+      c.beginPath(); c.arc(x, y, 30, 0, 2 * Math.PI); c.fillStyle = "#ffffff"; c.fill(); c.lineWidth = 3; c.strokeStyle = "#1C2318"; c.stroke();
+      c.fillStyle = "#1C2318"; c.font = "700 34px Barlow, system-ui, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(String(j + 1), x, y + 1);
+      c.textAlign = "start"; c.textBaseline = "alphabetic";
+    });
     // Tekst onder de kaart
-    const m2 = metOpp(r), k = metKg(m2, metZaad), naam = $("metNaam").value.trim() || "Meting";
+    const m2 = totM2(), k = metKg(m2, metZaad), naam = $("metNaam").value.trim() || "Meting";
     c.fillStyle = "#ffffff"; c.fillRect(0, kaartH, B, H - kaartH);
     c.fillStyle = "#1C2318"; c.font = "700 54px Barlow, system-ui, sans-serif"; c.fillText(naam, 40, kaartH + 70);
     c.font = "600 44px Barlow, system-ui, sans-serif";
-    c.fillText(m2Fmt(m2) + "  (" + haTxt(m2 / 10000) + " ha)", 40, kaartH + 132);
+    c.fillText(m2Fmt(m2) + "  (" + haTxt(m2 / 10000) + " ha)" + (vl.length > 1 ? "  ·  " + vl.length + " stukken" : ""), 40, kaartH + 132);
     if (k) c.fillText((metZaad.mengsel ? metZaad.mengsel.trim() : "Zaad") + ": " + kgFmt(k.kg) + "  (" + zaadTxt(metZaad) + (k.ex ? " + " + k.ex.toLocaleString("nl-NL") + " %" : "") + ")" + (k.zak ? " = " + Math.ceil(k.kg / k.zak - 1e-9) + " × " + k.zak.toLocaleString("nl-NL") + " kg" : ""), 40, kaartH + 192);
     c.font = "400 28px Barlow, system-ui, sans-serif"; c.fillStyle = "#5b6357";
     c.fillText(new Date().toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" }) + " · Perceelkaart · " + (isFoto ? "Luchtfoto" : "Kaart") + ": PDOK, Kadaster", 40, H - 30);

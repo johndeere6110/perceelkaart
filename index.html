@@ -64,8 +64,9 @@ header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-
 .row { display: flex; gap: 10px; }
 .namen { margin-top: 8px; }
 .tabs { display: flex; gap: 4px; margin: -4px 0 12px; border-bottom: 1px solid var(--line); }
-.tabs button { flex: 1; min-height: 46px; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); font: 600 17px "Barlow", system-ui, sans-serif; }
+.tabs button { flex: 1; min-width: 0; padding: 0 2px; min-height: 46px; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); font: 600 17px "Barlow", system-ui, sans-serif; }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+@media (max-width: 480px) { .tabs button { font-size: 15px; } }
 #paneelNamen .lbl2 { margin-top: 4px; }
 #namenHint:empty { display: none; }
 .groep { margin-top: 18px; padding-top: 10px; border-top: 1px solid var(--line); }
@@ -159,6 +160,22 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 #paneelKm .log .ok { color: var(--accent); font-weight: 700; text-align: center; }
 #paneelKm .tankrij { margin-top: 14px; }
 #kmHint:empty { display: none; }
+/* Tabblad Meten */
+#paneelMet .vk { display: grid; grid-template-columns: 6em 1fr; gap: 8px; align-items: center; margin-top: 8px; }
+#paneelMet input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 16px "Barlow", system-ui, sans-serif; padding: 6px 8px; outline: none; box-sizing: border-box; }
+#paneelMet input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+#paneelMet .knoppen { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+#paneelMet .btn { flex: none; min-height: 44px; font-size: 15px; padding: 0 12px; }
+#paneelMet .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+#paneelMet .btn:disabled { opacity: .45; }
+#paneelMet .liters { font-size: 24px; font-weight: 700; color: var(--ink); margin-top: 10px; }
+#paneelMet .liters:empty { display: none; }
+#paneelMet .liters span { font-size: 15px; font-weight: 400; color: var(--muted); }
+#paneelMet .log li { grid-template-columns: 8px 1fr auto 8px; cursor: pointer; }
+#paneelMet .log li.gekozen .name { color: #e8590c; font-weight: 700; }
+#paneelMet [hidden] { display: none !important; }
+.metpunt { width: 26px; height: 26px; border-radius: 50%; background: #e8590c; color: #fff; font: 700 13px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; box-sizing: border-box; box-shadow: 0 0 0 1px #1C2318; }
+.metplus { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,.85); color: #e8590c; font: 700 17px/19px "Barlow", system-ui, sans-serif; text-align: center; border: 2px solid #e8590c; box-sizing: border-box; }
 #paneelKm .kmbalk { display: flex; align-items: flex-start; gap: 8px; min-height: 40px; margin-bottom: 6px; }
 #paneelKm .kmbalk .hint { flex: 1; margin-top: 6px; }
 #paneelKm .kmbalk .hint:empty { display: block; }
@@ -252,6 +269,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <button type="button" role="tab" id="tabPerc" aria-selected="true">Percelen</button>
     <button type="button" role="tab" id="tabNamen" aria-selected="false">Bedrijven</button>
     <button type="button" role="tab" id="tabKm" aria-selected="false">Bemesten</button>
+    <button type="button" role="tab" id="tabMet" aria-selected="false">Meten</button>
   </div>
   <div id="paneelPerc">
   <div class="row">
@@ -336,6 +354,26 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div id="kmOverzicht"></div>
     <div class="vk tankrij"><label for="kmTank" id="kmTankLbl">Tank (l)</label><input id="kmTank" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 3000"></div>
   </div>
+  <div id="paneelMet" hidden>
+    <div class="hint" id="metHint">Tik de hoeken van het stuk op de kaart (tuin, weide, erf). Sleep een punt om het te verplaatsen; het bolletje tussen twee punten zet er een punt bij.</div>
+    <div class="advice">
+      <div class="tot"><span>Oppervlakte</span><span class="adv-main num" id="metOpp"></span></div>
+      <div class="meta" id="metOppSub"></div>
+      <div class="warn4" id="metKruis" hidden>De lijnen kruisen elkaar: zet de punten rondom in volgorde, anders klopt de oppervlakte niet.</div>
+      <div class="knoppen"><button type="button" class="btn" id="metTerug">Laatste punt weg</button><button type="button" class="btn" id="metWis">Opnieuw</button></div>
+      <div class="lbl2">Zaad</div>
+      <div class="knoppen"><button type="button" class="btn" id="metKgha" aria-pressed="true">kg/ha</button><button type="button" class="btn" id="metGm2" aria-pressed="false">g/m²</button></div>
+      <div class="vk">
+        <label for="metZaadW">Hoeveel</label><input id="metZaadW" class="num" type="text" inputmode="decimal" autocomplete="off">
+        <label for="metExtra">Extra (%)</label><input id="metExtra" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 10">
+        <label for="metZak">Zak (kg)</label><input id="metZak" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 15">
+      </div>
+      <div class="liters" id="metZaadUit"></div>
+      <div class="vk"><label for="metNaam">Naam</label><input id="metNaam" type="text" maxlength="60" autocomplete="off" placeholder="bijv. tuin Jansen"></div>
+      <div class="knoppen"><button type="button" class="btn" id="metFoto">Foto</button><button type="button" class="btn" id="metBewaar">Bewaren</button><button type="button" class="btn" id="metWeg">Weghalen</button></div>
+    </div>
+    <div id="metLijst"></div>
+  </div>
   <div id="paneelNamen" class="namen" hidden>
     <div class="hint" id="namenHint"></div>
     <div id="namenLijstBox"></div>
@@ -353,7 +391,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 102</div>
+  <div class="voet">versie 103</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1620,6 +1658,162 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     box.appendChild(ul);
   }
   tankEl.addEventListener("input", () => { store.set(tankEl.dataset.eh === "m3" ? "kaartTankM3" : "kaartTankL", tankEl.value); if (kmKeus) { const n = namen.find(x => x.naam === kmKeus.naam); if (n) kmTotaal(n); } });
+  // ---------- Tabblad Meten: een stuk zonder RVO-perceel (tuin, weide) meten door hoeken te tikken, zaad uitrekenen ----------
+  // Tik op de kaart = hoekpunt erbij; punten slepen; bolletje tussen twee punten = punt ertussen. Concept in kaartMetConcept,
+  // bewaarde metingen (alleen hoekpunten en getallen) in kaartMetingen; "Foto" maakt een plaatje van luchtfoto + stuk + zaad.
+  const metLaag = L.layerGroup();
+  let metRing = store.get("kaartMetConcept", []), metId = null;
+  if (!Array.isArray(metRing)) metRing = [];
+  let metingen = store.get("kaartMetingen", []);
+  if (!Array.isArray(metingen)) metingen = [];
+  const metZaad = Object.assign({ eh: "kgha", waarde: "", extra: "", zak: "" }, store.get("kaartMetZaad", {}));
+  const metSay = (t, warn) => { const h = $("metHint"); h.textContent = t; h.className = "hint" + (warn ? " warn" : ""); };
+  const metGeom = ring => ({ type: "Polygon", coordinates: [ring.concat([ring[0]])] });
+  const m2Fmt = v => Math.round(v).toLocaleString("nl-NL") + " m²";
+  const kgFmt = v => v.toLocaleString("nl-NL", { maximumFractionDigits: v < 10 ? 2 : 1 }) + " kg";
+  // Lijnen die elkaar kruisen (punten niet rondom gezet): dan klopt de oppervlakte niet
+  function kruist(ring) {
+    const n = ring.length; if (n < 4) return false;
+    const snijdt = (a, b, c, d) => { const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])); return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0; };
+    for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) { if (i === 0 && j === n - 1) continue; if (snijdt(ring[i], ring[(i + 1) % n], ring[j], ring[(j + 1) % n])) return true; }
+    return false;
+  }
+  const metOpp = ring => ring.length >= 3 ? Perceel.oppervlakteM2(metGeom(ring)) : 0;
+  const metOmtrek = ring => ring.reduce((t, p, i) => { if (ring.length < 2) return 0; const q = ring[(i + 1) % ring.length]; return t + L.latLng(p[1], p[0]).distanceTo(L.latLng(q[1], q[0])); }, 0);
+  // Zaad: kg/ha of g/m², plus extra %, en hoeveel zakken
+  function metKg(m2, z) {
+    const w = parse(z.waarde); if (!(w > 0) || !m2) return null;
+    const kg = z.eh === "gm2" ? w * m2 / 1000 : w * m2 / 10000, ex = parse(z.extra) > 0 ? parse(z.extra) : 0;
+    return { kg: kg * (1 + ex / 100), ex, zak: parse(z.zak) > 0 ? parse(z.zak) : 0 };
+  }
+  const zaadTxt = z => { const w = parse(z.waarde); return w > 0 ? w.toLocaleString("nl-NL") + (z.eh === "gm2" ? " g/m²" : " kg/ha") : ""; };
+  const bewaarConcept = () => store.set("kaartMetConcept", metRing);
+  function metTeken() {
+    metLaag.clearLayers();
+    const r = metRing;
+    if (r.length >= 2) metLaag.addLayer(L.polygon(r.map(p => [p[1], p[0]]), { color: "#e8590c", weight: 3, fillColor: "#e8590c", fillOpacity: r.length >= 3 ? .2 : 0, interactive: false }));
+    // Bolletjes tussen de punten: tik = punt ertussen
+    if (r.length >= 2) r.forEach((p, i) => {
+      if (r.length === 2 && i === 1) return;
+      const q = r[(i + 1) % r.length], m = L.marker([(p[1] + q[1]) / 2, (p[0] + q[0]) / 2], { icon: L.divIcon({ className: "", html: '<div class="metplus">+</div>', iconSize: [24, 24] }), keyboard: false });
+      m.on("click", e => { L.DomEvent.stop(e); metRing.splice(i + 1, 0, [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]); bewaarConcept(); metTeken(); metPaneel(); metSay("Punt ertussen gezet: sleep hem naar de goede plek."); });
+      metLaag.addLayer(m);
+    });
+    r.forEach((p, i) => {
+      const m = L.marker([p[1], p[0]], { draggable: true, icon: L.divIcon({ className: "", html: '<div class="metpunt">' + (i + 1) + '</div>', iconSize: [26, 26] }), keyboard: false });
+      m.on("click", e => L.DomEvent.stop(e));
+      m.on("drag", e => { const ll = e.target.getLatLng(); metRing[i] = [ll.lng, ll.lat]; const pg = metLaag.getLayers().find(x => x instanceof L.Polygon); if (pg) pg.setLatLngs(metRing.map(x => [x[1], x[0]])); metPaneel(true); });
+      m.on("dragend", () => { bewaarConcept(); metTeken(); metPaneel(); });
+      metLaag.addLayer(m);
+    });
+  }
+  function metTik(ll) {
+    metRing.push([ll.lng, ll.lat]); bewaarConcept(); metTeken(); metPaneel();
+    metSay(metRing.length < 3 ? "Punt " + metRing.length + " gezet. Tik de volgende hoek." : "Tik de volgende hoek, of sleep een punt. Klaar? Vul hieronder het zaad in.");
+  }
+  // Paneel: oppervlakte, zaad, knoppen, bewaarde metingen (licht = alleen getallen bijwerken, tijdens slepen)
+  function metPaneel(licht) {
+    const r = metRing, m2 = metOpp(r), kr = kruist(r);
+    $("metOpp").textContent = r.length < 3 ? (r.length ? r.length + (r.length === 1 ? " punt" : " punten") + ": tik nog " + (3 - r.length) + " hoek" + (3 - r.length === 1 ? "" : "en") : "Tik de hoeken van het stuk op de kaart") : m2Fmt(m2);
+    $("metOppSub").textContent = r.length >= 3 ? haTxt(m2 / 10000) + " ha · omtrek " + Math.round(metOmtrek(r)).toLocaleString("nl-NL") + " m" + (kr ? "" : "") : "";
+    $("metKruis").hidden = !kr;
+    const k = metKg(m2, metZaad), uit = $("metZaadUit");
+    uit.textContent = k ? kgFmt(k.kg) + " zaad" : "";
+    if (k) { const s = el("span", "", (k.ex ? " (incl. " + k.ex.toLocaleString("nl-NL") + " % extra)" : "") + (k.zak ? " = " + Math.ceil(k.kg / k.zak - 1e-9) + (Math.ceil(k.kg / k.zak - 1e-9) === 1 ? " zak" : " zakken") + " van " + k.zak.toLocaleString("nl-NL") + " kg" : "")); uit.appendChild(s); }
+    if (licht) return;
+    $("metTerug").disabled = !r.length; $("metWis").disabled = !r.length;
+    $("metFoto").disabled = r.length < 3; $("metBewaar").disabled = r.length < 3;
+    $("metBewaar").textContent = metId ? "Meting bijwerken" : "Bewaren";
+    // Bewaarde metingen
+    const box = $("metLijst"); box.innerHTML = "";
+    if (!metingen.length) return;
+    box.appendChild(el("div", "lbl2", "Bewaarde metingen"));
+    const ul = el("ul", "log");
+    metingen.slice().sort((a, b) => b.ts - a.ts).forEach(mt => {
+      const li = el("li"), go = el("div"), kk = metKg(mt.m2, mt.zaad || {});
+      if (mt.id === metId) li.className = "gekozen";
+      go.append(el("div", "name", mt.naam), el("div", "meta", new Date(mt.ts).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" }) + (zaadTxt(mt.zaad || {}) ? " · " + zaadTxt(mt.zaad) : "")));
+      const w = el("div", "w num", m2Fmt(mt.m2)); if (kk) w.appendChild(el("small", "", kgFmt(kk.kg)));
+      li.append(el("div", "nr", ""), go, w, el("span"));
+      li.addEventListener("click", () => {
+        metRing = mt.ring.map(p => p.slice()); metId = mt.id; Object.assign(metZaad, mt.zaad || {}); zetZaadVelden(); $("metNaam").value = mt.naam;
+        bewaarConcept(); metTeken(); metPaneel(); map.fitBounds(L.polygon(metRing.map(p => [p[1], p[0]])).getBounds(), { padding: [30, 30], maxZoom: 19 });
+        metSay(mt.naam + " staat op de kaart. Pas punten of zaad aan en tik Meting bijwerken, of maak een foto.");
+      });
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  function zetZaadVelden() {
+    $("metZaadW").value = metZaad.waarde || ""; $("metExtra").value = metZaad.extra || ""; $("metZak").value = metZaad.zak || "";
+    $("metKgha").setAttribute("aria-pressed", metZaad.eh !== "gm2"); $("metGm2").setAttribute("aria-pressed", metZaad.eh === "gm2");
+    $("metZaadW").placeholder = metZaad.eh === "gm2" ? "bijv. 35" : "bijv. 40";
+  }
+  const bewaarZaad = () => { store.set("kaartMetZaad", metZaad); metPaneel(true); };
+  [["metZaadW", "waarde"], ["metExtra", "extra"], ["metZak", "zak"]].forEach(([id, k]) => $(id).addEventListener("input", e => { metZaad[k] = e.target.value; bewaarZaad(); }));
+  [["metKgha", "kgha"], ["metGm2", "gm2"]].forEach(([id, eh]) => $(id).addEventListener("click", () => { metZaad.eh = eh; zetZaadVelden(); bewaarZaad(); }));
+  $("metTerug").addEventListener("click", () => { metRing.pop(); bewaarConcept(); metTeken(); metPaneel(); });
+  $("metWis").addEventListener("click", e => {
+    if (!armed(e.currentTarget, "Tik nog eens: opnieuw")) return;
+    metRing = []; metId = null; $("metNaam").value = ""; bewaarConcept(); metTeken(); metPaneel(); metSay("Leeg. Tik de hoeken van het stuk op de kaart.");
+  });
+  $("metBewaar").addEventListener("click", () => {
+    if (metRing.length < 3) return;
+    const naam = $("metNaam").value.trim().replace(/\s+/g, " ") || "Meting " + new Date().toLocaleDateString("nl-NL");
+    const r = { id: metId || Date.now().toString(36), naam, ts: Date.now(), ring: metRing.map(p => [Math.round(p[0] * 1e7) / 1e7, Math.round(p[1] * 1e7) / 1e7]), m2: Math.round(metOpp(metRing)), zaad: Object.assign({}, metZaad) };
+    metingen = metingen.filter(x => x.id !== r.id).concat([r]); metId = r.id;
+    if (store.set("kaartMetingen", metingen)) metSay(naam + " bewaard: " + m2Fmt(r.m2) + ". Je vindt hem hieronder terug.");
+    metPaneel();
+  });
+  $("metWeg").addEventListener("click", e => {
+    if (!metId) { metSay("Deze meting is nog niet bewaard.", true); return; }
+    if (!armed(e.currentTarget, "Tik nog eens om weg te halen")) return;
+    metingen = metingen.filter(x => x.id !== metId); store.set("kaartMetingen", metingen);
+    metId = null; metRing = []; $("metNaam").value = ""; bewaarConcept(); metTeken(); metPaneel(); metSay("Meting weggehaald.");
+  });
+  // Foto: luchtfoto (of kaart) van het stuk met de lijnen en de getallen eronder, om te delen of te bewaren
+  const tegelXYf = (lon, lat, z) => { const n = 256 * 2 ** z, r = lat * Math.PI / 180; return [(lon + 180) / 360 * n, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n]; };
+  async function metFoto() {
+    const r = metRing; if (r.length < 3) return;
+    const B = 1080, H = 1350, kaartH = 1080, rand = 90;
+    const lons = r.map(p => p[0]), lats = r.map(p => p[1]);
+    let z = 19;
+    for (; z > 10; z--) { const a = tegelXYf(Math.min(...lons), Math.max(...lats), z), b = tegelXYf(Math.max(...lons), Math.min(...lats), z); if (b[0] - a[0] <= B - 2 * rand && b[1] - a[1] <= kaartH - 2 * rand) break; }
+    const a = tegelXYf(Math.min(...lons), Math.max(...lats), z), b = tegelXYf(Math.max(...lons), Math.min(...lats), z);
+    const ox = (a[0] + b[0]) / 2 - B / 2, oy = (a[1] + b[1]) / 2 - kaartH / 2;
+    const cv = document.createElement("canvas"); cv.width = B; cv.height = H;
+    const c = cv.getContext("2d");
+    c.fillStyle = "#dfe3d8"; c.fillRect(0, 0, B, kaartH);
+    const url = isFoto ? FOTO_URL : BRT_URL, x0 = Math.floor(ox / 256), y0 = Math.floor(oy / 256), x1 = Math.floor((ox + B) / 256), y1 = Math.floor((oy + kaartH) / 256);
+    const laad = (x, y) => new Promise(res => { const im = new Image(); im.crossOrigin = "anonymous"; im.onload = () => res(im); im.onerror = () => res(null); im.src = url.replace("{z}", z).replace("{x}", x).replace("{y}", y); });
+    const klussen = [];
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) klussen.push(laad(x, y).then(im => { if (im) c.drawImage(im, x * 256 - ox, y * 256 - oy); }));
+    await Promise.all(klussen);
+    // Het stuk
+    c.beginPath();
+    r.forEach((p, i) => { const q = tegelXYf(p[0], p[1], z); if (i) c.lineTo(q[0] - ox, q[1] - oy); else c.moveTo(q[0] - ox, q[1] - oy); });
+    c.closePath(); c.fillStyle = "rgba(232,89,12,.22)"; c.fill(); c.lineWidth = 6; c.strokeStyle = "#e8590c"; c.lineJoin = "round"; c.stroke();
+    // Tekst onder de kaart
+    const m2 = metOpp(r), k = metKg(m2, metZaad), naam = $("metNaam").value.trim() || "Meting";
+    c.fillStyle = "#ffffff"; c.fillRect(0, kaartH, B, H - kaartH);
+    c.fillStyle = "#1C2318"; c.font = "700 54px Barlow, system-ui, sans-serif"; c.fillText(naam, 40, kaartH + 70);
+    c.font = "600 44px Barlow, system-ui, sans-serif";
+    c.fillText(m2Fmt(m2) + "  (" + haTxt(m2 / 10000) + " ha)", 40, kaartH + 132);
+    if (k) c.fillText("Zaad: " + kgFmt(k.kg) + "  (" + zaadTxt(metZaad) + (k.ex ? " + " + k.ex.toLocaleString("nl-NL") + " %" : "") + ")" + (k.zak ? " = " + Math.ceil(k.kg / k.zak - 1e-9) + " × " + k.zak.toLocaleString("nl-NL") + " kg" : ""), 40, kaartH + 192);
+    c.font = "400 28px Barlow, system-ui, sans-serif"; c.fillStyle = "#5b6357";
+    c.fillText(new Date().toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" }) + " · Perceelkaart · " + (isFoto ? "Luchtfoto" : "Kaart") + ": PDOK, Kadaster", 40, H - 30);
+    const blob = await new Promise(res => cv.toBlob(res, "image/jpeg", 0.88));
+    if (!blob) { metSay("De foto kon niet gemaakt worden.", true); return; }
+    const bestand = (naam.replace(/[^\w\- ]+/g, "").trim() || "meting").replace(/\s+/g, "-") + ".jpg", file = new File([blob], bestand, { type: "image/jpeg" });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: naam }); metSay("Foto gedeeld."); return; }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    const a2 = document.createElement("a"); a2.href = URL.createObjectURL(blob); a2.download = bestand; document.body.appendChild(a2); a2.click(); a2.remove();
+    setTimeout(() => URL.revokeObjectURL(a2.href), 10000);
+    metSay("Foto opgeslagen als " + bestand + ".");
+  }
+  $("metFoto").addEventListener("click", () => { metSay("Foto maken…"); metFoto(); });
+  zetZaadVelden();
   // Route naar het perceel in Google Maps (op de telefoon opent de app); doel is een punt in het perceel
   function routeKnop(q) {
     const m = Perceel.binnenPunt(q.geometry);
@@ -2006,17 +2200,21 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Tabbladen: Percelen (kaart, percelen, spuiten en zaaien), Namen (lijst, gedeelde link) en Kunstmest (alle namen op de kaart)
   function toonTab(t) {
     const was = tabNu; tabNu = t;
-    [["perc", "tabPerc", "paneelPerc"], ["namen", "tabNamen", "paneelNamen"], ["km", "tabKm", "paneelKm"]].forEach(([k, tab, pan]) => { $(tab).setAttribute("aria-selected", k === t); $(pan).hidden = k !== t; });
-    // Kunstmest: de gewone lagen (percelen op de kaart, sporen) even weg, alle namen erop
-    if (t === "km" && was !== "km") {
-      if (vrijModus) setVrij(false); if (abModus) setAB(false); if (oeverModus) setOever(false); if (koppelModus) setKoppel(false);
-      map.removeLayer(laag); map.removeLayer(spoorLaag); kmLaag.addTo(map); kmTab();
-    }
-    if (t !== "km" && was === "km") { map.removeLayer(kmLaag); laag.addTo(map); spoorLaag.addTo(map); teken(); }
+    [["perc", "tabPerc", "paneelPerc"], ["namen", "tabNamen", "paneelNamen"], ["km", "tabKm", "paneelKm"], ["met", "tabMet", "paneelMet"]].forEach(([k, tab, pan]) => { $(tab).setAttribute("aria-selected", k === t); $(pan).hidden = k !== t; });
+    // Bemesten en Meten hebben een eigen kaartlaag: de gewone lagen (percelen op de kaart, sporen) dan even weg
+    if (was === t) return;
+    const eigen = x => x === "km" || x === "met";
+    if (was === "km") map.removeLayer(kmLaag);
+    if (was === "met") map.removeLayer(metLaag);
+    if (eigen(t)) {
+      if (!eigen(was)) { if (vrijModus) setVrij(false); if (abModus) setAB(false); if (oeverModus) setOever(false); if (koppelModus) setKoppel(false); map.removeLayer(laag); map.removeLayer(spoorLaag); }
+      if (t === "km") { kmLaag.addTo(map); kmTab(); } else { metLaag.addTo(map); metTeken(); metPaneel(); }
+    } else if (eigen(was)) { laag.addTo(map); spoorLaag.addTo(map); teken(); }
   }
   $("tabPerc").addEventListener("click", () => toonTab("perc"));
   $("tabNamen").addEventListener("click", () => toonTab("namen"));
   $("tabKm").addEventListener("click", () => toonTab("km"));
+  $("tabMet").addEventListener("click", () => toonTab("met"));
   if (binnen) toonTab("namen");
   function renderNamen() {
     const box = $("namenBox"), lijstBox = $("namenLijstBox");
@@ -2359,7 +2557,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     });
   }
   renderTypes();
-  map.on("click", ev => tabNu === "km" ? kmTik(ev.latlng.lat, ev.latlng.lng) : vrijModus ? vrijTik(ev.latlng) : abModus ? abTik(ev.latlng) : koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
+  map.on("click", ev => tabNu === "met" ? metTik(ev.latlng) : tabNu === "km" ? kmTik(ev.latlng.lat, ev.latlng.lng) : vrijModus ? vrijTik(ev.latlng) : abModus ? abTik(ev.latlng) : koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
   teken();
   // Paneel eronder groeit/krimpt: kaart laten meeschalen
   if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe($("map"));

@@ -21,6 +21,12 @@ Percelen kiezen op de kaart met het totaal in ha, bufferstroken langs water, spu
 - **Kaart zonder bereik:** bij de naam op de kaart tik je **Kaart offline bewaren**. De app haalt dan de kaart en de luchtfoto rond die percelen op (dichtbij tot het fijnste niveau, verder weg grover), voor een paar percelen zo'n 10 MB. Daarna werken ze ook zonder internet. **Offline kaart vernieuwen** haalt ze opnieuw op; onder **Bedrijven** kun je alle offline kaarten wissen. Zonder bereik werkt de rest van de kaart (buiten die percelen) niet.
 - **Percelen koppelen** maakt van percelen die tegen elkaar liggen één kavel: één buitenrand en de spuitsporen over het geheel. Een pad of naad tot ongeveer 3,5 m ertussen mag; dat telt niet mee in de ha. Ligt er een sloot tussen, dan wordt het geweigerd. Bufferstroken blijven per perceel (zoals RVO).
 
+## Meten (tuin, weide, erf)
+- Tabblad **Meten**: voor een stuk zonder RVO-perceel. Tik de hoeken op de kaart (luchtfoto); sleep een punt om het te verplaatsen, het bolletje tussen twee punten zet er een punt bij, **Laatste punt weg** of **Opnieuw**. Je ziet m², ha en omtrek; kruisen de lijnen (punten niet rondom gezet), dan waarschuwt de app.
+- **Zaad**: in kg/ha of g/m², met extra % en zakgrootte, bijv. "3,4 kg zaad (incl. 10 % extra) = 1 zak van 15 kg".
+- **Foto**: een plaatje van de luchtfoto (of kaart) met het stuk en de getallen eronder, om te delen (WhatsApp) of te bewaren.
+- **Bewaren** met een naam: alleen de hoekpunten en getallen, in een lijstje onder het tabblad; tik er een aan om hem terug te halen.
+
 ## Bufferstroken langs water
 
 - **Water zoeken** markeert randen langs BGT-water (sloot = 3 m, greppel/droge sloot = 0 m). De strook gaat vanaf de **insteek van het talud**: BGT waterdeel en BGT ondersteunend waterdeel (oever, slootkant) samen, de buitenrand daarvan is de insteek. Alleen het deel binnen het perceel telt; het talud zelf niet. Geen talud in de BGT: dan vanaf de waterlijn, en dat staat erbij. Per perceel zie je de m² strook binnen het perceel (om te vergelijken met RVO of Boer&Bunder) en wat het vanaf de perceelrand zou zijn. Het talud staat licht bruin op de kaart.

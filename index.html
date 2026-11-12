@@ -363,6 +363,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div class="knoppen"><button type="button" class="btn" id="metTerug">Laatste punt weg</button><button type="button" class="btn" id="metWis">Opnieuw</button></div>
       <div class="lbl2">Zaad</div>
       <div class="vk">
+        <label for="metMengsel">Mengsel</label><input id="metMengsel" type="text" maxlength="40" autocomplete="off" placeholder="bijv. SV7">
         <label for="metZaadW">kg/ha</label><input id="metZaadW" class="num" type="text" inputmode="decimal" autocomplete="off">
         <label for="metExtra">Extra (%)</label><input id="metExtra" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 10">
         <label for="metZak">Zak (kg)</label><input id="metZak" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 15">
@@ -390,7 +391,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 104</div>
+  <div class="voet">versie 105</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1665,7 +1666,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   if (!Array.isArray(metRing)) metRing = [];
   let metingen = store.get("kaartMetingen", []);
   if (!Array.isArray(metingen)) metingen = [];
-  const metZaad = Object.assign({ eh: "kgha", waarde: "", extra: "", zak: "" }, store.get("kaartMetZaad", {}));
+  // Standaard: SV7 in zakken van 15 kg (wat jullie meestal zaaien); kg/ha onthoudt hij van de vorige keer
+  const metZaad = Object.assign({ eh: "kgha", mengsel: "SV7", waarde: "", extra: "", zak: "15" }, store.get("kaartMetZaad", {}));
   // Zaad alleen in kg/ha (g/m² is eruit): stond het op g/m², omrekenen (1 g/m² = 10 kg/ha)
   if (metZaad.eh === "gm2") { const w = parse(metZaad.waarde); metZaad.waarde = w > 0 ? String(Math.round(w * 100) / 10).replace(".", ",") : ""; metZaad.eh = "kgha"; store.set("kaartMetZaad", metZaad); }
   const metSay = (t, warn) => { const h = $("metHint"); h.textContent = t; h.className = "hint" + (warn ? " warn" : ""); };
@@ -1719,7 +1721,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     $("metOppSub").textContent = r.length >= 3 ? haTxt(m2 / 10000) + " ha · omtrek " + Math.round(metOmtrek(r)).toLocaleString("nl-NL") + " m" + (kr ? "" : "") : "";
     $("metKruis").hidden = !kr;
     const k = metKg(m2, metZaad), uit = $("metZaadUit");
-    uit.textContent = k ? kgFmt(k.kg) + " zaad" : "";
+    uit.textContent = k ? (metZaad.mengsel ? metZaad.mengsel.trim() + ": " : "") + kgFmt(k.kg) + (metZaad.mengsel ? "" : " zaad") : "";
     if (k) { const s = el("span", "", (k.ex ? " (incl. " + k.ex.toLocaleString("nl-NL") + " % extra)" : "") + (k.zak ? " = " + Math.ceil(k.kg / k.zak - 1e-9) + (Math.ceil(k.kg / k.zak - 1e-9) === 1 ? " zak" : " zakken") + " van " + k.zak.toLocaleString("nl-NL") + " kg" : "")); uit.appendChild(s); }
     if (licht) return;
     $("metTerug").disabled = !r.length; $("metWis").disabled = !r.length;
@@ -1733,7 +1735,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     metingen.slice().sort((a, b) => b.ts - a.ts).forEach(mt => {
       const li = el("li"), go = el("div"), kk = metKg(mt.m2, mt.zaad || {});
       if (mt.id === metId) li.className = "gekozen";
-      go.append(el("div", "name", mt.naam), el("div", "meta", new Date(mt.ts).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" }) + (zaadTxt(mt.zaad || {}) ? " · " + zaadTxt(mt.zaad) : "")));
+      go.append(el("div", "name", mt.naam), el("div", "meta", new Date(mt.ts).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" }) + ((mt.zaad || {}).mengsel ? " · " + mt.zaad.mengsel : "") + (zaadTxt(mt.zaad || {}) ? " · " + zaadTxt(mt.zaad) : "")));
       const w = el("div", "w num", m2Fmt(mt.m2)); if (kk) w.appendChild(el("small", "", kgFmt(kk.kg)));
       li.append(el("div", "nr", ""), go, w, el("span"));
       li.addEventListener("click", () => {
@@ -1746,11 +1748,11 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     box.appendChild(ul);
   }
   function zetZaadVelden() {
-    $("metZaadW").value = metZaad.waarde || ""; $("metExtra").value = metZaad.extra || ""; $("metZak").value = metZaad.zak || "";
+    $("metMengsel").value = metZaad.mengsel || ""; $("metZaadW").value = metZaad.waarde || ""; $("metExtra").value = metZaad.extra || ""; $("metZak").value = metZaad.zak || "";
     $("metZaadW").placeholder = "bijv. 40";
   }
   const bewaarZaad = () => { store.set("kaartMetZaad", metZaad); metPaneel(true); };
-  [["metZaadW", "waarde"], ["metExtra", "extra"], ["metZak", "zak"]].forEach(([id, k]) => $(id).addEventListener("input", e => { metZaad[k] = e.target.value; bewaarZaad(); }));
+  [["metMengsel", "mengsel"], ["metZaadW", "waarde"], ["metExtra", "extra"], ["metZak", "zak"]].forEach(([id, k]) => $(id).addEventListener("input", e => { metZaad[k] = e.target.value; bewaarZaad(); }));
   $("metTerug").addEventListener("click", () => { metRing.pop(); bewaarConcept(); metTeken(); metPaneel(); });
   $("metWis").addEventListener("click", e => {
     if (!armed(e.currentTarget, "Tik nog eens: opnieuw")) return;
@@ -1798,7 +1800,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     c.fillStyle = "#1C2318"; c.font = "700 54px Barlow, system-ui, sans-serif"; c.fillText(naam, 40, kaartH + 70);
     c.font = "600 44px Barlow, system-ui, sans-serif";
     c.fillText(m2Fmt(m2) + "  (" + haTxt(m2 / 10000) + " ha)", 40, kaartH + 132);
-    if (k) c.fillText("Zaad: " + kgFmt(k.kg) + "  (" + zaadTxt(metZaad) + (k.ex ? " + " + k.ex.toLocaleString("nl-NL") + " %" : "") + ")" + (k.zak ? " = " + Math.ceil(k.kg / k.zak - 1e-9) + " × " + k.zak.toLocaleString("nl-NL") + " kg" : ""), 40, kaartH + 192);
+    if (k) c.fillText((metZaad.mengsel ? metZaad.mengsel.trim() : "Zaad") + ": " + kgFmt(k.kg) + "  (" + zaadTxt(metZaad) + (k.ex ? " + " + k.ex.toLocaleString("nl-NL") + " %" : "") + ")" + (k.zak ? " = " + Math.ceil(k.kg / k.zak - 1e-9) + " × " + k.zak.toLocaleString("nl-NL") + " kg" : ""), 40, kaartH + 192);
     c.font = "400 28px Barlow, system-ui, sans-serif"; c.fillStyle = "#5b6357";
     c.fillText(new Date().toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" }) + " · Perceelkaart · " + (isFoto ? "Luchtfoto" : "Kaart") + ": PDOK, Kadaster", 40, H - 30);
     const blob = await new Promise(res => cv.toBlob(res, "image/jpeg", 0.88));

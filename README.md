@@ -23,7 +23,7 @@ Percelen kiezen op de kaart met het totaal in ha, bufferstroken langs water, spu
 
 ## Meten (tuin, weide, erf)
 - Tabblad **Meten**: voor een stuk zonder RVO-perceel. Tik de hoeken op de kaart (luchtfoto); sleep een punt om het te verplaatsen, het bolletje tussen twee punten zet er een punt bij, **Laatste punt weg** of **Opnieuw**. Je ziet m², ha en omtrek; kruisen de lijnen (punten niet rondom gezet), dan waarschuwt de app.
-- **Zaad**: in kg/ha, met extra % en zakgrootte, bijv. "3,4 kg zaad (incl. 10 % extra) = 1 zak van 15 kg".
+- **Zaad**: mengsel (standaard SV7), kg/ha (onthoudt hij), extra % en zakgrootte (standaard 15 kg), bijv. "3,4 kg zaad (incl. 10 % extra) = 1 zak van 15 kg".
 - **Foto**: een plaatje van de luchtfoto (of kaart) met het stuk en de getallen eronder, om te delen (WhatsApp) of te bewaren.
 - **Bewaren** met een naam: alleen de hoekpunten en getallen, in een lijstje onder het tabblad; tik er een aan om hem terug te halen.
 

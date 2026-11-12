@@ -362,9 +362,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div class="warn4" id="metKruis" hidden>De lijnen kruisen elkaar: zet de punten rondom in volgorde, anders klopt de oppervlakte niet.</div>
       <div class="knoppen"><button type="button" class="btn" id="metTerug">Laatste punt weg</button><button type="button" class="btn" id="metWis">Opnieuw</button></div>
       <div class="lbl2">Zaad</div>
-      <div class="knoppen"><button type="button" class="btn" id="metKgha" aria-pressed="true">kg/ha</button><button type="button" class="btn" id="metGm2" aria-pressed="false">g/m²</button></div>
       <div class="vk">
-        <label for="metZaadW">Hoeveel</label><input id="metZaadW" class="num" type="text" inputmode="decimal" autocomplete="off">
+        <label for="metZaadW">kg/ha</label><input id="metZaadW" class="num" type="text" inputmode="decimal" autocomplete="off">
         <label for="metExtra">Extra (%)</label><input id="metExtra" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 10">
         <label for="metZak">Zak (kg)</label><input id="metZak" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 15">
       </div>
@@ -391,7 +390,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 103</div>
+  <div class="voet">versie 104</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1667,6 +1666,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   let metingen = store.get("kaartMetingen", []);
   if (!Array.isArray(metingen)) metingen = [];
   const metZaad = Object.assign({ eh: "kgha", waarde: "", extra: "", zak: "" }, store.get("kaartMetZaad", {}));
+  // Zaad alleen in kg/ha (g/m² is eruit): stond het op g/m², omrekenen (1 g/m² = 10 kg/ha)
+  if (metZaad.eh === "gm2") { const w = parse(metZaad.waarde); metZaad.waarde = w > 0 ? String(Math.round(w * 100) / 10).replace(".", ",") : ""; metZaad.eh = "kgha"; store.set("kaartMetZaad", metZaad); }
   const metSay = (t, warn) => { const h = $("metHint"); h.textContent = t; h.className = "hint" + (warn ? " warn" : ""); };
   const metGeom = ring => ({ type: "Polygon", coordinates: [ring.concat([ring[0]])] });
   const m2Fmt = v => Math.round(v).toLocaleString("nl-NL") + " m²";
@@ -1736,7 +1737,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       const w = el("div", "w num", m2Fmt(mt.m2)); if (kk) w.appendChild(el("small", "", kgFmt(kk.kg)));
       li.append(el("div", "nr", ""), go, w, el("span"));
       li.addEventListener("click", () => {
-        metRing = mt.ring.map(p => p.slice()); metId = mt.id; Object.assign(metZaad, mt.zaad || {}); zetZaadVelden(); $("metNaam").value = mt.naam;
+        metRing = mt.ring.map(p => p.slice()); metId = mt.id; Object.assign(metZaad, mt.zaad || {}); if (metZaad.eh === "gm2") { const w = parse(metZaad.waarde); metZaad.waarde = w > 0 ? String(Math.round(w * 100) / 10).replace(".", ",") : ""; metZaad.eh = "kgha"; } zetZaadVelden(); $("metNaam").value = mt.naam;
         bewaarConcept(); metTeken(); metPaneel(); map.fitBounds(L.polygon(metRing.map(p => [p[1], p[0]])).getBounds(), { padding: [30, 30], maxZoom: 19 });
         metSay(mt.naam + " staat op de kaart. Pas punten of zaad aan en tik Meting bijwerken, of maak een foto.");
       });
@@ -1746,12 +1747,10 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   }
   function zetZaadVelden() {
     $("metZaadW").value = metZaad.waarde || ""; $("metExtra").value = metZaad.extra || ""; $("metZak").value = metZaad.zak || "";
-    $("metKgha").setAttribute("aria-pressed", metZaad.eh !== "gm2"); $("metGm2").setAttribute("aria-pressed", metZaad.eh === "gm2");
-    $("metZaadW").placeholder = metZaad.eh === "gm2" ? "bijv. 35" : "bijv. 40";
+    $("metZaadW").placeholder = "bijv. 40";
   }
   const bewaarZaad = () => { store.set("kaartMetZaad", metZaad); metPaneel(true); };
   [["metZaadW", "waarde"], ["metExtra", "extra"], ["metZak", "zak"]].forEach(([id, k]) => $(id).addEventListener("input", e => { metZaad[k] = e.target.value; bewaarZaad(); }));
-  [["metKgha", "kgha"], ["metGm2", "gm2"]].forEach(([id, eh]) => $(id).addEventListener("click", () => { metZaad.eh = eh; zetZaadVelden(); bewaarZaad(); }));
   $("metTerug").addEventListener("click", () => { metRing.pop(); bewaarConcept(); metTeken(); metPaneel(); });
   $("metWis").addEventListener("click", e => {
     if (!armed(e.currentTarget, "Tik nog eens: opnieuw")) return;

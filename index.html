@@ -404,7 +404,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 109</div>
+  <div class="voet">versie 110</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1690,10 +1690,18 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const metZaad = Object.assign({ eh: "kgha", mengsel: "SV7", manier: "nieuw", waarde: "", extra: "", zak: "15" }, store.get("kaartMetZaad", {}));
   // Mengsels met kg/ha voor nieuw zaaien en doorzaaien. Startwaarden zijn ruwe richtwaarden; wat je invult wordt per
   // mengsel en manier onthouden (kaartMetMengsels), dus de lijst wordt vanzelf die van jullie.
-  const MENG_STD = [{ naam: "SV7", nieuw: "300", door: "150" }, { naam: "Gazon", nieuw: "350", door: "200" }, { naam: "Sportveld", nieuw: "300", door: "200" },
-    { naam: "Grasland (weide)", nieuw: "40", door: "20" }, { naam: "Paardenweide", nieuw: "50", door: "25" }, { naam: "Bloemenmengsel", nieuw: "15", door: "" }];
+  const MENG_STD = [{ naam: "SV7", nieuw: "300", door: "150" }, { naam: "Grasland (weide)", nieuw: "40", door: "20" },
+    { naam: "Paardenweide", nieuw: "90", door: "45" }, { naam: "Bloemenmengsel", nieuw: "15", door: "" }];
   let mengsels = store.get("kaartMetMengsels", null);
   if (!Array.isArray(mengsels)) mengsels = MENG_STD.map(x => Object.assign({}, x));
+  // Lijst van versie 109 eenmalig bijwerken: Gazon en Sportveld eruit, Paardenweide 90/45
+  if (store.get("kaartMetMengselsV", 1) < 2) {
+    mengsels = mengsels.filter(x => x.naam !== "Gazon" && x.naam !== "Sportveld");
+    const pw = mengsels.find(x => x.naam === "Paardenweide"); if (pw) { pw.nieuw = "90"; pw.door = "45"; }
+    if (metZaad.mengsel === "Gazon" || metZaad.mengsel === "Sportveld") { metZaad.mengsel = "SV7"; metZaad.waarde = ""; }
+    if (metZaad.mengsel === "Paardenweide") metZaad.waarde = metZaad.manier === "door" ? "45" : "90";
+    store.set("kaartMetMengsels", mengsels); store.set("kaartMetMengselsV", 2); store.set("kaartMetZaad", metZaad);
+  }
   // Eerder zelf ingetikt mengsel (vrij tekstveld) ook in de lijst
   if (metZaad.mengsel && !mengsels.some(x => x.naam.toLowerCase() === String(metZaad.mengsel).trim().toLowerCase())) mengsels.push({ naam: String(metZaad.mengsel).trim(), nieuw: metZaad.waarde || "", door: "" });
   const mengVan = naam => mengsels.find(x => x.naam === naam);

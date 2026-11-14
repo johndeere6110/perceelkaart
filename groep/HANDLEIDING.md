@@ -5,6 +5,8 @@ zelf aangewezen oevers en de kunstmest (l/ha, notities, gedaan). Iedereen in de 
 voegt het per perceel samen. Alles komt in één Google Sheet; de app stuurt en haalt op via een klein script in die sheet.
 Eenmalig instellen, daarna gaat het vanzelf. Dit is een aparte groep, los van die van de Zaaihulp.
 
+Ook bewaarde metingen uit het tabblad **Meten** (tuinen, weides: stukken, mengsel, kg/ha) gaan mee, als regel met soort `meting`.
+
 Wat niet gedeeld wordt: de vorm van de percelen (haalt elke telefoon zelf op), gevonden water (Water zoeken doet elke
 telefoon zelf), offline kaarten en de instellingen (spuitbreedte, tank enz.).
 

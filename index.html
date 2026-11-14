@@ -394,7 +394,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div class="lbl2">Groep</div>
       <div class="hint" id="grNiet" hidden>De groep is nog niet ingesteld in deze versie van de app.</div>
       <div id="grBlok">
-        <label class="chk"><input type="checkbox" id="grAan"> <span>Meedoen met de groep: alle bedrijven delen met de anderen</span></label>
+        <label class="chk"><input type="checkbox" id="grAan"> <span>Meedoen met de groep: alle bedrijven en bewaarde metingen delen met de anderen</span></label>
         <div id="grVelden" class="vk">
           <label for="grNaam">Je naam</label><input id="grNaam" type="text" maxlength="40" autocomplete="off" placeholder="bv. Jan">
           <label for="grCode">Groepscode</label><input id="grCode" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="code">
@@ -404,7 +404,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </div>
     </div>
   </div>
-  <div class="voet">versie 110</div>
+  <div class="voet">versie 111</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1819,6 +1819,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       const nv = (mt.vlakken || [mt.ring]).length;
       const w = el("div", "w num", m2Fmt(mt.m2)); if (kk) w.appendChild(el("small", "", kgFmt(kk.kg)));
       if (nv > 1) go.lastChild.textContent += " · " + nv + " stukken";
+      { const wie = typeof groepVan === "object" && groepActief() ? groepVan["meting:" + mt.id] : ""; if (wie && wie !== groep.naam.trim()) go.lastChild.textContent += " · laatst door " + wie; }
       li.append(el("div", "nr", ""), go, w, el("span"));
       li.addEventListener("click", () => {
         metVlakken = (mt.vlakken || [mt.ring]).map(v => v.map(p => p.slice())); metAct = metVlakken.length - 1; metId = mt.id; Object.assign(metZaad, mt.zaad || {}); if (metZaad.eh === "gm2") { const w = parse(metZaad.waarde); metZaad.waarde = w > 0 ? String(Math.round(w * 100) / 10).replace(".", ",") : ""; metZaad.eh = "kgha"; } zetZaadVelden(); $("metNaam").value = mt.naam;
@@ -1880,14 +1881,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const naam = $("metNaam").value.trim().replace(/\s+/g, " ") || "Meting " + new Date().toLocaleDateString("nl-NL");
     const r = { id: metId || Date.now().toString(36), naam, ts: Date.now(), vlakken: metOk().map(v => v.map(p => [Math.round(p[0] * 1e7) / 1e7, Math.round(p[1] * 1e7) / 1e7])), m2: Math.round(totM2()), zaad: Object.assign({}, metZaad) };
     metingen = metingen.filter(x => x.id !== r.id).concat([r]); metId = r.id;
-    if (store.set("kaartMetingen", metingen)) metSay(naam + " bewaard: " + m2Fmt(r.m2) + ". Je vindt hem hieronder terug.");
-    metPaneel();
+    if (store.set("kaartMetingen", metingen)) metSay(naam + " bewaard: " + m2Fmt(r.m2) + ". Je vindt hem hieronder terug" + (groepActief() ? " (en bij de groep)." : "."));
+    metPaneel(); groepPlanFn();
   });
   $("metWeg").addEventListener("click", e => {
     if (!metId) { metSay("Deze meting is nog niet bewaard.", true); return; }
     if (!armed(e.currentTarget, "Tik nog eens om weg te halen")) return;
     metingen = metingen.filter(x => x.id !== metId); store.set("kaartMetingen", metingen);
-    metId = null; metVlakken = [[]]; metAct = 0; $("metNaam").value = ""; bewaarConcept(); metTeken(); metPaneel(); metSay("Meting weggehaald.");
+    metId = null; metVlakken = [[]]; metAct = 0; $("metNaam").value = ""; bewaarConcept(); metTeken(); metPaneel(); metSay("Meting weggehaald."); groepPlanFn();
   });
   // Foto: luchtfoto (of kaart) van het stuk met de lijnen en de getallen eronder, om te delen of te bewaren
   const tegelXYf = (lon, lat, z) => { const n = 256 * 2 ** z, r = lat * Math.PI / 180; return [(lon + 180) / 360 * n, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n]; };
@@ -2196,15 +2197,23 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     finally { if (t) clearTimeout(t); }
   }
   // Is er hier iets veranderd sinds de vorige keer? (dan meteen bijwerken; anders wacht het tot de volgende ronde)
+  // Bewaarde metingen (tabblad Meten) gaan ook mee: één regel per meting (id "meting:<id>"), hele meting als één geheel;
+  // allebei veranderd: wie nu bijwerkt wint. Het concept (niet bewaard) blijft op de telefoon.
+  const metingId = mt => "meting:" + mt.id;
+  const metingSchoon = mt => ({ id: String(mt.id), naam: String(mt.naam || "Meting").slice(0, 60), ts: +mt.ts || 0, m2: +mt.m2 || 0,
+    vlakken: (mt.vlakken || [mt.ring]).filter(v => Array.isArray(v) && v.length >= 3), zaad: Object.assign({}, mt.zaad) });
+  const metingHash = mt => vast(metingSchoon(mt));
+  const metingTxt = mt => ["Meting", mt.naam, Math.round(mt.m2).toLocaleString("nl-NL") + " m²", ((mt.zaad || {}).mengsel || "") + ((mt.zaad || {}).manier === "door" ? " doorzaaien" : ""), (mt.zaad || {}).waarde ? mt.zaad.waarde + " kg/ha" : ""].filter(Boolean).join(" · ");
   const hierVeranderd = () => namen.some(n => { const b = groepBasis.n[naamId(n.naam)]; return !b || vast(hashes(naamItems(n))) !== vast(b); }) ||
-    Object.keys(groepBasis.n).some(id => !namen.some(n => naamId(n.naam) === id));
+    Object.keys(groepBasis.n).some(id => !namen.some(n => naamId(n.naam) === id)) ||
+    metingen.some(mt => (groepBasis.m || {})[metingId(mt)] !== metingHash(mt)) || Object.keys(groepBasis.m || {}).some(id => !metingen.some(mt => metingId(mt) === id));
   async function groepSync() {
     if (!groepOk() || groepBezig) return renderGroep();
     if (navigator.onLine === false) { groepFout = "Geen bereik: wordt bijgewerkt zodra er weer internet is."; return renderGroep(); }
     groepBezig = true; groepFout = ""; renderGroep();
     try {
       const bron = groepUrl() + "|" + groep.code.trim();
-      if (groepBasis.bron !== bron) groepBasis = { bron, n: {} }; // andere sheet of code: alles opnieuw samenvoegen
+      if (groepBasis.bron !== bron) groepBasis = { bron, n: {}, m: {} }; // andere sheet of code: alles opnieuw samenvoegen
       const a = await groepVraag();
       if (!a || !a.ok || !Array.isArray(a.rijen)) throw new Error(a && a.fout === "code" ? "code" : "server");
       const remote = {}, van = {};
@@ -2244,6 +2253,34 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         groepBasis.n[id] = hashes(naamItems(n));
         if (vast(hashes(M)) !== vast(hashes(docItems(R)))) stuur.push({ id, soort: "naam", apparaat: groep.apparaat, van: groep.naam.trim(), omschrijving: omschrijving(n), data: docUit(n.naam, M) });
       });
+      // Metingen
+      if (!groepBasis.m) groepBasis.m = {};
+      const remM = {};
+      a.rijen.forEach(r => { if (r.soort !== "meting") return; let d = r.data; if (typeof d === "string") { try { d = JSON.parse(d); } catch (e) { d = null; } } if (d && d.id != null && Array.isArray(d.vlakken)) { remM[r.id] = metingSchoon(d); van[r.id] = r.van || ""; } });
+      let metBinnen = 0;
+      const stuurMeting = mt => stuur.push({ id: metingId(mt), soort: "meting", apparaat: groep.apparaat, van: groep.naam.trim(), omschrijving: metingTxt(mt), data: metingSchoon(mt) });
+      new Set([...Object.keys(remM), ...Object.keys(groepBasis.m), ...metingen.map(metingId)]).forEach(id => {
+        const L = metingen.find(mt => metingId(mt) === id), R = remM[id], B = groepBasis.m[id];
+        if (!L && !R) { delete groepBasis.m[id]; return; }
+        if (!L) {
+          if (B && metingHash(R) === B) { stuur.push({ id, apparaat: groep.apparaat, weg: true }); delete groepBasis.m[id]; return; } // hier weggehaald
+          metingen.push(R); groepBasis.m[id] = metingHash(R); metBinnen++; return; // nieuw van een ander
+        }
+        if (!R) {
+          if (B && metingHash(L) === B) { metingen = metingen.filter(x => x !== L); delete groepBasis.m[id]; metBinnen++; return; } // bij een ander weggehaald
+          stuurMeting(L); groepBasis.m[id] = metingHash(L); return;
+        }
+        const lh = metingHash(L), rh = metingHash(R);
+        if (lh === rh) { groepBasis.m[id] = lh; return; }
+        if (lh === B) { metingen = metingen.map(x => x === L ? R : x); groepBasis.m[id] = rh; metBinnen++; } // alleen daar veranderd
+        else { stuurMeting(L); groepBasis.m[id] = lh; } // hier veranderd (of allebei): die van hier
+      });
+      if (metBinnen) {
+        store.set("kaartMetingen", metingen);
+        if (metId && !metingen.some(x => x.id === metId)) metId = null;
+        if (tabNu === "met") metPaneel();
+      }
+      binnen += metBinnen;
       zetNamen(); store.set("kaartGroepBasis", groepBasis);
       groepStil = false;
       for (let i = 0; i < stuur.length; i += 100) {
@@ -2302,7 +2339,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const wacht = namen.reduce((t, n) => t + (n.wacht || []).length, 0);
     if (groepFout) st.className = "hint warn";
     st.textContent = groepBezig ? "Bezig met bijwerken…" : (groepFout ? groepFout + " " : "") +
-      (groepLaatst ? "Bijgewerkt " + tijd + ": " + namen.length + (namen.length === 1 ? " bedrijf" : " bedrijven") + " in de groep." + (groepNieuw ? " " + groepNieuw + (groepNieuw === 1 ? " bedrijf" : " bedrijven") + " bijgewerkt uit de groep." : "") : "Nog niet bijgewerkt.") +
+      (groepLaatst ? "Bijgewerkt " + tijd + ": " + namen.length + (namen.length === 1 ? " bedrijf" : " bedrijven") + (metingen.length ? " en " + metingen.length + (metingen.length === 1 ? " meting" : " metingen") : "") + " in de groep." + (groepNieuw ? " " + groepNieuw + (groepNieuw === 1 ? " bedrijf" : " bedrijven") + " bijgewerkt uit de groep." : "") : "Nog niet bijgewerkt.") +
       (wacht ? " " + wacht + (wacht === 1 ? " perceel wordt" : " percelen worden") + " nog opgehaald." : "");
   }
   const bewaarGroep = () => { store.set("kaartGroep", groep); renderGroep(); };

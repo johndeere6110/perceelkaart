@@ -26,7 +26,7 @@ Percelen kiezen op de kaart met het totaal in ha, bufferstroken langs water, spu
 - **Meerdere stukken op één klus** (voortuin, achtertuin, strook): **Stuk erbij** begint het volgende stuk. Bovenaan het totaal, eronder de stukken los (tik = bewerken, × = weghalen); tik op de kaart een ander stuk om dat te bewerken. Zaad en foto gaan over alle stukken samen (genummerd op de foto).
 - **Zaad**: kies het mengsel uit de lijst (SV7, Grasland, Paardenweide, Bloemenmengsel, of **+ Ander mengsel…**) en **Nieuw zaaien** of **Doorzaaien**; de kg/ha vult zich in. De startwaarden zijn ruwe richtwaarden: pas je de kg/ha aan, dan onthoudt de app die per mengsel en manier. Verder extra % en zakgrootte (standaard 15 kg), bijv. "3,4 kg zaad (incl. 10 % extra) = 1 zak van 15 kg".
 - **Foto**: een plaatje van de luchtfoto (of kaart) met het stuk en de getallen eronder, om te delen (WhatsApp) of te bewaren.
-- **Bewaren** met een naam: alleen de hoekpunten en getallen, in een lijstje onder het tabblad; tik er een aan om hem terug te halen.
+- **Bewaren** met een naam: alleen de hoekpunten en getallen, in een lijstje onder het tabblad; tik er een aan om hem terug te halen. Doe je mee met de groep, dan gaan bewaarde metingen mee naar de anderen (ook aanpassen en weghalen); wat je nog niet bewaarde blijft op je telefoon.
 
 ## Bufferstroken langs water
 

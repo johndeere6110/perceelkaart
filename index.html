@@ -45,7 +45,13 @@ body {
   padding-top: env(safe-area-inset-top, 0px);
 }
 .num { font-family: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; font-weight: 700; font-variant-numeric: tabular-nums; }
-header { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 10px 16px; }
+header { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 10px 16px; position: relative; }
+header .kopwiel { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 42px; height: 42px; border: 0; border-radius: 10px; background: none; color: inherit; display: inline-flex; align-items: center; justify-content: center; padding: 0; opacity: .85; }
+header .kopwiel[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); opacity: 1; }
+#paneelInst h2 { margin: 0 0 4px; font: 700 20px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; }
+#paneelInst .instkop { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#paneelInst .instkop .btn { flex: none; }
+#paneelInst .blok { margin-top: 18px; padding-top: 10px; border-top: 1px solid var(--line); }
 header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; }
 .voet { text-align: center; margin: 22px 0 4px; font-size: 13px; color: var(--muted); }
 #map { flex: 1; min-height: 45vh; background: var(--line); }
@@ -272,6 +278,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
 <body>
 <header>
   <h1>Perceelkaart</h1>
+  <button type="button" class="kopwiel" id="bInst" aria-expanded="false" aria-controls="paneelInst" aria-label="Instellingen"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.3 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>
 </header>
 <div id="map" role="application" aria-label="Kaart, tik op een perceel"></div>
 <div class="panel">
@@ -341,13 +348,6 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <ul class="log" id="lijst"></ul>
     <div class="row" style="margin-top:10px"><button type="button" class="btn" id="bWis">Alles wissen</button></div>
   </div>
-  <div class="row" style="margin-top:14px"><a class="btn link" href="../zaaihulp/">Zaaihulp openen</a><button type="button" class="btn" id="bDeel">Stuur installatielink</button></div>
-  <div class="hint" id="deelHint"></div>
-  <div class="hint" id="opslagStand"></div>
-  <details>
-    <summary>Ruwe data (voor het testen)</summary>
-    <pre id="ruw">Nog niks opgehaald.</pre>
-  </details>
   </div>
   <div id="paneelKm" hidden>
     <div class="kmbalk"><div class="soort" role="group" aria-label="Soort bemesting"><button type="button" class="btn" id="soortKm" aria-pressed="true">Kunstmest (l/ha)</button><button type="button" class="btn" id="soortMest" aria-pressed="false">Mest (m³/ha)</button></div><button type="button" class="tandwiel" id="kmInstKnop" aria-expanded="false" aria-controls="kmInst" aria-label="Instellingen voor de kaart"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.3 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button></div>
@@ -390,7 +390,10 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   <div id="paneelNamen" class="namen" hidden>
     <div class="hint" id="namenHint"></div>
     <div id="namenLijstBox"></div>
-    <div class="groep">
+  </div>
+  <div id="paneelInst" class="namen" hidden>
+    <div class="instkop"><h2>Instellingen</h2><button type="button" class="btn" id="instTerug">Terug</button></div>
+    <div class="groep blok">
       <div class="lbl2">Groep</div>
       <div class="hint" id="grNiet" hidden>De groep is nog niet ingesteld in deze versie van de app.</div>
       <div id="grBlok">
@@ -403,8 +406,19 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         <div class="lijst" style="margin-top:6px"><button type="button" class="btn" id="grSync">Nu bijwerken</button><button type="button" class="btn" id="grLink">Stuur groepslink</button></div>
       </div>
     </div>
+    <div class="blok" id="instOffline"></div>
+    <div class="blok">
+      <div class="lbl2">App</div>
+      <div class="row" style="margin-top:8px"><a class="btn link" href="../zaaihulp/">Zaaihulp openen</a><button type="button" class="btn" id="bDeel">Stuur installatielink</button></div>
+      <div class="hint" id="deelHint"></div>
+      <div class="hint" id="opslagStand"></div>
+      <details>
+        <summary>Ruwe data (voor het testen)</summary>
+        <pre id="ruw">Nog niks opgehaald.</pre>
+      </details>
+    </div>
   </div>
-  <div class="voet">versie 111</div>
+  <div class="voet">versie 112</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1318,7 +1332,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Tabblad Kunstmest: alle percelen van alle namen op de kaart. Tik een perceel: je ziet van wie het is, vult de l/ha,
   // een notitie en gedaan in, en ziet het totaal voor die naam. Per perceel in q[KV] {lha, noti, gedaan} (lha "0" = niet);
   // bij de naam in n[KV] {wat, noti}. Gerekend met de netto ha per perceel (bufferstrook eraf, langs water erbij).
-  let tabNu = "perc", kmKeus = null, kmT = 0; // kmKeus: { naam, key } (key null = alleen de naam)
+  let tabNu = "perc", tabVoorInst = "perc", kmKeus = null, kmT = 0; // kmKeus: { naam, key } (key null = alleen de naam)
   const tankEl = $("kmTank");
   tankEl.value = store.get("kaartTankL", "");
   const kmLaag = L.layerGroup();
@@ -2365,7 +2379,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const groepAlsOud = ms => { if (document.visibilityState !== "hidden" && Date.now() - groepLaatst > ms) groepSync(); };
   document.addEventListener("visibilitychange", () => groepAlsOud(30000));
   setInterval(() => groepAlsOud(4 * 60000), 60000);
-  if (viaGroepslink) toonTab("namen");
+  if (viaGroepslink) toonTab("inst");
   renderGroep(); setTimeout(groepSync, 1500);
   {
     const d = leesDeel(location.hash);
@@ -2374,7 +2388,9 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Tabbladen: Percelen (kaart, percelen, spuiten en zaaien), Namen (lijst, gedeelde link) en Kunstmest (alle namen op de kaart)
   function toonTab(t) {
     const was = tabNu; tabNu = t;
+    if (t === "inst" && was !== "inst") tabVoorInst = was;
     [["perc", "tabPerc", "paneelPerc"], ["namen", "tabNamen", "paneelNamen"], ["km", "tabKm", "paneelKm"], ["met", "tabMet", "paneelMet"]].forEach(([k, tab, pan]) => { $(tab).setAttribute("aria-selected", k === t); $(pan).hidden = k !== t; });
+    $("paneelInst").hidden = t !== "inst"; $("bInst").setAttribute("aria-expanded", t === "inst");
     // Bemesten en Meten hebben een eigen kaartlaag: de gewone lagen (percelen op de kaart, sporen) dan even weg
     if (was === t) return;
     const eigen = x => x === "km" || x === "met";
@@ -2389,6 +2405,9 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   $("tabNamen").addEventListener("click", () => toonTab("namen"));
   $("tabKm").addEventListener("click", () => toonTab("km"));
   $("tabMet").addEventListener("click", () => toonTab("met"));
+  // Tandwiel rechtsboven: instellingen open/dicht (dicht = terug naar het tabblad van daarvoor)
+  $("bInst").addEventListener("click", () => { if (tabNu === "inst") toonTab(tabVoorInst); else { toonTab("inst"); renderGroep(); } });
+  $("instTerug").addEventListener("click", () => toonTab(tabVoorInst));
   if (binnen) toonTab("namen");
   function renderNamen() {
     const box = $("namenBox"), lijstBox = $("namenLijstBox");
@@ -2441,12 +2460,19 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       m.textContent = "Nog geen bedrijven. Kies percelen onder Percelen en tik daar Bewaar onder bedrijf.";
       lijstBox.appendChild(m);
     }
-    if (Object.keys(offline).length) {
+    {
+      // Instellingen: offline kaarten
+      const ib = $("instOffline"); ib.innerHTML = "";
+      ib.appendChild(Object.assign(document.createElement("div"), { className: "lbl2", textContent: "Offline kaarten" }));
       const m = document.createElement("div"); m.className = "meta";
-      m.textContent = "Kaart offline bewaard voor: " + Object.keys(offline).sort((a, b) => a.localeCompare(b, "nl")).join(", ") + ".";
-      const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
-      r.appendChild(kn("Offline kaarten wissen", e => { if (armed(e.currentTarget, "Tik nog eens om te wissen")) wisOffline(); }));
-      lijstBox.append(m, r);
+      m.textContent = Object.keys(offline).length ? "Kaart offline bewaard voor: " + Object.keys(offline).sort((a, b) => a.localeCompare(b, "nl")).join(", ") + "."
+        : "Nog geen kaart offline bewaard. Dat doe je bij een bedrijf op de kaart (onder Percelen): Kaart offline bewaren.";
+      ib.appendChild(m);
+      if (Object.keys(offline).length) {
+        const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
+        r.appendChild(kn("Offline kaarten wissen", e => { if (armed(e.currentTarget, "Tik nog eens om te wissen")) wisOffline(); }));
+        ib.appendChild(r);
+      }
     }
     {
       // Gedeelde link plakken (bijv. op een iPhone, waar een link in Safari opent en niet in de app)

@@ -3,7 +3,7 @@
 Percelen kiezen op de kaart met het totaal in ha, bufferstroken langs water, spuitsporen, een zaaiplan voor mais en AB-lijnen uitmeten. Werkt op je telefoon.
 
 **Openen:** https://johndeere6110.github.io/perceelkaart/
-**Installeren of doorsturen:** https://johndeere6110.github.io/perceelkaart/installeren.html (ook via **Stuur installatielink** onderaan in de app, en onderaan de installatiepagina van de [Zaaihulp](https://johndeere6110.github.io/zaaihulp/installeren.html))
+**Installeren of doorsturen:** https://johndeere6110.github.io/perceelkaart/installeren.html (ook via **Stuur installatielink** in de app, tandwiel rechtsboven, en onderaan de installatiepagina van de [Zaaihulp](https://johndeere6110.github.io/zaaihulp/installeren.html))
 
 ## Percelen en oppervlakte
 

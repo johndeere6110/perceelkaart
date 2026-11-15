@@ -142,7 +142,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .log .w, .kavel .w { max-width: 30vw; }
 .del { border: 0; background: none; color: var(--muted); font-size: 24px; width: 44px; height: 44px; border-radius: 8px; }
 .armed { color: var(--warn) !important; font-weight: 700 !important; }
-.leaflet-tooltip.pnr { background: var(--hl); border: 0; color: #1C2318; font: 700 15px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; padding: 1px 7px; border-radius: 999px; box-shadow: none; }
+.leaflet-tooltip.pnr { background: var(--hl); border: 0; color: #1C2318; font: 700 15px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; padding: 1px 7px; border-radius: 8px; box-shadow: none; text-align: center; line-height: 1.15; }
+.leaflet-tooltip.pnr small { display: block; font-size: 11px; font-weight: 600; }
 .leaflet-tooltip.pnr::before { display: none; }
 .lbl2 { margin-top: 10px; color: var(--muted); font-weight: 500; }
 .seg4 { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); margin-top: 6px; }
@@ -268,7 +269,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
 .kavel .w { font-size: 21px; }
 .kavel .meta { font-size: 14px; color: var(--muted); }
 .kavel .klein { min-height: 40px; font-size: 15px; margin-top: 6px; width: auto; padding: 0 12px; display: inline-flex; }
-.leaflet-tooltip.kav { background: #e8590c; color: #fff; }
+.leaflet-tooltip.kav { background: #e8590c; color: #fff; border-radius: 999px; }
 #bBron[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 #bKoppel[aria-pressed="true"] { background: #e8590c; border-color: #e8590c; color: #fff; }
 .spuit .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -431,7 +432,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet">versie 116</div>
+  <div class="voet">versie 117</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1100,7 +1101,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     sel.forEach((q, i) => {
       if (koppelModus && koppelSet.has(q.key)) laag.addLayer(L.geoJSON(q.geometry, { style: { color: "#e8590c", weight: 5, fillColor: "#e8590c", fillOpacity: .35 }, interactive: false }));
       const g = L.geoJSON(q.geometry, { style: stijl, interactive: false });
-      g.bindTooltip(String(i + 1), { permanent: true, direction: "center", className: "pnr" });
+      // Nummer, en klein eronder de oppervlakte (bruto ha, zoals RVO)
+      g.bindTooltip(String(i + 1) + "<small>" + haTxt(q.ha) + " ha</small>", { permanent: true, direction: "center", className: "pnr" });
       laag.addLayer(g);
       if (uitgelicht === q.key) laag.addLayer(L.geoJSON(q.geometry, { style: { color: "#e8590c", weight: 6, fill: false }, interactive: false }));
       Perceel.zijden(q.geometry).filter(z => q.oever[z.key] != null).forEach(z => {

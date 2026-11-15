@@ -431,7 +431,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet">versie 115</div>
+  <div class="voet">versie 116</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1756,7 +1756,11 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   function metKg(m2, z) {
     const w = parse(z.waarde); if (!(w > 0) || !m2) return null;
     const kg = z.eh === "gm2" ? w * m2 / 1000 : w * m2 / 10000, ex = parse(z.extra) > 0 ? parse(z.extra) : 0;
-    return { kg: kg * (1 + ex / 100), ex, zak: parse(z.zak) > 0 ? parse(z.zak) : 0 };
+    const tot = kg * (1 + ex / 100), zak = parse(z.zak) > 0 ? parse(z.zak) : 0;
+    // Zakken: naar boven afgerond; blijft er dan minder dan 10 % over (krap, met overlap te kort), een zak erbij
+    let zakken = zak ? Math.ceil(tot / zak - 1e-9) : 0, krap = 0;
+    if (zak && zakken * zak - tot < 0.1 * tot) { krap = zakken * zak - tot; zakken++; }
+    return { kg: tot, ex, zak, zakken, over: zak ? zakken * zak - tot : 0, krap };
   }
   const zaadTxt = z => { const w = parse(z.waarde); return w > 0 ? w.toLocaleString("nl-NL") + (z.eh === "gm2" ? " g/m²" : " kg/ha") : ""; };
   const bewaarConcept = () => { store.set("kaartMetConcept", metVlakken); store.set("kaartMetConceptId", metId); };
@@ -1838,7 +1842,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     }
     const k = metKg(m2, metZaad), uit = $("metZaadUit");
     uit.textContent = k ? (metZaad.mengsel ? metZaad.mengsel.trim() + (metZaad.manier === "door" ? " (doorzaaien)" : "") + ": " : "") + kgFmt(k.kg) + (metZaad.mengsel ? "" : " zaad") : "";
-    if (k) { const s = el("span", "", (k.ex ? " (incl. " + k.ex.toLocaleString("nl-NL") + " % extra)" : "") + (k.zak ? " = " + Math.ceil(k.kg / k.zak - 1e-9) + (Math.ceil(k.kg / k.zak - 1e-9) === 1 ? " zak" : " zakken") + " van " + k.zak.toLocaleString("nl-NL") + " kg" : "")); uit.appendChild(s); }
+    if (k) { const s = el("span", "", (k.ex ? " (incl. " + k.ex.toLocaleString("nl-NL") + " % extra)" : "") + (k.zak ? " = " + k.zakken + (k.zakken === 1 ? " zak" : " zakken") + " van " + k.zak.toLocaleString("nl-NL") + " kg (" + kgFmt(k.over) + " over" + (k.zakken > Math.ceil(k.kg / k.zak - 1e-9) ? "; met " + (k.zakken - 1) + " hield je maar " + kgFmt(k.krap) + " over" : "") + ")" : "")); uit.appendChild(s); }
     if (licht) return;
     $("metTerug").disabled = !r.length; $("metWis").disabled = !metVlakken.some(v => v.length) && !metId;
     $("metNieuw").disabled = r.length < 3;
@@ -1976,7 +1980,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     c.fillStyle = "#1C2318"; c.font = "700 54px Barlow, system-ui, sans-serif"; c.fillText(naam, 40, kaartH + 70);
     c.font = "600 44px Barlow, system-ui, sans-serif";
     c.fillText(m2Fmt(m2) + "  (" + haTxt(m2 / 10000) + " ha)" + (vl.length > 1 ? "  ·  " + vl.length + " stukken" : ""), 40, kaartH + 132);
-    if (k) c.fillText((metZaad.mengsel ? metZaad.mengsel.trim() + (metZaad.manier === "door" ? " doorzaaien" : "") : "Zaad") + ": " + kgFmt(k.kg) + "  (" + zaadTxt(metZaad) + (k.ex ? " + " + k.ex.toLocaleString("nl-NL") + " %" : "") + ")" + (k.zak ? " = " + Math.ceil(k.kg / k.zak - 1e-9) + " × " + k.zak.toLocaleString("nl-NL") + " kg" : ""), 40, kaartH + 192);
+    if (k) c.fillText((metZaad.mengsel ? metZaad.mengsel.trim() + (metZaad.manier === "door" ? " doorzaaien" : "") : "Zaad") + ": " + kgFmt(k.kg) + "  (" + zaadTxt(metZaad) + (k.ex ? " + " + k.ex.toLocaleString("nl-NL") + " %" : "") + ")" + (k.zak ? " = " + k.zakken + " × " + k.zak.toLocaleString("nl-NL") + " kg" : ""), 40, kaartH + 192);
     c.font = "400 28px Barlow, system-ui, sans-serif"; c.fillStyle = "#5b6357";
     c.fillText(new Date().toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" }) + " · Perceelkaart · " + (isFoto ? "Luchtfoto" : "Kaart") + ": PDOK, Kadaster", 40, H - 30);
     const blob = await new Promise(res => cv.toBlob(res, "image/jpeg", 0.88));

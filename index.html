@@ -299,7 +299,6 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   </div>
   <div id="paneelPerc">
   <div class="row">
-    <button type="button" class="btn" id="bLaag" aria-pressed="false">Luchtfoto</button>
     <button type="button" class="btn" id="bMij">Mijn locatie</button>
   </div>
   <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bBron" aria-pressed="false">Grenzen: BRP-gewasperceel</button></div>
@@ -402,6 +401,11 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   </div>
   <div id="paneelInst" class="namen" hidden>
     <div class="instkop"><h2>Instellingen</h2><button type="button" class="btn" id="instTerug">Terug</button></div>
+    <div class="blok">
+      <div class="lbl2">Kaart</div>
+      <div class="lijst" style="margin-top:6px"><button type="button" class="btn" id="bLaag" aria-pressed="true">Luchtfoto: aan</button></div>
+      <div class="meta">Uit = de gewone kaart (wegen, sloten, namen) in plaats van de luchtfoto.</div>
+    </div>
     <div class="groep blok">
       <div class="lbl2">Groep</div>
       <div class="hint" id="grNiet" hidden>De groep is nog niet ingesteld in deze versie van de app.</div>
@@ -427,7 +431,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet">versie 114</div>
+  <div class="voet">versie 115</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -479,10 +483,12 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const FOTO_URL = "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg";
   const brt = L.tileLayer(BRT_URL, { minZoom: 7, maxNativeZoom: 19, maxZoom: 22, attribution: attr });
   const foto = L.tileLayer(FOTO_URL, { minZoom: 7, maxNativeZoom: 19, maxZoom: 22, attribution: "Luchtfoto: " + attr });
-  let isFoto = store.get("kaartTestFoto", false);
+  // Luchtfoto staat standaard aan; eenmalig ook voor wie hem nog op uit had staan (keuze in Instellingen)
+  let isFoto = store.get("kaartTestFoto", true);
+  if (!store.get("kaartFotoStd", false)) { isFoto = true; store.set("kaartFotoStd", true); }
   const setLaag = () => {
     (isFoto ? brt : foto).remove(); (isFoto ? foto : brt).addTo(map);
-    $("bLaag").setAttribute("aria-pressed", isFoto); store.set("kaartTestFoto", isFoto);
+    $("bLaag").setAttribute("aria-pressed", isFoto); $("bLaag").textContent = "Luchtfoto: " + (isFoto ? "aan" : "uit"); store.set("kaartTestFoto", isFoto);
   };
   $("bLaag").addEventListener("click", () => { isFoto = !isFoto; setLaag(); });
   setLaag();

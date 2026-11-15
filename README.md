@@ -22,7 +22,7 @@ Percelen kiezen op de kaart met het totaal in ha, bufferstroken langs water, spu
 - **Percelen koppelen** maakt van percelen die tegen elkaar liggen één kavel: één buitenrand en de spuitsporen over het geheel. Een pad of naad tot ongeveer 3,5 m ertussen mag; dat telt niet mee in de ha. Ligt er een sloot tussen, dan wordt het geweigerd. Bufferstroken blijven per perceel (zoals RVO).
 
 ## Instellingen
-- Het **tandwiel rechtsboven** opent Instellingen: de groep (meedoen, je naam, code, bijwerken, groepslink), offline kaarten wissen, Zaaihulp openen, installatielink sturen en de opslagstatus. Nog eens op het tandwiel of **Terug** gaat terug naar het tabblad waar je was.
+- Het **tandwiel rechtsboven** opent Instellingen: **Luchtfoto** aan/uit (standaard aan; uit = gewone kaart), de groep (meedoen, je naam, code, bijwerken, groepslink), offline kaarten wissen, Zaaihulp openen, installatielink sturen en de opslagstatus. Nog eens op het tandwiel of **Terug** gaat terug naar het tabblad waar je was.
 
 ## Meten (tuin, weide, erf)
 - Tabblad **Meten**: voor een stuk zonder RVO-perceel. Tik de hoeken op de kaart (luchtfoto); sleep een punt om het te verplaatsen, het bolletje tussen twee punten zet er een punt bij, **Laatste punt weg**, en **Nieuwe meting** voor de volgende plek (bewaard = meteen; nog niet bewaard = eerst nog eens tikken; mengsel en kg/ha blijven staan). Je ziet m², ha en omtrek; kruisen de lijnen (punten niet rondom gezet), dan waarschuwt de app.

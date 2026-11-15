@@ -380,7 +380,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div class="meta" id="metOppSub"></div>
       <div class="warn4" id="metKruis" hidden>De lijnen kruisen elkaar: zet de punten rondom in volgorde, anders klopt de oppervlakte niet.</div>
       <div id="metStukken"></div>
-      <div class="knoppen"><button type="button" class="btn" id="metNieuw">Stuk erbij</button><button type="button" class="btn" id="metTerug">Laatste punt weg</button><button type="button" class="btn" id="metWis">Opnieuw</button></div>
+      <div class="knoppen"><button type="button" class="btn" id="metNieuw">Stuk erbij</button><button type="button" class="btn" id="metTerug">Laatste punt weg</button><button type="button" class="btn" id="metWis">Nieuwe meting</button></div>
       <div class="lbl2">Zaad</div>
       <div class="vk">
         <label for="metMengSel">Mengsel</label><select id="metMengSel"></select>
@@ -427,7 +427,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet">versie 113</div>
+  <div class="voet">versie 114</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1709,6 +1709,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const metOk = () => metVlakken.filter(r => r.length >= 3);
   let metingen = store.get("kaartMetingen", []);
   if (!Array.isArray(metingen)) metingen = [];
+  { const id = store.get("kaartMetConceptId", null); if (id && metingen.some(x => x.id === id)) metId = id; }
   // Standaard: SV7 in zakken van 15 kg (wat jullie meestal zaaien); kg/ha onthoudt hij van de vorige keer
   const metZaad = Object.assign({ eh: "kgha", mengsel: "SV7", manier: "nieuw", waarde: "", extra: "", zak: "15" }, store.get("kaartMetZaad", {}));
   // Mengsels met kg/ha voor nieuw zaaien en doorzaaien. Startwaarden zijn ruwe richtwaarden; wat je invult wordt per
@@ -1752,7 +1753,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     return { kg: kg * (1 + ex / 100), ex, zak: parse(z.zak) > 0 ? parse(z.zak) : 0 };
   }
   const zaadTxt = z => { const w = parse(z.waarde); return w > 0 ? w.toLocaleString("nl-NL") + (z.eh === "gm2" ? " g/m²" : " kg/ha") : ""; };
-  const bewaarConcept = () => store.set("kaartMetConcept", metVlakken);
+  const bewaarConcept = () => { store.set("kaartMetConcept", metVlakken); store.set("kaartMetConceptId", metId); };
+  // Staat er iets op de kaart dat (zo) nog niet bewaard is?
+  const rondR = v => v.map(p => [Math.round(p[0] * 1e7) / 1e7, Math.round(p[1] * 1e7) / 1e7]);
+  function metOnbewaard() {
+    if (!metVlakken.some(v => v.length)) return false;
+    const mt = metId && metingen.find(x => x.id === metId);
+    return !mt || JSON.stringify(metOk().map(rondR)) !== JSON.stringify(mt.vlakken || [mt.ring]);
+  }
   const totM2 = () => metOk().reduce((t, r) => t + metOpp(r), 0);
   const middenVan = r => { const lo = r.map(p => p[0]), la = r.map(p => p[1]); return [(Math.min(...lo) + Math.max(...lo)) / 2, (Math.min(...la) + Math.max(...la)) / 2]; };
   // Stuk kiezen om te bewerken; lege stukken (behalve het gekozen) vallen weg
@@ -1826,7 +1834,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     uit.textContent = k ? (metZaad.mengsel ? metZaad.mengsel.trim() + (metZaad.manier === "door" ? " (doorzaaien)" : "") + ": " : "") + kgFmt(k.kg) + (metZaad.mengsel ? "" : " zaad") : "";
     if (k) { const s = el("span", "", (k.ex ? " (incl. " + k.ex.toLocaleString("nl-NL") + " % extra)" : "") + (k.zak ? " = " + Math.ceil(k.kg / k.zak - 1e-9) + (Math.ceil(k.kg / k.zak - 1e-9) === 1 ? " zak" : " zakken") + " van " + k.zak.toLocaleString("nl-NL") + " kg" : "")); uit.appendChild(s); }
     if (licht) return;
-    $("metTerug").disabled = !r.length; $("metWis").disabled = !metVlakken.some(v => v.length);
+    $("metTerug").disabled = !r.length; $("metWis").disabled = !metVlakken.some(v => v.length) && !metId;
     $("metNieuw").disabled = r.length < 3;
     $("metFoto").disabled = !ok.length; $("metBewaar").disabled = !ok.length; $("metWeg").disabled = !metId;
     $("metBewaar").textContent = metId ? "Meting bijwerken" : "Bewaren";
@@ -1895,15 +1903,17 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     bewaarConcept(); metTeken(); metPaneel();
     metSay("Stuk " + (metAct + 1) + ": tik de hoeken van het volgende stuk. Het zaad gaat over alle stukken samen.");
   });
+  // Nieuwe meting: bewaard (of leeg) = meteen; nog niet bewaard = eerst nog eens tikken. Zaad-instellingen blijven staan.
   $("metWis").addEventListener("click", e => {
-    if (!armed(e.currentTarget, "Tik nog eens: opnieuw")) return;
-    metVlakken = [[]]; metAct = 0; metId = null; $("metNaam").value = ""; bewaarConcept(); metTeken(); metPaneel(); metSay("Leeg. Tik de hoeken van het stuk op de kaart.");
+    if (metOnbewaard() && !armed(e.currentTarget, "Niet bewaard: tik nog eens")) return;
+    metVlakken = [[]]; metAct = 0; metId = null; $("metNaam").value = ""; bewaarConcept(); metTeken(); metPaneel();
+    metSay("Nieuwe meting: tik de hoeken van het eerste stuk op de kaart.");
   });
   $("metBewaar").addEventListener("click", () => {
     if (!metOk().length) return;
     const naam = $("metNaam").value.trim().replace(/\s+/g, " ") || "Meting " + new Date().toLocaleDateString("nl-NL");
     const r = { id: metId || Date.now().toString(36), naam, ts: Date.now(), vlakken: metOk().map(v => v.map(p => [Math.round(p[0] * 1e7) / 1e7, Math.round(p[1] * 1e7) / 1e7])), m2: Math.round(totM2()), zaad: Object.assign({}, metZaad) };
-    metingen = metingen.filter(x => x.id !== r.id).concat([r]); metId = r.id;
+    metingen = metingen.filter(x => x.id !== r.id).concat([r]); metId = r.id; bewaarConcept();
     if (store.set("kaartMetingen", metingen)) metSay(naam + " bewaard: " + m2Fmt(r.m2) + ". Je vindt hem hieronder terug" + (groepActief() ? " (en bij de groep)." : "."));
     metPaneel(); groepPlanFn();
   });

@@ -424,6 +424,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div class="blok">
       <div class="lbl2">App</div>
       <div class="row" style="margin-top:8px"><a class="btn link" href="../zaaihulp/">Zaaihulp openen</a><button type="button" class="btn" id="bDeel">Stuur installatielink</button></div>
+      <div class="meta">Zit je in de groep, dan gaat die mee: de ander installeert de app en vult daarna alleen zijn naam in.</div>
       <div class="hint" id="deelHint"></div>
       <div class="hint" id="opslagStand"></div>
       <details>
@@ -432,7 +433,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet">versie 117</div>
+  <div class="voet">versie 118</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -2378,7 +2379,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     const st = $("grStatus");
     st.className = "hint";
     if (!groep.aan) { st.textContent = "Je doet niet mee: je bedrijven blijven alleen op deze telefoon."; return; }
-    if (!String(groep.naam || "").trim()) { st.textContent = "Vul je naam in. Zonder naam deelt de app niks en haalt ook niks op."; st.className = "hint warn"; return; }
+    if (!String(groep.naam || "").trim()) { st.textContent = String(groep.code || "").trim() ? "Je bent uitgenodigd voor de groep. Vul je naam in." : "Vul je naam in. Zonder naam deelt de app niks en haalt ook niks op."; st.className = "hint warn"; return; }
     if (!String(groep.code || "").trim()) { st.textContent = "Vul de groepscode in (of open de groepslink die je kreeg)."; st.className = "hint warn"; return; }
     const tijd = groepLaatst ? new Date(groepLaatst).toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
     const wacht = namen.reduce((t, n) => t + (n.wacht || []).length, 0);
@@ -2390,6 +2391,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const bewaarGroep = () => { store.set("kaartGroep", groep); renderGroep(); };
   $("grAan").addEventListener("change", e => { groep.aan = e.target.checked; bewaarGroep(); if (groep.aan) groepSync(); });
   $("grNaam").addEventListener("input", e => { groep.naam = e.target.value; bewaarGroep(); clearTimeout(groepTimer); groepTimer = setTimeout(groepSync, 3000); });
+  // Naam klaar (Enter of veld verlaten): meteen bijwerken
+  $("grNaam").addEventListener("change", () => { clearTimeout(groepTimer); if (groepOk()) groepSync(); });
   $("grCode").addEventListener("input", e => { groep.code = e.target.value.trim(); bewaarGroep(); clearTimeout(groepTimer); groepTimer = setTimeout(groepSync, 3000); });
   $("grSync").addEventListener("click", () => groepSync());
   // Groepslink: de app met de code erin, dan hoeft niemand iets over te typen
@@ -2410,7 +2413,13 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const groepAlsOud = ms => { if (document.visibilityState !== "hidden" && Date.now() - groepLaatst > ms) groepSync(); };
   document.addEventListener("visibilitychange", () => groepAlsOud(30000));
   setInterval(() => groepAlsOud(4 * 60000), 60000);
-  if (viaGroepslink) toonTab("inst");
+  // Uitgenodigd (groepslink of installatielink met groep): wel een code, nog geen naam. Dan bij het opstarten meteen
+  // Instellingen open, cursor in het naamveld, met "Je bent uitgenodigd voor de groep. Vul je naam in."
+  const uitgenodigd = () => !!(groep.aan && String(groep.code || "").trim() && !String(groep.naam || "").trim());
+  if (viaGroepslink || uitgenodigd()) {
+    toonTab("inst");
+    if (uitgenodigd()) setTimeout(() => { const i = $("grNaam"); try { i.scrollIntoView({ block: "center" }); i.focus(); } catch (e) {} }, 300);
+  }
   renderGroep(); setTimeout(groepSync, 1500);
   {
     const d = leesDeel(location.hash);
@@ -2795,9 +2804,12 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
 
   // Installatielink delen (zelfde als bij de Zaaihulp): via het deelmenu van de telefoon, anders kopiëren
   $("bDeel").addEventListener("click", async () => {
-    const url = new URL("installeren.html", location.href).href, hint = $("deelHint");
+    // Zit je in een groep: de groep gaat mee (?groep=, net als de groepslink), dan doet de ander na het installeren meteen mee
+    const code = groep.aan ? String(groep.code || "").trim() : "", hint = $("deelHint");
+    const url = new URL("installeren.html", location.href).href + (code ? "?groep=" + encodeURIComponent(code) : "");
+    const tekst = code ? "Installeer Perceelkaart en doe meteen mee met onze groep:" : "Perceelkaart (en de Zaaihulp) installeren op je telefoon:";
     try {
-      if (navigator.share) { await navigator.share({ title: "Perceelkaart", text: "Perceelkaart (en de Zaaihulp) installeren op je telefoon:", url }); hint.textContent = "Gedeeld."; }
+      if (navigator.share) { await navigator.share({ title: code ? "Perceelkaart groep" : "Perceelkaart", text: tekst, url }); hint.textContent = "Gedeeld" + (code ? ", met de groep erbij." : "."); }
       else if (navigator.clipboard) { await navigator.clipboard.writeText(url); hint.textContent = "Link gekopieerd: " + url; }
       else hint.textContent = url;
     } catch (e) { if (e && e.name !== "AbortError") hint.textContent = url; }

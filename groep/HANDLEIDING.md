@@ -32,9 +32,13 @@ telefoon zelf), offline kaarten en de instellingen (spuitbreedte, tank enz.).
    vast in de app; daarna hoeft niemand meer iets met die URL te doen.
 
 ## 4. Meedoen
-- In de app, tabblad **Bedrijven** → onderaan **Groep** → *Meedoen met de groep*, je naam en de groepscode invullen.
+- In de app, tandwiel rechtsboven → **Groep** → *Meedoen met de groep*, je naam en de groepscode invullen.
 - Of: één persoon tikt op **Stuur groepslink** en stuurt die naar de rest. Wie de link opent, doet meteen mee
   (alleen zijn naam nog invullen).
+- Heeft iemand de app nog niet: tik (terwijl je in de groep zit) op **Stuur installatielink**. Die link installeert
+  de app én zet de groep alvast klaar; bij de eerste keer openen vraagt de app alleen de naam. Op een iPhone ziet
+  de app op het beginscherm de uitnodiging soms niet; daarom staat de groepscode op de installatiepagina, om in de
+  app zelf in te vullen.
 - Alle namen op je telefoon gaan naar de groep, en die van de anderen komen erbij. Een naam die al bestond
   (zelfde naam) wordt samengevoegd.
 

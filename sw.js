@@ -1,7 +1,7 @@
 // Perceelkaart service worker: nodig om als app te installeren, en de app zelf werkt ook zonder bereik.
 // PDOK-gegevens gaan er niet doorheen; percelen bewaart perceel.js zelf.
 // Kaarttegels: alleen als ze offline bewaard zijn (knop bij een naam), komen ze uit de eigen tegelcache.
-const CACHE = "perceelkaart-v113";
+const CACHE = "perceelkaart-v114";
 // Begint bewust niet met "perceelkaart-" of "zaaihulp-": die caches worden bij een update opgeruimd
 const TEGELS = "tegels-perceelkaart";
 const TEGEL = /^https:\/\/service\.pdok\.nl\/.*\/EPSG:3857\/\d+\/\d+\/\d+\.(png|jpeg)$/;
@@ -31,6 +31,6 @@ self.addEventListener("fetch", e => {
   e.respondWith(
     fetch(e.request.url, { cache: "no-cache", redirect: e.request.mode === "navigate" ? "manual" : "follow" })
       .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; })
-      .catch(() => caches.match(e.request).then(m => m || caches.match("./index.html")))
+      .catch(() => caches.match(e.request, { ignoreSearch: true }).then(m => m || caches.match("./index.html")))
   );
 });

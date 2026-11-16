@@ -89,11 +89,18 @@ body.metpijl main { padding-bottom: 90px; }
     <div><h1>Perceelkaart</h1><div class="sub">Percelen en ha, bufferstroken, spuitsporen, zaaiplan en AB-lijnen</div></div>
   </div>
 
+  <!-- Uitnodiging voor de groep (installatielink met ?groep=) -->
+  <section class="card main" id="vGroep" hidden>
+    <h2>Je bent uitgenodigd voor een groep</h2>
+    <p style="margin:0">Installeer de app hieronder, daarna vraagt hij alleen je naam. Je zit dan meteen in de groep en ziet de bedrijven en metingen van de anderen.</p>
+    <div class="tip" id="groepIos" hidden><strong>iPhone:</strong> de app op je beginscherm kan de uitnodiging soms niet zien. Vraagt hij niet om je naam? Tik in de app op het tandwiel rechtsboven, zet <b>Meedoen met de groep</b> aan en vul deze groepscode in: <b id="groepCode"></b></div>
+  </section>
+
   <!-- Al geïnstalleerd -->
   <section class="card main" id="vAl" hidden>
     <div class="ok">✓</div>
     <h2 style="margin-top:8px">Je hebt de app al</h2>
-    <a class="btn primary" href="./">Open Perceelkaart</a>
+    <a class="btn primary" id="openApp" href="./">Open Perceelkaart</a>
     <a class="btn" href="../zaaihulp/installeren.html">Ook de Zaaihulp installeren</a>
   </section>
 
@@ -186,6 +193,23 @@ body.metpijl main { padding-bottom: 90px; }
   // In-app browsers op Android (WhatsApp, Facebook enz. gebruiken een WebView: "; wv)")
   const androidInApp = android && (/; wv\)/.test(ua) || /FBAN|FBAV|Instagram/.test(ua));
   const show = id => { $(id).hidden = false; };
+
+  // Uitnodiging voor de groep: code alvast bewaren in dezelfde opslag als de app (kaartGroep; een bestaande naam blijft),
+  // dan vraagt de app na het installeren alleen de naam. De link zelf (met ?groep=) kun je ook weer doorsturen.
+  let uitnodiging = "";
+  try { uitnodiging = (new URLSearchParams(location.search).get("groep") || "").trim().slice(0, 100); } catch (e) {}
+  if (uitnodiging) {
+    try {
+      let g = null; try { g = JSON.parse(localStorage.getItem("kaartGroep") || "null"); } catch (e) {}
+      if (!g || typeof g !== "object" || Array.isArray(g)) g = {};
+      g.code = uitnodiging; g.aan = true;
+      localStorage.setItem("kaartGroep", JSON.stringify(g));
+    } catch (e) { /* geen opslag: de app vraagt dan om de code (zie iPhone-uitleg) */ }
+    show("vGroep");
+    // iPhone: de app op het beginscherm heeft vaak eigen opslag, los van Safari: dan de code zelf invullen
+    if (/iPhone|iPod/.test(ua)) { $("groepCode").textContent = uitnodiging; show("groepIos"); }
+    $("openApp").href = "./?groep=" + encodeURIComponent(uitnodiging);
+  }
 
   if (standalone) { show("vAl"); return; }
 

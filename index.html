@@ -446,7 +446,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet" id="voetVersie">versie 124</div>
+  <div class="voet" id="voetVersie">versie 125</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -2393,7 +2393,7 @@ function start() {
     vlakken: (mt.vlakken || [mt.ring]).filter(v => Array.isArray(v) && v.length >= 3), zaad: Object.assign({}, mt.zaad) });
   const metingHash = mt => vast(metingSchoon(mt));
   const metingTxt = mt => ["Meting", mt.naam, Math.round(mt.m2).toLocaleString("nl-NL") + " m²", ((mt.zaad || {}).mengsel || "") + ((mt.zaad || {}).manier === "door" ? " doorzaaien" : ""), (mt.zaad || {}).waarde ? mt.zaad.waarde + " kg/ha" : ""].filter(Boolean).join(" · ");
-  const hierVeranderd = () => namen.some(n => { const b = groepBasis.n[naamId(n.naam)]; return !b || vast(hashes(naamItems(n))) !== vast(b); }) ||
+  const hierVeranderd = () => Object.keys(groepBasis.hernoemd || {}).length > 0 || namen.some(n => { const b = groepBasis.n[naamId(n.naam)]; return !b || vast(hashes(naamItems(n))) !== vast(b); }) ||
     Object.keys(groepBasis.n).some(id => !namen.some(n => naamId(n.naam) === id)) ||
     metingen.some(mt => (groepBasis.m || {})[metingId(mt)] !== metingHash(mt)) || Object.keys(groepBasis.m || {}).some(id => !metingen.some(mt => metingId(mt) === id));
   async function groepSync() {
@@ -2438,9 +2438,13 @@ function start() {
         }
         const M = voegSamen(L, docItems(R), B || {});
         if (vast(hashes(M)) !== vast(hashes(L))) { zetNaam(n, M); binnen++; }
+        // Alleen hoofdletters anders: hier hernoemd = meesturen, anders de schrijfwijze van de groep overnemen
+        const hernoemd = !!(groepBasis.hernoemd && groepBasis.hernoemd[id]);
+        if (groepBasis.hernoemd) delete groepBasis.hernoemd[id];
+        if (typeof R.n === "string" && R.n.trim() && R.n !== n.naam && !hernoemd) { zetNaamLokaal(n, R.n.trim()); binnen++; }
         // Wat hier na het samenvoegen staat is de nieuwe basis (pasten oevers niet op de vorm hier, dan blijft dat zo)
         groepBasis.n[id] = hashes(naamItems(n));
-        if (vast(hashes(M)) !== vast(hashes(docItems(R)))) stuur.push({ id, soort: "naam", apparaat: groep.apparaat, van: groep.naam.trim(), omschrijving: omschrijving(n), data: docUit(n.naam, M) });
+        if (vast(hashes(M)) !== vast(hashes(docItems(R))) || (hernoemd && R.n !== n.naam)) stuur.push({ id, soort: "naam", apparaat: groep.apparaat, van: groep.naam.trim(), omschrijving: omschrijving(n), data: docUit(n.naam, M) });
       });
       // Metingen
       if (!groepBasis.m) groepBasis.m = {};
@@ -2598,6 +2602,30 @@ function start() {
   $("bInst").addEventListener("click", () => { if (tabNu === "inst") toonTab(tabVoorInst); else { toonTab("inst"); renderGroep(); } });
   $("instTerug").addEventListener("click", () => toonTab(tabVoorInst));
   if (binnen) toonTab("namen");
+  // Bedrijf een andere naam geven. Alles hangt aan het bedrijf zelf (percelen, kavels, kunstmest); alleen wat op naam
+  // bewaard is gaat mee: de naam op de kaart, offline kaarten, de keuze in Bemesten. In de groep wordt het de nieuwe naam
+  // (oude weg, nieuwe erbij); bij alleen hoofdletters anders dezelfde regel, die de nieuwe schrijfwijze meekrijgt.
+  let hernoemOpen = false;
+  function hernoemNaam(oud, nieuw) {
+    nieuw = String(nieuw || "").trim().replace(/\s+/g, " ").slice(0, 40);
+    if (!nieuw) { say("Vul een naam in.", true); return false; }
+    if (nieuw === oud) return true;
+    if (namen.some(x => x.naam !== oud && naamId(x.naam) === naamId(nieuw))) { say("Er is al een bedrijf dat " + nieuw + " heet. Kies een andere naam.", true); return false; }
+    const n = namen.find(x => x.naam === oud); if (!n) return false;
+    zetNaamLokaal(n, nieuw);
+    if (naamId(oud) === naamId(nieuw)) { groepBasis.hernoemd = Object.assign({}, groepBasis.hernoemd, { [naamId(nieuw)]: true }); store.set("kaartGroepBasis", groepBasis); }
+    zetNamen(); teken();
+    say(oud + " heet nu " + nieuw + ".");
+    return true;
+  }
+  // Alleen de naam omzetten, en wat op naam bewaard staat (ook gebruikt als de groep een andere schrijfwijze heeft)
+  function zetNaamLokaal(n, nieuw) {
+    const oud = n.naam;
+    n.naam = nieuw;
+    if (naamActief === oud) { naamActief = nieuw; store.set("kaartNaamActief", nieuw); }
+    if (offline[oud]) { offline[nieuw] = offline[oud]; delete offline[oud]; store.set("kaartOffline", offline); }
+    if (kmKeus && kmKeus.naam === oud) kmKeus.naam = nieuw;
+  }
   function renderNamen() {
     const box = $("namenBox"), lijstBox = $("namenLijstBox");
     box.innerHTML = ""; lijstBox.innerHTML = "";
@@ -2680,7 +2708,7 @@ function start() {
       const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
       // Afronden: kaart leeg, de naam blijft bewaard; daarna percelen voor de volgende naam aantikken
       const klaar = kn("Klaar met " + naamActief, () => {
-        wijzigen = false; uitgelicht = null;
+        wijzigen = false; uitgelicht = null; hernoemOpen = false;
         const was = naamActief; bewaarNaam(); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
         sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
         say(was + " is bewaard (zie Bedrijven). Tik percelen aan voor het volgende bedrijf.");
@@ -2691,17 +2719,25 @@ function start() {
         wijzigen = !wijzigen; uitgelicht = null; teken();
         say(wijzigen ? "Tik percelen aan om ze toe te voegen of weg te halen." : "Klaar met wijzigen. " + naamActief + " is bewaard.");
       }, wijzigen));
+      r.appendChild(kn("Naam wijzigen", () => { hernoemOpen = !hernoemOpen; teken(); if (hernoemOpen) setTimeout(() => { const i = $("hernoemNaam"); if (i) { i.focus(); i.select(); } }, 0); }, hernoemOpen));
       r.appendChild(kn("Delen", e => deel(e.currentTarget)));
       { const b = kn(offlineLabel(naamActief), () => bewaarOffline(naamActief)); b.id = "bOffline"; r.appendChild(b); }
       r.appendChild(kn("Bedrijf weghalen", e => {
         if (!armed(e.currentTarget, "Tik nog eens om " + naamActief + " weg te halen")) return;
-        wijzigen = false; uitgelicht = null;
+        wijzigen = false; uitgelicht = null; hernoemOpen = false;
         const was = naamActief; namen = namen.filter(x => x.naam !== was); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
         if (offline[was]) { delete offline[was]; store.set("kaartOffline", offline); }
         teken();
         say(was + " is weggehaald. De percelen staan nog op de kaart, zonder bedrijf.");
       }));
       box.append(m, r);
+      if (hernoemOpen) {
+        const rr = document.createElement("div"); rr.className = "opslaan"; rr.style.marginTop = "8px";
+        const inp = document.createElement("input"); inp.type = "text"; inp.maxLength = 40; inp.id = "hernoemNaam"; inp.value = naamActief; inp.setAttribute("aria-label", "Nieuwe naam voor " + naamActief);
+        const ok = kn("Opslaan", () => { if (hernoemNaam(naamActief, inp.value)) { hernoemOpen = false; teken(); } });
+        inp.addEventListener("keydown", ev => { if (ev.key === "Enter") ok.click(); if (ev.key === "Escape") { hernoemOpen = false; teken(); } });
+        rr.append(inp, ok); box.appendChild(rr);
+      }
     } else if (sel.length) {
       const r = document.createElement("div"); r.className = "opslaan";
       const inp = document.createElement("input"); inp.type = "text"; inp.maxLength = 40; inp.placeholder = "Bedrijf, bijv. Jouke"; inp.setAttribute("aria-label", "Bedrijf voor deze percelen");

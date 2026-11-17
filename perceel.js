@@ -1,4 +1,4 @@
-// perceel.js versie 40 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 41 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -1079,6 +1079,8 @@
       try { st.setItem(o.cacheKey, JSON.stringify(lijst)); return; } catch (e) { lijst = lijst.slice(0, Math.floor(lijst.length / 2)); }
     }
   }
+  // Standaardopslag voor de perceelcache (zelfde vorm als localStorage: getItem/setItem/removeItem)
+  const zetOpslag = st => { DEF.storage = st || null; };
   const wisCache = o => { o = opts(o); const st = opslag(o); try { if (st) st.removeItem(o.cacheKey); } catch (e) {} };
   const aantalOpgeslagen = o => leesCache(opts(o)).length;
 
@@ -1189,5 +1191,5 @@
     return r;
   }
 
-  return { zoekOpMijnLocatie, zoekOpPunt, gebruikRegio, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, totInsteek, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, koers, puntOpKoers, verschuifLijn, verschuif, samenvoegen, wisCache, aantalOpgeslagen, API, API_REF };
+  return { zoekOpMijnLocatie, zoekOpPunt, gebruikRegio, positie, oppervlakteHa, oppervlakteM2, bevatPunt, binnenPunt, zijden, rechteZijde, afstandM, zoekWater, waterLangsZijden, waterBijPerceel, waterStrook, totInsteek, sporen, zaaiPlan, zaaiVlakken, zaaiLijnen, koers, puntOpKoers, verschuifLijn, verschuif, samenvoegen, wisCache, aantalOpgeslagen, zetOpslag, API, API_REF };
 });

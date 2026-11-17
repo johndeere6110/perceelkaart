@@ -434,14 +434,116 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet">versie 122</div>
+  <div class="voet">versie 123</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/polygon-clipping/polygon-clipping.umd.min.js"></script>
 <script src="perceel.js"></script>
 <script>
-(function () {
+// Opslag voor de grote gegevens (bedrijven, percelen, kavels, perceelcache) in IndexedDB. localStorage heeft maar ±5 MB
+// voor dit hele adres, gedeeld met de Zaaihulp; IndexedDB honderden MB. Werkt als localStorage (getItem/setItem/removeItem,
+// direct uit het geheugen); schrijven gaat op de achtergrond naar IndexedDB. Sleutelnamen blijven hetzelfde.
+// Overzetten: eerst naar IndexedDB schrijven en teruglezen, pas als dat klopt uit localStorage halen. Lukt IndexedDB niet,
+// dan blijft alles in localStorage zoals vroeger. Staat er na het overzetten tóch weer iets in localStorage (een oude
+// versie van de app die leeg begon), dan wint IndexedDB en gaat het andere apart als reserve ("reserve:<sleutel>:<tijd>").
+window.Opslag = (function () {
+  const GROOT = ["kaartNamen", "kaartTestSelectie", "kaartKavels", "perceelCache", "perceelCacheRef"];
+  const groot = k => GROOT.indexOf(k) >= 0;
+  const mem = new Map(), bezig = new Set(), wacht = new Set(), klaarFns = [];
+  let db = null, foutFn = null;
+  const ls = () => { try { return window.localStorage || null; } catch (e) { return null; } };
+  const o = {
+    modus: "laden", groot,
+    getItem(k) { if (db && groot(k)) return mem.has(k) ? mem.get(k) : null; const s = ls(); return s ? s.getItem(k) : null; },
+    setItem(k, v) { v = String(v); if (db && groot(k)) { mem.set(k, v); schrijf(k); return; } const s = ls(); if (!s) throw new Error("geen opslag"); s.setItem(k, v); },
+    removeItem(k) { if (db && groot(k)) { mem.delete(k); schrijf(k); return; } const s = ls(); if (s) s.removeItem(k); },
+    bijFout(fn) { foutFn = fn; },
+    // Klaar als alles wat nog op de achtergrond geschreven wordt in de database staat
+    bewaard() { return bezig.size ? new Promise(res => klaarFns.push(res)) : Promise.resolve(); },
+    // Hoeveel tekens er in de grote gegevens zitten (voor het overzicht)
+    grootte() { let n = 0; GROOT.forEach(k => { const v = o.getItem(k); if (v) n += v.length; }); return n; }
+  };
+  // Eén schrijfactie per sleutel tegelijk; komt er intussen een nieuwe waarde, dan daarna alleen de laatste.
+  // Mislukt het, dan de database opnieuw openen en nog één keer proberen (oudere iPhones verbreken de verbinding soms
+  // als de app op de achtergrond stond).
+  let herOpen = null;
+  const opnieuw = () => herOpen || (herOpen = open().then(d => { const oud = db; db = d; try { oud.close(); } catch (e) {} }).finally(() => { herOpen = null; }));
+  function schrijf(k, poging) {
+    if (!poging && bezig.has(k)) { wacht.add(k); return; }
+    bezig.add(k);
+    let af = false;
+    const klaar = (ok, e) => {
+      bezig.delete(k);
+      if (!ok && foutFn) foutFn(e);
+      if (wacht.has(k)) { wacht.delete(k); schrijf(k); }
+      if (!bezig.size) klaarFns.splice(0).forEach(f => f());
+    };
+    const eind = (ok, e) => {
+      if (af) return; af = true;
+      if (!ok && !poging) { opnieuw().then(() => schrijf(k, 1), () => klaar(false, e)); return; }
+      klaar(ok, e);
+    };
+    try {
+      const tx = db.transaction("kv", "readwrite"), st = tx.objectStore("kv");
+      if (mem.has(k)) st.put(mem.get(k), k); else st.delete(k);
+      tx.oncomplete = () => eind(true);
+      tx.onerror = tx.onabort = () => eind(false, tx.error);
+    } catch (e) { eind(false, e); }
+  }
+  const tx = (d, mode, fn) => new Promise((res, rej) => {
+    const t = d.transaction("kv", mode), uit = fn(t.objectStore("kv"));
+    t.oncomplete = () => res(uit); t.onerror = t.onabort = () => rej(t.error || new Error("transactie mislukt"));
+  });
+  const lees = (d, sleutels) => tx(d, "readonly", st => { const r = {}; sleutels.forEach(k => { const q = st.get(k); q.onsuccess = () => { if (q.result !== undefined) r[k] = q.result; }; }); return r; });
+  function open() {
+    return new Promise((res, rej) => {
+      if (!window.indexedDB) return rej(new Error("geen IndexedDB"));
+      let telaat = false;
+      const t = setTimeout(() => { telaat = true; rej(new Error("IndexedDB reageert niet")); }, 6000);
+      let rq;
+      try { rq = indexedDB.open("perceelkaart", 1); } catch (e) { clearTimeout(t); return rej(e); }
+      rq.onupgradeneeded = () => { if (!rq.result.objectStoreNames.contains("kv")) rq.result.createObjectStore("kv"); };
+      rq.onsuccess = () => { clearTimeout(t); if (telaat) { try { rq.result.close(); } catch (e) {} return; } res(rq.result); };
+      rq.onerror = () => { clearTimeout(t); rej(rq.error || new Error("IndexedDB ging niet open")); };
+    });
+  }
+  o.klaar = (async () => {
+    let d;
+    try { d = await open(); } catch (e) { o.modus = "localStorage"; o.waarom = String((e && e.message) || e); return; }
+    try {
+      const s = ls(), inDb = await lees(d, GROOT), over = {}, reserve = {}, nu = Date.now();
+      GROOT.forEach(k => {
+        const v = s ? s.getItem(k) : null;
+        if (v === null) return;
+        if (!(k in inDb)) over[k] = v;
+        else if (inDb[k] !== v) reserve["reserve:" + k + ":" + nu] = v;
+      });
+      const nieuw = Object.assign({}, over, reserve), ks = Object.keys(nieuw);
+      if (ks.length) {
+        await tx(d, "readwrite", st => { ks.forEach(k => st.put(nieuw[k], k)); });
+        const terug = await lees(d, ks);
+        if (ks.some(k => terug[k] !== nieuw[k])) throw new Error("teruglezen klopte niet");
+      }
+      // Alles staat veilig in IndexedDB: vanaf nu daar lezen en schrijven, en pas nu localStorage vrijmaken
+      Object.keys(over).forEach(k => { inDb[k] = over[k]; });
+      Object.keys(inDb).forEach(k => mem.set(k, inDb[k]));
+      db = d; o.modus = "idb"; o.overgezet = Object.keys(over); o.reserve = Object.keys(reserve).length;
+      if (s) {
+        try { s.setItem("kaartOpslag", "idb"); } catch (e) {}
+        GROOT.forEach(k => { try { if (s.getItem(k) !== null) s.removeItem(k); } catch (e) {} });
+      }
+    } catch (e) {
+      o.modus = "localStorage"; o.waarom = String((e && e.message) || e);
+      try { d.close(); } catch (er) {}
+    }
+  })();
+  return o;
+})();
+if (window.Perceel && Perceel.zetOpslag) Perceel.zetOpslag(Opslag);
+</script>
+<script>
+function start() {
   const $ = id => document.getElementById(id);
   const hint = $("hint"), info = $("info"), ruw = $("ruw");
   const say = (t, warn) => {
@@ -453,9 +555,15 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const haTxt = v => v.toLocaleString("nl-NL", { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false });
   const store = {
-    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { say("De opslag van de telefoon is vol: dit is NIET bewaard. Haal percelen of bedrijven weg.", true); return false; } }
+    get(k, d) { try { const v = Opslag.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { Opslag.setItem(k, JSON.stringify(v)); return true; } catch (e) { say("De opslag van de telefoon is vol: dit is NIET bewaard. Haal percelen of bedrijven weg.", true); return false; } }
   };
+  // Schrijven naar IndexedDB gaat op de achtergrond: lukt het niet, dan hier melden
+  Opslag.bijFout(() => say("Opslaan lukte niet (opslag vol of geblokkeerd): de laatste wijziging is NIET bewaard.", true));
+  if (Opslag.modus !== "idb") {
+    let m = null; try { m = localStorage.getItem("kaartOpslag"); } catch (e) {}
+    if (m === "idb") setTimeout(() => say("De database van de app ging niet open" + (Opslag.waarom ? " (" + Opslag.waarom + ")" : "") + ". Je bedrijven zijn niet weg, maar nu niet te zien: sluit de app helemaal af en open hem opnieuw. Verander intussen niks.", true), 1500);
+  }
   if (!window.L) { say("Kaart kon niet laden. Heb je internet?", true); return; }
   if (!window.Perceel) { say("perceel.js kon niet laden.", true); return; }
 
@@ -563,7 +671,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Versie 99 had kuub als eenheid van een hele naam (n.km.eh): nu is mest een eigen soort naast kunstmest
   namen.forEach(n => { if (n.km && n.km.eh === "m3") { const k = Object.assign({}, n.km); delete k.eh; n.mest = Object.assign({}, n.mest, k); delete n.km; (n.sel || []).forEach(q => { if (q.km) { q.mest = Object.assign({}, q.mest, q.km); delete q.km; } }); kmOm = true; } else if (n.km && "eh" in n.km) delete n.km.eh; });
   namen.forEach(n => { if (n.km && n.km.gedaan) { const g = n.km.gedaan; (n.sel || []).forEach(q => { if (!(q.km && q.km.gedaan)) q.km = Object.assign({}, q.km, { gedaan: g }); }); delete n.km.gedaan; kmOm = true; } });
-  if (kmOm) { store.set("kaartTestSelectie", sel); try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(n => n.naam === naamActief ? Object.assign({ naam: n.naam, ts: n.ts, opKaart: true }, n.km ? { km: n.km } : {}, n.mest ? { mest: n.mest } : {}, n.wacht ? { wacht: n.wacht } : {}) : n))); } catch (e) {} }
+  if (kmOm) { store.set("kaartTestSelectie", sel); try { Opslag.setItem("kaartNamen", JSON.stringify(namen.map(n => n.naam === naamActief ? Object.assign({ naam: n.naam, ts: n.ts, opKaart: true }, n.km ? { km: n.km } : {}, n.mest ? { mest: n.mest } : {}, n.wacht ? { wacht: n.wacht } : {}) : n))); } catch (e) {} }
   // Eerder bewaard water was een hele rechthoek rond het perceel (honderden kB per perceel): eenmalig inkorten
   const kortWater = lijst => {
     let iets = false;
@@ -576,7 +684,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   if (kortWater(sel)) store.set("kaartTestSelectie", sel);
   let namenKort = false;
   namen.forEach(n => { if (n.sel !== sel && kortWater(n.sel)) namenKort = true; });
-  if (namenKort) try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(naarOpslag))); } catch (e) {}
+  if (namenKort) try { Opslag.setItem("kaartNamen", JSON.stringify(namen.map(naarOpslag))); } catch (e) {}
   // Oppervlakte opnieuw uit de grens (eerder bewaard op 2 decimalen)
   sel.forEach(q => { try { q.ha = Perceel.oppervlakteHa(q.geometry); if (q.alt && q.alt.geometry) q.alt.ha = Perceel.oppervlakteHa(q.alt.geometry); } catch (e) {} });
   const nieuwPerceel = p => ({ key: sleutel(p), gewas: p.gewas || (p.ref ? "Referentieperceel" : ""), jaar: p.jaar, status: p.status || "", ha: p.ha, bron: p.bron, ref: !!p.ref, geometry: p.geometry, oever: {} });
@@ -1325,7 +1433,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   }
   function zetNamen() {
     eigenCache.clear(); groepPlanFn();
-    try { localStorage.setItem("kaartNamen", JSON.stringify(namen.map(naarOpslag))); return true; }
+    try { Opslag.setItem("kaartNamen", JSON.stringify(namen.map(naarOpslag))); return true; }
     catch (e) { say("De opslag is vol: de bedrijven zijn niet bijgewerkt. Haal een bedrijf of percelen weg.", true); return false; }
   }
   function bewaarNaam() {
@@ -2839,13 +2947,24 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   // Opslag beschermen: vraag de browser de gegevens niet op te ruimen bij weinig ruimte, en laat zien of dat lukte
   (async () => {
     const el = $("opslagStand");
+    // Waar de bedrijven en percelen staan, en hoeveel ruimte dat is
+    const mb = n => (n / 1e6).toLocaleString("nl-NL", { maximumFractionDigits: n < 1e7 ? 1 : 0 }) + " MB";
+    let waar = Opslag.modus === "idb"
+      ? " Bedrijven en percelen: " + mb(Opslag.grootte()) + " in de database van de app."
+      : " Bedrijven en percelen: " + mb(Opslag.grootte()) + " in de gewone opslag (± 5 MB voor dit adres, samen met de Zaaihulp).";
     try {
-      if (!navigator.storage || !navigator.storage.persisted) { el.textContent = "Opslag: deze browser zegt niet of de gegevens beschermd zijn."; return; }
+      if (Opslag.modus === "idb" && navigator.storage && navigator.storage.estimate) {
+        const e = await navigator.storage.estimate();
+        if (e && e.quota) waar += " Ruimte die de browser toestaat: " + mb(e.quota) + ".";
+      }
+    } catch (e) {}
+    try {
+      if (!navigator.storage || !navigator.storage.persisted) { el.textContent = "Opslag: deze browser zegt niet of de gegevens beschermd zijn." + waar; return; }
       let p = await navigator.storage.persisted();
       if (!p && navigator.storage.persist) p = await navigator.storage.persist();
-      el.textContent = p ? "Opslag: beschermd, de browser ruimt de gegevens niet zomaar op."
-        : "Opslag: niet beschermd, bij weinig ruimte mag de browser de gegevens opruimen. Op het beginscherm installeren helpt vaak.";
-    } catch (e) { el.textContent = ""; }
+      el.textContent = (p ? "Opslag: beschermd, de browser ruimt de gegevens niet zomaar op."
+        : "Opslag: niet beschermd, bij weinig ruimte mag de browser de gegevens opruimen. Op het beginscherm installeren helpt vaak.") + waar;
+    } catch (e) { el.textContent = waar.trim(); }
   })();
   // AB-lijn meten, los van percelen: A en B tikken, slepen, intikken of GPS; koers, afstand, midden en opzij schuiven
   let vrijModus = false;
@@ -3014,7 +3133,9 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     } catch (er) { say(er.message, true); }
     finally { btn.disabled = false; btn.textContent = old; }
   });
-})();
+}
+// Eerst de opslag laden (IndexedDB, zie Opslag hierboven), dan de app; fouten in start() blijven gewone fouten
+Opslag.klaar.then(() => setTimeout(start, 0));
 </script>
 <script>
 if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {

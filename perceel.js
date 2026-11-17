@@ -1,4 +1,4 @@
-// perceel.js versie 41 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
+// perceel.js versie 42 (bron: repo perceelkaart). Kopie elders? Houd dit nummer gelijk.
 // Perceel: zoek het BRP-gewasperceel (PDOK, RVO) op een GPS-positie en bereken de oppervlakte.
 // Losse module zonder afhankelijkheden. In de browser: window.Perceel, in Node: require("./perceel.js").
 //
@@ -202,8 +202,11 @@
     if (!res.ok) throw fout("server", "PDOK (" + naam + ") gaf een fout (" + res.status + ").");
     let data;
     try { data = await res.json(); } catch (e) { throw fout("server", "Onverwacht antwoord van PDOK (" + naam + ")."); }
-    return Array.isArray(data && data.features) ? data.features.filter(x => x && x.geometry && polygonen(x.geometry).length) : [];
+    // PDOK geeft ook de geschiedenis mee: oude versies (eind_registratie gevuld) en objecten die niet meer bestaan
+    // (termination_date gevuld, bijv. een gedempte sloot). Alleen het huidige water telt.
+    return Array.isArray(data && data.features) ? data.features.filter(x => x && x.geometry && polygonen(x.geometry).length && huidigBgt(x)) : [];
   }
+  const huidigBgt = x => { const p = x.properties || {}; return p.eind_registratie == null && p.termination_date == null; };
   // Haal de BGT-waterdelen en taluds op rond een perceel (bbox + marge in graden, ~25 m).
   // Taluds krijgen .talud = true. Lukt het talud niet (o.talud: false = niet vragen), dan alleen water
   // en staat de foutmelding in .taludFout van de lijst.

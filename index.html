@@ -448,7 +448,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet" id="voetVersie">versie 127</div>
+  <div class="voet" id="voetVersie">versie 128</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -723,7 +723,7 @@ function start() {
   const nieuwPerceel = p => ({ key: sleutel(p), gewas: p.gewas || (p.ref ? "Referentieperceel" : ""), jaar: p.jaar, status: p.status || "", ha: p.ha, bron: p.bron, ref: !!p.ref, geometry: p.geometry, oever: {} });
   // Andere grens per perceel (BRP <-> referentieperceel), in q.alt. Alles wat bij een grens hoort wisselt mee,
   // zodat terugwisselen de oevers, het gevonden water en de sleutel (kavels) terugzet.
-  const GRENS = ["key", "gewas", "jaar", "status", "ha", "bron", "ref", "geometry", "oever", "wauto", "water", "taludStatus", "waterTs", "extraWater", "reken", "waterKort"];
+  const GRENS = ["key", "gewas", "jaar", "status", "ha", "bron", "ref", "geometry", "oever", "wauto", "water", "taludStatus", "waterTs", "extraWater", "reken", "waterKort", "waterV"];
   const altBezig = new Map(), altGeprobeerd = new Set();
   // Overlap: ligt een gekozen perceel binnen een ander (bijv. referentieperceel over twee BRP-percelen)? Dan telt het dubbel.
   const middenCache = new Map();
@@ -790,7 +790,7 @@ function start() {
     if (sel.some(x => x !== q && x.key === n.key)) return "dubbel";
     if (b === q) {
       const oudKey = q.key;
-      ["wauto", "water", "taludStatus", "waterTs", "reken", "waterKort"].forEach(k => delete q[k]);
+      ["wauto", "water", "taludStatus", "waterTs", "reken", "waterKort", "waterV"].forEach(k => delete q[k]);
       Object.assign(q, n, { oever: {} });
       kavels.forEach(kv => kv.leden = kv.leden.map(x => x === oudKey ? q.key : x));
       bewaarK();
@@ -1334,6 +1334,11 @@ function start() {
         bd.appendChild(tb);
         if (bf.stap) { const n = document.createElement("div"); n.textContent = "Meer dan 4 % (" + haTxt(bf.max) + " ha) mag niet, dan wordt de strook smaller."; bd.appendChild(n); }
         if (bf.stap === 2 && bf.af > bf.max) { const n = document.createElement("div"); n.textContent = "Nog boven 4 %, maar smaller mag niet."; bd.appendChild(n); }
+        if (bf.water && q.waterV !== 2) {
+          const o = document.createElement("div"); o.className = "warn4";
+          o.textContent = "Dit water is gezocht met een oudere versie, die ook gedempte of verlegde sloten meetelde. Tik Water zoeken om het opnieuw te zoeken.";
+          bd.appendChild(o);
+        }
         if (bf.water) {
           const n = document.createElement("div"), w = bf.water;
           n.textContent = w.kant
@@ -1497,7 +1502,7 @@ function start() {
   }
   // Gevonden water vergeten (veel ruimte): water, talud, de berekende stroken en de oevers die Water zoeken vond. Zelf
   // aangewezen oevers en "langs water erbij" blijven (die gaan ook mee in de groep). Daarna: bufferstrook nog niet bekend.
-  const WATERVELDEN = ["wauto", "water", "taludStatus", "waterTs", "reken", "waterKort"];
+  const WATERVELDEN = ["wauto", "water", "taludStatus", "waterTs", "reken", "waterKort", "waterV"];
   const heeftWater = q => [q, q && q.alt].some(x => x && ((Array.isArray(x.water) && x.water.length) || (x.wauto && Object.keys(x.wauto).length)));
   function vergeetWater(q) {
     let iets = false;
@@ -3011,7 +3016,7 @@ function start() {
         // Waterdelen en taluds bewaren (bijgeknipt): de strook wordt vanaf de insteek gerekend
         q.water = window.polygonClipping ? Perceel.waterBijPerceel(q.geometry, water, polygonClipping) : [];
         q.taludStatus = water.taludFout ? "fout" : "ok";
-        q.waterTs = Date.now(); q.waterKort = 1; delete q.reken;
+        q.waterTs = Date.now(); q.waterKort = 1; q.waterV = 2; delete q.reken;
         if (water.taludFout) regels.push("Perceel " + (i + 1) + ": " + water.taludFout + " Gerekend vanaf de waterlijn.");
         regels.push("Perceel " + (i + 1) + ": " + (nat || droog ? [nat ? mTxt(nat) + " water" : "", droog ? mTxt(droog) + " greppel/droge sloot" : ""].filter(Boolean).join(", ") : "geen (nieuw) water langs de rand"));
         const wd = water.filter(w => !w.talud), td = water.filter(w => w.talud);

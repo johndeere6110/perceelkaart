@@ -210,6 +210,7 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 #paneelKm .kminst { margin: 0 0 10px; }
 #paneelKm input.fout { border-color: var(--warn); box-shadow: 0 0 0 2px var(--warn); }
 #paneelKm .warn4[hidden] { display: none; }
+#waterWegRij[hidden] { display: none; }
 #paneelKm .soort { display: flex; gap: 6px; flex: 1; }
 #paneelKm .soort .btn { flex: 1; min-height: 40px; }
 .leaflet-tooltip.kml { background: #fff; border: 0; color: #1C2318; font: 700 13px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; padding: 1px 6px; border-radius: 8px; box-shadow: 0 0 0 1px #1C2318; text-align: center; line-height: 1.15; }
@@ -322,6 +323,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <button type="button" class="btn" id="bOever" aria-pressed="false">Oevers aanwijzen</button>
     </div>
     <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bKoppel" aria-pressed="false">Percelen koppelen</button><button type="button" class="btn" id="bWaterZicht" aria-pressed="false">Water tonen: uit</button></div>
+    <div class="row" style="margin-top:8px" id="waterWegRij" hidden><button type="button" class="btn" id="bWaterWeg">Water vergeten</button></div>
     <div id="typeBox" hidden>
       <div class="lbl2">Type waterloop, kies vóór het tikken</div>
       <div class="seg4" role="group" aria-label="Type waterloop" id="typeSeg"></div>
@@ -446,7 +448,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet" id="voetVersie">versie 126</div>
+  <div class="voet" id="voetVersie">versie 127</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1238,6 +1240,7 @@ function start() {
     $("bPijl").textContent = "Pijlen: " + (pijlenAan ? "aan" : "uit");
     $("bRonde").setAttribute("aria-pressed", buitenronde);
     $("bRonde").textContent = "Buitenronde eerst: " + (buitenronde ? "aan" : "uit");
+    $("waterWegRij").hidden = !sel.some(heeftWater);
     // Kavels opschonen: weggehaalde percelen eruit, kavel met minder dan 2 percelen vervalt
     const keys = new Set(sel.map(q => q.key)), voor = JSON.stringify(kavels);
     kavels = kavels.map(k => Object.assign(k, { leden: (k.leden || []).filter(x => keys.has(x)) })).filter(k => k.leden.length >= 2);
@@ -1460,6 +1463,7 @@ function start() {
   function naarOpslag(n) {
     if (n.naam !== naamActief) return n;
     const o = { naam: n.naam, ts: n.ts, opKaart: true };
+    if (n.bekeken) o.bekeken = n.bekeken;
     if (n.km) o.km = n.km;
     if (n.mest) o.mest = n.mest;
     if (n.wacht) o.wacht = n.wacht;
@@ -1483,6 +1487,7 @@ function start() {
     if (!n) return;
     bewaarNaam();
     wijzigen = false; uitgelicht = null;
+    n.bekeken = Date.now();
     naamActief = naam; store.set("kaartNaamActief", naam);
     sel = JSON.parse(JSON.stringify(n.sel || [])); kavels = JSON.parse(JSON.stringify(n.kavels || []));
     store.set("kaartTestSelectie", sel); store.set("kaartKavels", kavels); zetNamen();
@@ -1490,6 +1495,41 @@ function start() {
     if (sel.length) map.fitBounds(L.geoJSON({ type: "FeatureCollection", features: sel.map(q => ({ type: "Feature", properties: {}, geometry: q.geometry })) }).getBounds(), { padding: [24, 24], maxZoom: 17 });
     say(naam + ": " + sel.length + (sel.length === 1 ? " perceel, " : " percelen, ") + haTxt(haGeheel(sel)) + " ha.");
   }
+  // Gevonden water vergeten (veel ruimte): water, talud, de berekende stroken en de oevers die Water zoeken vond. Zelf
+  // aangewezen oevers en "langs water erbij" blijven (die gaan ook mee in de groep). Daarna: bufferstrook nog niet bekend.
+  const WATERVELDEN = ["wauto", "water", "taludStatus", "waterTs", "reken", "waterKort"];
+  const heeftWater = q => [q, q && q.alt].some(x => x && ((Array.isArray(x.water) && x.water.length) || (x.wauto && Object.keys(x.wauto).length)));
+  function vergeetWater(q) {
+    let iets = false;
+    [q, q.alt].forEach(x => {
+      if (!x || typeof x !== "object") return;
+      if (x.wauto && x.oever) Object.keys(x.wauto).forEach(k => { if (x.wauto[k]) delete x.oever[k]; });
+      WATERVELDEN.forEach(k => { if (k in x) { delete x[k]; iets = true; } });
+    });
+    return iets;
+  }
+  // Een bedrijf dat een week niet op de kaart stond: water vergeten (Water zoeken haalt het terug). Laatst bekeken =
+  // openen of Water zoeken. Bedrijven zonder datum (van voor deze versie) krijgen eerst een week de tijd.
+  const WATER_DAGEN = 7;
+  {
+    const nu = Date.now(); let vergeten = 0, nieuw = false;
+    namen.forEach(n => {
+      if (n.naam === naamActief) { if (!n.bekeken) { n.bekeken = nu; nieuw = true; } return; }
+      const lijst = n.sel || [];
+      const laatst = Math.max(n.bekeken || 0, ...lijst.map(q => q.waterTs || 0));
+      if (!n.bekeken) { n.bekeken = Math.max(nu, laatst); nieuw = true; return; }
+      if (nu - laatst > WATER_DAGEN * 864e5 && lijst.some(heeftWater)) { lijst.forEach(vergeetWater); vergeten++; }
+    });
+    if (vergeten || nieuw) zetNamen();
+    if (vergeten) setTimeout(() => say("Gevonden water vergeten bij " + vergeten + (vergeten === 1 ? " bedrijf dat" : " bedrijven die") + " een week niet open " + (vergeten === 1 ? "stond" : "stonden") + " (scheelt ruimte). Water zoeken haalt het terug."), 1200);
+  }
+  $("bWaterWeg").addEventListener("click", e => {
+    if (!armed(e.currentTarget, "Tik nog eens: water vergeten")) return;
+    let n = 0; sel.forEach(q => { if (vergeetWater(q)) n++; });
+    waterZicht = false; zetWaterKnop();
+    bewaar(); teken();
+    say("Water vergeten bij " + n + (n === 1 ? " perceel" : " percelen") + ". Netto en bufferstrook pas weer na Water zoeken.");
+  });
   // Tabblad Kunstmest: alle percelen van alle namen op de kaart. Tik een perceel: je ziet van wie het is, vult de l/ha,
   // een notitie en gedaan in, en ziet het totaal voor die naam. Per perceel in q[KV] {lha, noti, gedaan} (lha "0" = niet);
   // bij de naam in n[KV] {wat, noti}. Gerekend met de netto ha per perceel (bufferstrook eraf, langs water erbij).

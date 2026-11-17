@@ -425,6 +425,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div class="lbl2">App</div>
       <div class="row" style="margin-top:8px"><a class="btn link" href="../zaaihulp/">Zaaihulp openen</a><button type="button" class="btn" id="bDeel">Stuur installatielink</button></div>
       <div class="meta">Zit je in de groep, dan gaat die mee: de ander installeert de app en vult daarna alleen zijn naam in.</div>
+      <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bDeelLos" hidden>Installatielink zonder groep</button></div>
       <div class="hint" id="deelHint"></div>
       <div class="hint" id="opslagStand"></div>
       <details>
@@ -433,7 +434,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet">versie 119</div>
+  <div class="voet">versie 120</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -2372,6 +2373,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   groepPlanFn = () => { if (groepStil || !groepOk()) return; clearTimeout(groepTimer); groepTimer = setTimeout(() => { if (hierVeranderd()) groepSync(); }, 3000); };
   function renderGroep() {
     const ingesteld = !!groepUrl();
+    $("bDeelLos").hidden = !(ingesteld && groep.aan && String(groep.code || "").trim());
     $("grNiet").hidden = ingesteld; $("grBlok").hidden = !ingesteld;
     if (!ingesteld) return;
     $("grAan").checked = !!groep.aan; $("grVelden").hidden = !groep.aan;
@@ -2803,9 +2805,10 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe($("map"));
 
   // Installatielink delen (zelfde als bij de Zaaihulp): via het deelmenu van de telefoon, anders kopiëren
-  $("bDeel").addEventListener("click", async () => {
-    // Zit je in een groep: de groep gaat mee (?groep=, net als de groepslink), dan doet de ander na het installeren meteen mee
-    const code = groep.aan ? String(groep.code || "").trim() : "", hint = $("deelHint");
+  // Zit je in een groep: de groep gaat mee (?groep=, net als de groepslink), dan doet de ander na het installeren meteen mee.
+  // "Zonder groep" stuurt altijd de gewone installatielink.
+  const stuurInstallatie = async metGroep => {
+    const code = metGroep && groep.aan ? String(groep.code || "").trim() : "", hint = $("deelHint");
     const url = new URL("installeren.html", location.href).href + (code ? "?groep=" + encodeURIComponent(code) : "");
     const tekst = code ? "Installeer Perceelkaart en doe meteen mee met onze groep:" : "Perceelkaart (en de Zaaihulp) installeren op je telefoon:";
     try {
@@ -2813,7 +2816,9 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       else if (navigator.clipboard) { await navigator.clipboard.writeText(url); hint.textContent = "Link gekopieerd: " + url; }
       else hint.textContent = url;
     } catch (e) { if (e && e.name !== "AbortError") hint.textContent = url; }
-  });
+  };
+  $("bDeel").addEventListener("click", () => stuurInstallatie(true));
+  $("bDeelLos").addEventListener("click", () => stuurInstallatie(false));
   // Opslag beschermen: vraag de browser de gegevens niet op te ruimen bij weinig ruimte, en laat zien of dat lukte
   (async () => {
     const el = $("opslagStand");

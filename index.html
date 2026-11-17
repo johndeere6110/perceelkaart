@@ -145,6 +145,8 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 .leaflet-tooltip.pnr { background: var(--hl); border: 0; color: #1C2318; font: 700 15px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; padding: 1px 7px; border-radius: 8px; box-shadow: none; text-align: center; line-height: 1.15; }
 .leaflet-tooltip.pnr small { display: block; font-size: 11px; font-weight: 600; }
 .leaflet-tooltip.pnr::before { display: none; }
+.leaflet-tooltip.pnr.pnrKlein small { display: none; }
+.leaflet-tooltip.pnr.pnrWeg { display: none; }
 .lbl2 { margin-top: 10px; color: var(--muted); font-weight: 500; }
 .seg4 { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); margin-top: 6px; }
 .seg4 button { border: 0; background: transparent; color: var(--ink); padding: 6px 2px 8px; min-height: 64px; font: 700 20px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; gap: 2px; }
@@ -448,7 +450,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet" id="voetVersie">versie 128</div>
+  <div class="voet" id="voetVersie">versie 129</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -620,6 +622,31 @@ function start() {
   const zoomKlasse = () => { $("map").classList.toggle("ver", map.getZoom() < 17); $("map").classList.toggle("verKm", map.getZoom() < kmZoom); kmZoomTxt(); };
   $("kmZoomZet").addEventListener("click", () => { kmZoom = map.getZoom(); store.set("kaartKmZoom", kmZoom); zoomKlasse(); const b = $("kmZoomZet"); b.textContent = "Ingesteld: zoom " + kmZoom; setTimeout(() => { b.textContent = "Tot deze hoogte"; }, 1500); });
   map.on("zoomend", zoomKlasse); zoomKlasse();
+  // Perceellabels (nummer + ha): past het niet in het perceel, dan alleen het nummer, en anders niks. Vallen labels
+  // over elkaar, dan wint het grootste perceel. Zo blijft het uitgezoomd leesbaar in plaats van één kluwen.
+  const pnrLagen = [];
+  let pnrPlan = 0;
+  function pasLabels() {
+    const lagen = pnrLagen.map(x => { const t = x.g.getTooltip && x.g.getTooltip(), el = t && t.getElement && t.getElement(); return el ? Object.assign({ el }, x) : null; }).filter(Boolean);
+    lagen.forEach(x => {
+      x.el.classList.remove("pnrKlein", "pnrWeg");
+      let w = 0, h = 0;
+      try { const b = x.g.getBounds(), a = map.latLngToContainerPoint(b.getNorthWest()), c = map.latLngToContainerPoint(b.getSouthEast()); w = Math.abs(c.x - a.x); h = Math.abs(c.y - a.y); } catch (e) {}
+      if (w < 22 || h < 16) x.el.classList.add("pnrWeg");
+      else if (w < 66 || h < 34) x.el.classList.add("pnrKlein");
+    });
+    // Grootste eerst; een label dat over een al geplaatst label valt: eerst alleen het nummer, anders weg
+    const gezet = [], raakt = r => gezet.some(s => r.left < s.right + 2 && r.right > s.left - 2 && r.top < s.bottom + 2 && r.bottom > s.top - 2);
+    lagen.sort((a, b) => b.ha - a.ha).forEach(x => {
+      if (x.el.classList.contains("pnrWeg")) return;
+      let r = x.el.getBoundingClientRect();
+      if (raakt(r) && !x.el.classList.contains("pnrKlein")) { x.el.classList.add("pnrKlein"); r = x.el.getBoundingClientRect(); }
+      if (raakt(r)) { x.el.classList.add("pnrWeg"); return; }
+      gezet.push(r);
+    });
+  }
+  const planLabels = () => { cancelAnimationFrame(pnrPlan); pnrPlan = requestAnimationFrame(pasLabels); };
+  map.on("zoomend", planLabels);
 
   // PDOK-achtergronden (Web Mercator, geen key)
   const attr = 'Kaart: <a href="https://www.pdok.nl">PDOK</a>, Kadaster';
@@ -1223,6 +1250,7 @@ function start() {
 
   function teken() {
     laag.clearLayers(); spoorLaag.clearLayers();
+    pnrLagen.length = 0; planLabels(); // labels opnieuw passen zodra alles getekend is
     const sb = spuitBreedte();
     $("bSpuit").setAttribute("aria-pressed", spuitAan);
     $("bSpuit").textContent = "Spuiten: " + (spuitAan ? "aan" : "uit");
@@ -1250,6 +1278,7 @@ function start() {
       const g = L.geoJSON(q.geometry, { style: stijl, interactive: false });
       // Nummer, en klein eronder de oppervlakte (bruto ha, zoals RVO)
       g.bindTooltip(String(i + 1) + "<small>" + haTxt(q.ha) + " ha</small>", { permanent: true, direction: "center", className: "pnr" });
+      pnrLagen.push({ g, ha: q.ha || 0 });
       laag.addLayer(g);
       if (uitgelicht === q.key) laag.addLayer(L.geoJSON(q.geometry, { style: { color: "#e8590c", weight: 6, fill: false }, interactive: false }));
       if (waterZicht || oeverModus) Perceel.zijden(q.geometry).filter(z => q.oever[z.key] != null).forEach(z => {
@@ -2995,7 +3024,7 @@ function start() {
     if (btn.disabled || !sel.length) return;
     const old = btn.textContent;
     btn.disabled = true; btn.textContent = "Water zoeken…";
-    const regels = [], ruwData = [];
+    const regels = [], ruwData = [], metWater = [];
     let fout = null;
     for (const [i, q] of sel.entries()) {
       try {
@@ -3018,7 +3047,7 @@ function start() {
         q.taludStatus = water.taludFout ? "fout" : "ok";
         q.waterTs = Date.now(); q.waterKort = 1; q.waterV = 2; delete q.reken;
         if (water.taludFout) regels.push("Perceel " + (i + 1) + ": " + water.taludFout + " Gerekend vanaf de waterlijn.");
-        regels.push("Perceel " + (i + 1) + ": " + (nat || droog ? [nat ? mTxt(nat) + " water" : "", droog ? mTxt(droog) + " greppel/droge sloot" : ""].filter(Boolean).join(", ") : "geen (nieuw) water langs de rand"));
+        if (nat || droog) metWater.push({ nr: i + 1, nat, droog });
         const wd = water.filter(w => !w.talud), td = water.filter(w => w.talud);
         ruwData.push({ perceel: i + 1, waterdelen: wd.length, taluds: td.length, voorbeeld: wd.slice(0, 3).map(w => w.properties), voorbeeldTalud: td.slice(0, 3).map(w => w.properties) });
       } catch (er) { fout = er; regels.push("Perceel " + (i + 1) + ": " + er.message); }
@@ -3026,7 +3055,14 @@ function start() {
     waterZicht = true; zetWaterKnop(); // net gezocht: laten zien wat hij vond
     bewaar(); teken();
     btn.disabled = false; btn.textContent = old;
-    say(regels.join(" · ") + (fout ? "" : ". Water staat op 'nat of kort droog' (3 m, vanaf de insteek van het talud): zet lang droogvallend en droge sloten zelf om via Oevers aanwijzen."), !!fout);
+    // Kort: alleen waar nieuw water is gevonden, en wat misging
+    const totNat = metWater.reduce((t, x) => t + x.nat, 0), totDroog = metWater.reduce((t, x) => t + x.droog, 0);
+    let samen = "Water gezocht bij " + sel.length + (sel.length === 1 ? " perceel" : " percelen") + ": " + (metWater.length
+      ? "nieuw water langs " + (metWater.length === 1 ? "perceel " : "percelen ") + metWater.map(x => x.nr).join(", ") + " (" + [totNat ? mTxt(totNat) + " water" : "", totDroog ? mTxt(totDroog) + " greppel/droge sloot" : ""].filter(Boolean).join(", ") + ")."
+      : "geen nieuw water langs de randen.");
+    if (totNat) samen += " Telt als nat of kort droog (3 m vanaf de insteek); droge sloten zet je om via Oevers aanwijzen.";
+    if (regels.length) samen += " " + regels.join(" · ");
+    say(samen, !!fout);
     ruw.textContent = JSON.stringify(ruwData, null, 2);
   });
   // Keuze type waterloop

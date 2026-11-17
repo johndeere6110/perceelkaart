@@ -35,7 +35,7 @@ telefoon zelf), offline kaarten en de instellingen (spuitbreedte, tank enz.).
 - In de app, tandwiel rechtsboven → **Groep** → *Meedoen met de groep*, je naam en de groepscode invullen.
 - Of: één persoon tikt op **Stuur groepslink** en stuurt die naar de rest. Wie de link opent, doet meteen mee
   (alleen zijn naam nog invullen).
-- Heeft iemand de app nog niet: tik (terwijl je in de groep zit) op **Stuur installatielink**. Die link installeert
+- Heeft iemand de app nog niet: tik (terwijl je in de groep zit) op **Installatielink met groep**. Die link installeert
   de app én zet de groep alvast klaar; bij de eerste keer openen vraagt de app alleen de naam. Op een iPhone ziet
   de app op het beginscherm de uitnodiging soms niet; daarom staat de groepscode op de installatiepagina, om in de
   app zelf in te vullen.

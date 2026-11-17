@@ -446,7 +446,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet" id="voetVersie">versie 125</div>
+  <div class="voet" id="voetVersie">versie 126</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -520,11 +520,23 @@ window.Opslag = (function () {
       if (!window.indexedDB) return rej(new Error("geen IndexedDB"));
       let telaat = false;
       const t = setTimeout(() => { telaat = true; rej(new Error("IndexedDB reageert niet")); }, 6000);
-      let rq;
-      try { rq = indexedDB.open("perceelkaart", 1); } catch (e) { clearTimeout(t); return rej(e); }
-      rq.onupgradeneeded = () => { if (!rq.result.objectStoreNames.contains("kv")) rq.result.createObjectStore("kv"); };
-      rq.onsuccess = () => { clearTimeout(t); if (telaat) { try { rq.result.close(); } catch (e) {} return; } res(rq.result); };
-      rq.onerror = () => { clearTimeout(t); rej(rq.error || new Error("IndexedDB ging niet open")); };
+      // Zonder versienummer openen (dan past elke bestaande versie); ontbreekt de store "kv" (bijv. een lege database die
+      // iets anders aanmaakte), dan één versie hoger openen en hem alsnog aanmaken
+      const poging = versie => {
+        let rq;
+        try { rq = versie ? indexedDB.open("perceelkaart", versie) : indexedDB.open("perceelkaart"); } catch (e) { clearTimeout(t); return rej(e); }
+        rq.onupgradeneeded = () => { if (!rq.result.objectStoreNames.contains("kv")) rq.result.createObjectStore("kv"); };
+        rq.onsuccess = () => {
+          const d = rq.result;
+          if (!d.objectStoreNames.contains("kv")) { const v = d.version + 1; d.close(); if (!versie) return poging(v); clearTimeout(t); return rej(new Error("database zonder opslagplek")); }
+          clearTimeout(t);
+          if (telaat) { try { d.close(); } catch (e) {} return; }
+          d.onversionchange = () => { try { d.close(); } catch (e) {} }; // een andere versie wil hem bijwerken: loslaten (schrijven opent hem dan opnieuw)
+          res(d);
+        };
+        rq.onerror = () => { clearTimeout(t); rej(rq.error || new Error("IndexedDB ging niet open")); };
+      };
+      poging(0);
     });
   }
   o.klaar = (async () => {

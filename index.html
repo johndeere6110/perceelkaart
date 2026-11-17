@@ -321,7 +321,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <button type="button" class="btn" id="bWater">Water zoeken</button>
       <button type="button" class="btn" id="bOever" aria-pressed="false">Oevers aanwijzen</button>
     </div>
-    <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bKoppel" aria-pressed="false">Percelen koppelen</button></div>
+    <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bKoppel" aria-pressed="false">Percelen koppelen</button><button type="button" class="btn" id="bWaterZicht" aria-pressed="false">Water tonen: uit</button></div>
     <div id="typeBox" hidden>
       <div class="lbl2">Type waterloop, kies vóór het tikken</div>
       <div class="seg4" role="group" aria-label="Type waterloop" id="typeSeg"></div>
@@ -422,6 +422,18 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     </div>
     <div class="blok" id="instOffline"></div>
     <div class="blok">
+      <div class="lbl2">Back-up</div>
+      <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bBackup">Back-up maken</button><button type="button" class="btn" id="bBackupTerug">Back-up terugzetten</button></div>
+      <input type="file" id="backupBestand" accept=".json,application/json" hidden>
+      <div class="meta">Zet alles (bedrijven, percelen met het gevonden water, kavels, metingen, instellingen en de groep) in één bestand op je telefoon, buiten de app. Wis je de gegevens van de browser of verwijder je de app, dan zet je het hiermee terug.</div>
+      <div class="hint" id="backupStand"></div>
+      <div id="backupKeus" hidden>
+        <div class="hint" id="backupWat"></div>
+        <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bBackupJa">Terugzetten</button><button type="button" class="btn" id="bBackupNee">Annuleren</button></div>
+      </div>
+      <div class="hint" id="backupHint"></div>
+    </div>
+    <div class="blok">
       <div class="lbl2">App</div>
       <div class="row" style="margin-top:8px"><a class="btn link" href="../zaaihulp/">Zaaihulp openen</a><button type="button" class="btn" id="bDeel">Stuur installatielink</button></div>
       <div class="meta" id="deelUitleg">Zit je in de groep, dan gaat die mee: de ander installeert de app en vult daarna alleen zijn naam in.</div>
@@ -434,7 +446,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet">versie 123</div>
+  <div class="voet" id="voetVersie">versie 124</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -451,14 +463,21 @@ window.Opslag = (function () {
   const GROOT = ["kaartNamen", "kaartTestSelectie", "kaartKavels", "perceelCache", "perceelCacheRef"];
   const groot = k => GROOT.indexOf(k) >= 0;
   const mem = new Map(), bezig = new Set(), wacht = new Set(), klaarFns = [];
-  let db = null, foutFn = null;
+  let db = null, foutFn = null, bevroren = false;
   const ls = () => { try { return window.localStorage || null; } catch (e) { return null; } };
   const o = {
     modus: "laden", groot,
     getItem(k) { if (db && groot(k)) return mem.has(k) ? mem.get(k) : null; const s = ls(); return s ? s.getItem(k) : null; },
-    setItem(k, v) { v = String(v); if (db && groot(k)) { mem.set(k, v); schrijf(k); return; } const s = ls(); if (!s) throw new Error("geen opslag"); s.setItem(k, v); },
-    removeItem(k) { if (db && groot(k)) { mem.delete(k); schrijf(k); return; } const s = ls(); if (s) s.removeItem(k); },
+    setItem(k, v) { if (bevroren) return; v = String(v); if (db && groot(k)) { mem.set(k, v); schrijf(k); return; } const s = ls(); if (!s) throw new Error("geen opslag"); s.setItem(k, v); },
+    removeItem(k) { if (bevroren) return; if (db && groot(k)) { mem.delete(k); schrijf(k); return; } const s = ls(); if (s) s.removeItem(k); },
     bijFout(fn) { foutFn = fn; },
+    // Iets apart bewaren in de database als "reserve:<naam>:<tijd>" (wordt niet geladen; voor als het mis was)
+    bewaarReserve(naam, tekst) {
+      if (!db) return Promise.resolve(false);
+      return tx(db, "readwrite", st => { st.put(String(tekst), "reserve:" + naam + ":" + Date.now()); }).then(() => true);
+    },
+    // Na terugzetten van een back-up tot de herstart niks meer schrijven (anders zet de draaiende app zijn oude stand terug)
+    bevries() { bevroren = true; },
     // Klaar als alles wat nog op de achtergrond geschreven wordt in de database staat
     bewaard() { return bezig.size ? new Promise(res => klaarFns.push(res)) : Promise.resolve(); },
     // Hoeveel tekens er in de grote gegevens zitten (voor het overzicht)
@@ -528,7 +547,7 @@ window.Opslag = (function () {
       // Alles staat veilig in IndexedDB: vanaf nu daar lezen en schrijven, en pas nu localStorage vrijmaken
       Object.keys(over).forEach(k => { inDb[k] = over[k]; });
       Object.keys(inDb).forEach(k => mem.set(k, inDb[k]));
-      db = d; o.modus = "idb"; o.overgezet = Object.keys(over); o.reserve = Object.keys(reserve).length;
+      db = d; o.modus = "idb"; o.overgezet = Object.keys(over); o.reserves = Object.keys(reserve).length;
       if (s) {
         try { s.setItem("kaartOpslag", "idb"); } catch (e) {}
         GROOT.forEach(k => { try { if (s.getItem(k) !== null) s.removeItem(k); } catch (e) {} });
@@ -857,6 +876,9 @@ function start() {
   }
   const nlM = v => String(v).replace(".", ",") + " m";
   let oeverModus = false;
+  // Water (oevers, strook, talud) alleen op de kaart als je erom vraagt; bij elke start weer uit. De berekening blijft.
+  let waterZicht = false;
+  const zetWaterKnop = () => { const b = $("bWaterZicht"); b.setAttribute("aria-pressed", waterZicht); b.textContent = "Water tonen: " + (waterZicht ? "aan" : "uit"); };
   // Spuitsporen onder de perceelranden tekenen
   const spoorLaag = L.layerGroup().addTo(map);
   const laag = L.layerGroup().addTo(map);
@@ -1215,7 +1237,7 @@ function start() {
       g.bindTooltip(String(i + 1) + "<small>" + haTxt(q.ha) + " ha</small>", { permanent: true, direction: "center", className: "pnr" });
       laag.addLayer(g);
       if (uitgelicht === q.key) laag.addLayer(L.geoJSON(q.geometry, { style: { color: "#e8590c", weight: 6, fill: false }, interactive: false }));
-      Perceel.zijden(q.geometry).filter(z => q.oever[z.key] != null).forEach(z => {
+      if (waterZicht || oeverModus) Perceel.zijden(q.geometry).filter(z => q.oever[z.key] != null).forEach(z => {
         const t = typeVan(q.oever[z.key]);
         laag.addLayer(L.polyline([[z.a[1], z.a[0]], [z.b[1], z.b[0]]], { color: t.c, weight: t.w, opacity: .95, dashArray: t.d || null, lineCap: "butt", interactive: false }));
       });
@@ -1313,14 +1335,14 @@ function start() {
             bd.appendChild(t);
           }
           // Talud (BGT ondersteunend waterdeel) licht bruin, de strook blauw
-          if (Array.isArray(q.water)) q.water.filter(x => x.talud).forEach(x => laag.addLayer(L.geoJSON(x.geometry, { style: { stroke: false, fillColor: "#a0784a", fillOpacity: .4 }, interactive: false })));
-          if (w.kant) laag.addLayer(L.geoJSON(w.kant.geometry, { style: { stroke: false, fillColor: "#2f7fd8", fillOpacity: .45 }, interactive: false }));
+          if (waterZicht && Array.isArray(q.water)) q.water.filter(x => x.talud).forEach(x => laag.addLayer(L.geoJSON(x.geometry, { style: { stroke: false, fillColor: "#a0784a", fillOpacity: .4 }, interactive: false })));
+          if (waterZicht && w.kant) laag.addLayer(L.geoJSON(w.kant.geometry, { style: { stroke: false, fillColor: "#2f7fd8", fillOpacity: .45 }, interactive: false }));
         }
       }
       // Strook tussen perceel en insteek (bijv. gras zaai je tot de insteek): licht groen op de kaart
       const ti = bf.ti && bf.ti.m2 >= 1 ? bf.ti : null;
       if (ti) {
-        laag.addLayer(L.geoJSON(ti.geometry, { style: { color: "#2b8a3e", weight: 1, dashArray: "3 3", fillColor: "#69db7c", fillOpacity: .5 }, interactive: false }));
+        if (waterZicht) laag.addLayer(L.geoJSON(ti.geometry, { style: { color: "#2b8a3e", weight: 1, dashArray: "3 3", fillColor: "#69db7c", fillOpacity: .5 }, interactive: false }));
         const n = document.createElement("div");
         n.textContent = "Tussen perceel en insteek: " + m2Txt(ti.m2) + " (gemiddeld " + nlM(Math.round(ti.breedte * 10) / 10) + " breed over " + mTxt(ti.lengte) + ", breedst " + nlM(Math.round(ti.max * 10) / 10) + "), licht groen op de kaart.";
         maakDetail().appendChild(n);
@@ -2838,6 +2860,7 @@ function start() {
     $("bOever").textContent = aan ? "Klaar met oevers" : "Oevers aanwijzen";
     $("map").classList.toggle("oever", aan);
     $("typeBox").hidden = !aan;
+    if (!waterZicht) teken(); // oevers alleen zichtbaar tijdens aanwijzen (of met Water tonen)
     say(aan ? "Tik op de randen langs het water. Nog eens tikken haalt een oever weg." : "Tik op een perceel om het toe te voegen. Nog eens tikken haalt het weg.");
   }
   $("bOever").addEventListener("click", () => setOever(!oeverModus));
@@ -2873,6 +2896,7 @@ function start() {
     say(kv.naam + ": " + leden.length + " percelen gekoppeld, samen " + haTxt(leden.reduce((t, k) => t + sel.find(q => q.key === k).ha, 0)) + " ha.");
   });
   // Water zoeken: randen langs BGT-water automatisch markeren; zelf aangewezen randen blijven staan
+  $("bWaterZicht").addEventListener("click", () => { waterZicht = !waterZicht; zetWaterKnop(); teken(); });
   $("bWater").addEventListener("click", async e => {
     const btn = e.currentTarget;
     if (btn.disabled || !sel.length) return;
@@ -2906,6 +2930,7 @@ function start() {
         ruwData.push({ perceel: i + 1, waterdelen: wd.length, taluds: td.length, voorbeeld: wd.slice(0, 3).map(w => w.properties), voorbeeldTalud: td.slice(0, 3).map(w => w.properties) });
       } catch (er) { fout = er; regels.push("Perceel " + (i + 1) + ": " + er.message); }
     }
+    waterZicht = true; zetWaterKnop(); // net gezocht: laten zien wat hij vond
     bewaar(); teken();
     btn.disabled = false; btn.textContent = old;
     say(regels.join(" · ") + (fout ? "" : ". Water staat op 'nat of kort droog' (3 m, vanaf de insteek van het talud): zet lang droogvallend en droge sloten zelf om via Oevers aanwijzen."), !!fout);
@@ -2944,6 +2969,87 @@ function start() {
   };
   $("bDeel").addEventListener("click", () => stuurInstallatie(true));
   $("bDeelLos").addEventListener("click", () => stuurInstallatie(false));
+  // ---------- Back-up: alles in één bestand buiten de app (Downloads of Bestanden) ----------
+  // Bevat de sleutels zoals ze bewaard zijn (letterlijke tekst): alle kaart*-sleutels en de grote gegevens uit de database.
+  // Niet: de perceelcache (haalt hij zo weer op), het merkteken van de opslag en wanneer de laatste back-up was.
+  const BU_NIET = ["kaartOpslag", "kaartBackupTs"];
+  function backupSleutels() {
+    const ks = new Set(["kaartNamen", "kaartTestSelectie", "kaartKavels"]);
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^kaart/.test(k)) ks.add(k); } } catch (e) {}
+    BU_NIET.forEach(k => ks.delete(k));
+    return [...ks].filter(k => Opslag.getItem(k) !== null);
+  }
+  const dagenGeleden = ts => { const d = Math.floor((Date.now() - ts) / 864e5); return d <= 0 ? "vandaag" : d === 1 ? "gisteren" : d + " dagen geleden"; };
+  function toonBackupStand() {
+    const ts = store.get("kaartBackupTs", 0), el = $("backupStand");
+    const oud = !ts || Date.now() - ts > 30 * 864e5;
+    el.textContent = ts ? "Laatste back-up: " + dagenGeleden(ts) + "." + (oud ? " Maak er weer eens een." : "") : "Nog geen back-up gemaakt op deze telefoon.";
+    el.className = "hint" + (oud && namen.length ? " warn" : "");
+  }
+  toonBackupStand();
+  $("bBackup").addEventListener("click", async () => {
+    const hint = $("backupHint"), sl = {};
+    backupSleutels().forEach(k => { sl[k] = Opslag.getItem(k); });
+    let nNamen = 0; try { nNamen = JSON.parse(sl.kaartNamen || "[]").length; } catch (e) {}
+    const nu = new Date(), dag = nu.getFullYear() + "-" + String(nu.getMonth() + 1).padStart(2, "0") + "-" + String(nu.getDate()).padStart(2, "0");
+    const naam = "perceelkaart-backup-" + dag + ".json";
+    const tekst = JSON.stringify({ app: "perceelkaart", soort: "back-up", v: 1, appVersie: ($("voetVersie") || {}).textContent || "", gemaakt: nu.toISOString(), sleutels: sl });
+    const blob = new Blob([tekst], { type: "application/json" });
+    const mb = (blob.size / 1e6).toLocaleString("nl-NL", { maximumFractionDigits: 1 });
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+    try {
+      // iPhone: via Delen ("Bewaar in Bestanden"); downloaden werkt daar niet goed in de app op het beginscherm
+      let file = null; try { file = new File([blob], naam, { type: "application/json" }); } catch (e) {}
+      if (ios && file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: naam });
+        hint.textContent = "Back-up gedeeld (" + nNamen + " bedrijven, " + mb + " MB). Kies je Bewaar in Bestanden, dan staat hij in de Bestanden-app.";
+      } else {
+        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = naam; document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 10000);
+        hint.textContent = "Back-up bewaard als " + naam + " (" + nNamen + " bedrijven, " + mb + " MB), in Downloads. Je kunt hem ook naar je mail of Drive sturen.";
+      }
+      hint.className = "hint"; store.set("kaartBackupTs", Date.now()); toonBackupStand();
+    } catch (e) { if (!e || e.name !== "AbortError") { hint.textContent = "Back-up maken lukte niet: " + ((e && e.message) || e); hint.className = "hint warn"; } }
+  });
+  // Terugzetten: bestand kiezen, eerst laten zien wat erin staat, dan pas (twee keer tikken) vervangen
+  let backupKlaar = null;
+  $("bBackupTerug").addEventListener("click", () => { $("backupBestand").value = ""; $("backupBestand").click(); });
+  $("bBackupNee").addEventListener("click", () => { backupKlaar = null; $("backupKeus").hidden = true; $("backupHint").textContent = ""; });
+  $("backupBestand").addEventListener("change", async e => {
+    const f = e.target.files && e.target.files[0], hint = $("backupHint");
+    $("backupKeus").hidden = true; backupKlaar = null; hint.className = "hint";
+    if (!f) return;
+    let b = null;
+    try { b = JSON.parse(await f.text()); } catch (er) {}
+    const ok = b && b.app === "perceelkaart" && b.soort === "back-up" && b.sleutels && typeof b.sleutels === "object" &&
+      Object.entries(b.sleutels).every(([k, v]) => /^kaart/.test(k) && typeof v === "string");
+    if (!ok) { hint.textContent = "Dit is geen back-up van de Perceelkaart (" + f.name + ")."; hint.className = "hint warn"; return; }
+    const tel = k => { try { const v = JSON.parse(b.sleutels[k] || "[]"); return Array.isArray(v) ? v.length : 0; } catch (er) { return 0; } };
+    const wanneer = new Date(b.gemaakt).toLocaleString("nl-NL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    let groepNaam = ""; try { const g = JSON.parse(b.sleutels.kaartGroep || "null"); if (g && g.aan && g.naam) groepNaam = String(g.naam); } catch (er) {}
+    $("backupWat").textContent = "Back-up van " + wanneer + ": " + tel("kaartNamen") + " bedrijven, " + tel("kaartMetingen") + " metingen" + (groepNaam ? ", groep (als " + groepNaam + ")" : "") +
+      ". Terugzetten vervangt alles wat nu in de Perceelkaart staat. Zit je in de groep, dan haalt hij daarna ook wat de anderen sindsdien veranderden.";
+    $("backupKeus").hidden = false; backupKlaar = b;
+  });
+  $("bBackupJa").addEventListener("click", async e => {
+    const b = backupKlaar, hint = $("backupHint");
+    if (!b || !armed(e.currentTarget, "Alles vervangen? Tik nog eens")) return;
+    const sl = b.sleutels;
+    if (Opslag.modus !== "idb" && Object.values(sl).reduce((t, v) => t + v.length, 0) > 4.5e6) {
+      hint.textContent = "Deze back-up is te groot voor de opslag van deze browser (de database van de app werkt hier niet). Probeer het in de app op het beginscherm."; hint.className = "hint warn"; return;
+    }
+    try {
+      // Eerst wat er nu staat apart bewaren in de database (voor als het de verkeerde back-up was)
+      const nu = {}; backupSleutels().forEach(k => { nu[k] = Opslag.getItem(k); });
+      if (Object.keys(nu).length) await Opslag.bewaarReserve("voorTerugzetten", JSON.stringify(nu));
+      // Dan de back-up erin, daarna wat er niet in de back-up stond weg
+      Object.entries(sl).forEach(([k, v]) => { if (BU_NIET.indexOf(k) < 0) Opslag.setItem(k, v); });
+      Object.keys(nu).forEach(k => { if (!(k in sl)) Opslag.removeItem(k); });
+      await Opslag.bewaard(); Opslag.bevries(); clearTimeout(groepTimer);
+      hint.textContent = "Teruggezet. De app start opnieuw…"; hint.className = "hint";
+      setTimeout(() => { location.href = location.pathname; }, 400);
+    } catch (er) { hint.textContent = "Terugzetten lukte niet: " + ((er && er.message) || er); hint.className = "hint warn"; }
+  });
   // Opslag beschermen: vraag de browser de gegevens niet op te ruimen bij weinig ruimte, en laat zien of dat lukte
   (async () => {
     const el = $("opslagStand");

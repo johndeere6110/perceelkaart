@@ -434,7 +434,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet">versie 121</div>
+  <div class="voet">versie 122</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1715,11 +1715,15 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   metVlakken = metVlakken.filter(r => Array.isArray(r));
   if (!metVlakken.length) metVlakken = [[]];
   metAct = metVlakken.length - 1;
-  const akt = () => metVlakken[metAct];
+  // metAct = -1: geen stuk gekozen (na het openen van een bewaarde meting). Dan doet tikken op de kaart niks en kun je
+  // niet per ongeluk punten verslepen; tik een stuk (op de kaart of in de lijst) om het aan te passen.
+  const akt = () => metVlakken[metAct] || [];
+  const geenStuk = () => metAct < 0 || !metVlakken[metAct];
   const metOk = () => metVlakken.filter(r => r.length >= 3);
   let metingen = store.get("kaartMetingen", []);
   if (!Array.isArray(metingen)) metingen = [];
   { const id = store.get("kaartMetConceptId", null); if (id && metingen.some(x => x.id === id)) metId = id; }
+  if (metId && metVlakken.some(v => v.length)) metAct = -1; // bewaarde meting: bij opstarten niks gekozen
   // Standaard: SV7 in zakken van 15 kg (wat jullie meestal zaaien); kg/ha onthoudt hij van de vorige keer
   const metZaad = Object.assign({ eh: "kgha", mengsel: "SV7", manier: "nieuw", waarde: "", extra: "", zak: "15" }, store.get("kaartMetZaad", {}));
   // Mengsels met kg/ha voor nieuw zaaien en doorzaaien. Startwaarden zijn ruwe richtwaarden; wat je invult wordt per
@@ -1790,7 +1794,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       if (j === metAct || r.length < 2) return;
       const pg = L.polygon(r.map(p => [p[1], p[0]]), { color: "#e8590c", weight: 2, dashArray: "6 5", fillColor: "#e8590c", fillOpacity: r.length >= 3 ? .12 : 0 });
       pg.on("click", e => { L.DomEvent.stop(e); kiesStuk(j); metSay("Stuk " + (j + 1) + " gekozen: tik hoeken erbij of sleep een punt."); });
-      if (r.length >= 3) pg.bindTooltip(String(j + 1), { permanent: true, direction: "center", className: "kml" });
+      if (veel && r.length >= 3) pg.bindTooltip(String(j + 1), { permanent: true, direction: "center", className: "kml" });
       metLaag.addLayer(pg);
     });
     const r = akt();
@@ -1815,6 +1819,10 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     });
   }
   function metTik(ll) {
+    if (geenStuk()) {
+      if (metVlakken.some(v => v.length)) { metSay("Geen stuk gekozen, er is niks veranderd. Tik op een stuk (op de kaart of in de lijst) om het aan te passen, of tik Stuk erbij.", true); return; }
+      metVlakken = [[]]; metAct = 0;
+    }
     const r = akt(); r.push([ll.lng, ll.lat]); bewaarConcept(); metTeken(); metPaneel();
     const st = metVlakken.length > 1 ? "Stuk " + (metAct + 1) + ": " : "";
     metSay(st + (r.length < 3 ? "punt " + r.length + " gezet. Tik de volgende hoek." : "tik de volgende hoek, of sleep een punt. Nog een stuk op deze klus? Tik Stuk erbij."));
@@ -1833,12 +1841,15 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         if (!v.length) return;
         const rij = el("div", "stuk" + (j === metAct ? " actief" : "")), t = el("button", "stuknaam", "Stuk " + (j + 1) + ": " + (v.length >= 3 ? m2Fmt(metOpp(v)) : v.length + (v.length === 1 ? " punt" : " punten")));
         t.type = "button";
-        t.addEventListener("click", () => { kiesStuk(j); const k2 = metVlakken[metAct]; if (k2.length >= 2) map.fitBounds(L.polygon(k2.map(p => [p[1], p[0]])).getBounds(), { padding: [40, 40], maxZoom: 20 }); metSay("Stuk " + (metAct + 1) + " gekozen: tik hoeken erbij of sleep een punt."); });
+        t.addEventListener("click", () => {
+          if (j === metAct) { metAct = -1; bewaarConcept(); metTeken(); metPaneel(); metSay("Stuk " + (j + 1) + " losgelaten: tikken op de kaart verandert nu niks."); return; }
+          kiesStuk(j); const k2 = metVlakken[metAct]; if (k2.length >= 2) map.fitBounds(L.polygon(k2.map(p => [p[1], p[0]])).getBounds(), { padding: [40, 40], maxZoom: 20 }); metSay("Stuk " + (metAct + 1) + " gekozen: tik hoeken erbij of sleep een punt."); });
         const x = el("button", "stukweg", "×"); x.type = "button"; x.setAttribute("aria-label", "Stuk " + (j + 1) + " weghalen");
         x.addEventListener("click", () => {
           if (!armed(x, "Weg?")) return;
           metVlakken.splice(j, 1); if (!metVlakken.length) metVlakken = [[]];
-          metAct = Math.min(metAct > j ? metAct - 1 : metAct, metVlakken.length - 1);
+          metAct = metAct === j ? -1 : Math.min(metAct > j ? metAct - 1 : metAct, metVlakken.length - 1);
+          if (!metVlakken.some(v => v.length)) metAct = 0;
           bewaarConcept(); metTeken(); metPaneel(); metSay("Stuk weggehaald.");
         });
         rij.append(t, x); sb.appendChild(rij);
@@ -1849,7 +1860,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     if (k) { const s = el("span", "", (k.ex ? " (incl. " + k.ex.toLocaleString("nl-NL") + " % extra)" : "") + (k.zak ? " = " + k.zakken + (k.zakken === 1 ? " zak" : " zakken") + " van " + k.zak.toLocaleString("nl-NL") + " kg (" + kgFmt(k.over) + " over" + (k.zakken > Math.ceil(k.kg / k.zak - 1e-9) ? "; met " + (k.zakken - 1) + " hield je maar " + kgFmt(k.krap) + " over" : "") + ")" : "")); uit.appendChild(s); }
     if (licht) return;
     $("metTerug").disabled = !r.length; $("metWis").disabled = !metVlakken.some(v => v.length) && !metId;
-    $("metNieuw").disabled = r.length < 3;
+    $("metNieuw").disabled = !geenStuk() && r.length < 3;
     $("metFoto").disabled = !ok.length; $("metBewaar").disabled = !ok.length; $("metWeg").disabled = !metId;
     $("metBewaar").textContent = metId ? "Meting bijwerken" : "Bewaren";
     // Bewaarde metingen
@@ -1867,9 +1878,9 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       { const wie = typeof groepVan === "object" && groepActief() ? groepVan["meting:" + mt.id] : ""; if (wie && wie !== groep.naam.trim()) go.lastChild.textContent += " · laatst door " + wie; }
       li.append(el("div", "nr", ""), go, w, el("span"));
       li.addEventListener("click", () => {
-        metVlakken = (mt.vlakken || [mt.ring]).map(v => v.map(p => p.slice())); metAct = metVlakken.length - 1; metId = mt.id; Object.assign(metZaad, mt.zaad || {}); if (metZaad.eh === "gm2") { const w = parse(metZaad.waarde); metZaad.waarde = w > 0 ? String(Math.round(w * 100) / 10).replace(".", ",") : ""; metZaad.eh = "kgha"; } zetZaadVelden(); $("metNaam").value = mt.naam;
+        metVlakken = (mt.vlakken || [mt.ring]).map(v => v.map(p => p.slice())); metAct = -1; metId = mt.id; Object.assign(metZaad, mt.zaad || {}); if (metZaad.eh === "gm2") { const w = parse(metZaad.waarde); metZaad.waarde = w > 0 ? String(Math.round(w * 100) / 10).replace(".", ",") : ""; metZaad.eh = "kgha"; } zetZaadVelden(); $("metNaam").value = mt.naam;
         bewaarConcept(); metTeken(); metPaneel(); map.fitBounds(L.polygon(metVlakken.map(v => v.map(p => [p[1], p[0]]))).getBounds(), { padding: [30, 30], maxZoom: 19 });
-        metSay(mt.naam + " staat op de kaart. Pas punten of zaad aan en tik Meting bijwerken, of maak een foto.");
+        metSay(mt.naam + " staat op de kaart. Iets aanpassen? Tik eerst op het stuk. Daarna Meting bijwerken.");
       });
       ul.appendChild(li);
     });
@@ -1906,13 +1917,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   $("metMengNaam").addEventListener("keydown", e => { if (e.key === "Enter") $("metMengToe").click(); });
   [["metNieuwZ", "nieuw"], ["metDoorZ", "door"]].forEach(([id, m]) => $(id).addEventListener("click", () => { metZaad.manier = m; kiesMengsel(); }));
   $("metTerug").addEventListener("click", () => {
+    if (geenStuk()) return;
     akt().pop();
     // Leeg stuk en er zijn er meer: weg, verder met het vorige
     if (!akt().length && metVlakken.length > 1) { metVlakken.splice(metAct, 1); metAct = metVlakken.length - 1; }
     bewaarConcept(); metTeken(); metPaneel();
   });
   $("metNieuw").addEventListener("click", () => {
-    if (akt().length < 3) { metSay("Maak eerst dit stuk af: minstens 3 hoeken.", true); return; }
+    if (!geenStuk() && akt().length < 3) { metSay("Maak eerst dit stuk af: minstens 3 hoeken.", true); return; }
     metVlakken = metVlakken.filter(v => v.length); metVlakken.push([]); metAct = metVlakken.length - 1;
     bewaarConcept(); metTeken(); metPaneel();
     metSay("Stuk " + (metAct + 1) + ": tik de hoeken van het volgende stuk. Het zaad gaat over alle stukken samen.");

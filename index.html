@@ -122,6 +122,13 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .abl.vrijp.gekozen { background: #fff; color: #e8590c; border-color: #e8590c; box-shadow: 0 0 0 4px rgba(232, 89, 12, .45); }
 .hint { font-size: 15px; color: var(--muted); margin-top: 8px; min-height: 1.4em; }
 .hint.warn { color: var(--warn); font-weight: 600; }
+/* Uitleg als de locatie uit staat of geweigerd is: onderaan over de kaart heen */
+#locHulp { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 2000; max-width: 560px; margin: 0 auto; max-height: 75vh; overflow: auto; background: var(--surface); color: var(--ink); border: 2px solid var(--warn); border-radius: 14px; padding: 12px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 15px; }
+#locHulp[hidden] { display: none; }
+#locHulp h3 { margin: 0 0 4px; font-size: 18px; }
+#locHulp ol { margin: 6px 0; padding-left: 22px; }
+#locHulp li { margin: 5px 0; }
+#locHulp .row { display: flex; gap: 8px; margin-top: 8px; }
 .advice { margin-top: 10px; background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
 .advice .adv-main { font-size: 36px; line-height: 1.1; }
 .advice .meta { color: var(--muted); }
@@ -450,7 +457,14 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       </details>
     </div>
   </div>
-  <div class="voet" id="voetVersie">versie 129</div>
+  <div id="locHulp" role="dialog" aria-labelledby="locHulpKop" hidden>
+    <h3 id="locHulpKop">Locatie staat uit</h3>
+    <div class="meta" id="locHulpWaar"></div>
+    <ol id="locHulpStappen"></ol>
+    <div class="meta">Een website mag dit niet zelf voor je aanzetten; dat moet je één keer op de telefoon doen.</div>
+    <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
+  </div>
+  <div class="voet" id="voetVersie">versie 130</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3201,6 +3215,58 @@ function start() {
         : "Opslag: niet beschermd, bij weinig ruimte mag de browser de gegevens opruimen. Op het beginscherm installeren helpt vaak.") + waar;
     } catch (e) { el.textContent = waar.trim(); }
   })();
+  // ---------- Locatie: vooraf zeggen dat de telefoon gaat vragen; geweigerd of uit = stappen voor deze telefoon ----------
+  // Een website kan de instellingen van de telefoon niet openen of aanzetten; we kunnen wel precies zeggen waar het zit.
+  const locIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  function locStappen(soort) {
+    const ua = navigator.userAgent, opStart = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    if (locIos) {
+      const ios = ["Open <b>Instellingen → Privacy en beveiliging → Locatievoorzieningen</b> en zet het bovenaan <b>aan</b>."];
+      if (/CriOS/.test(ua)) return { waar: "iPhone, Chrome", stappen: ios.concat([
+        "Scrol in die lijst naar <b>Chrome</b>: kies <b>Bij gebruik van de app</b> en zet <b>Nauwkeurige locatie</b> aan.",
+        "Terug in Chrome: tik op het icoontje <b>links van het webadres</b> en zet <b>Locatie</b> aan.",
+        "Tik hieronder op <b>Opnieuw proberen</b>."]) };
+      return { waar: opStart ? "iPhone, app op het beginscherm" : "iPhone, Safari", stappen: ios.concat([
+        "Scrol in die lijst naar <b>Safari-websites</b>: kies <b>Bij gebruik van de app</b> en zet <b>Nauwkeurige locatie</b> aan.",
+        "Open <b>Instellingen → Apps → Safari → Locatie</b> (oudere iPhone: <b>Instellingen → Safari → Locatie</b>) en kies <b>Vraag</b> of <b>Sta toe</b>.",
+        opStart ? "Sluit de app helemaal af (omhoog vegen), open hem opnieuw en tik nog eens op de locatieknop." : "Tik hieronder op <b>Opnieuw proberen</b>; werkt het niet, laad de pagina dan opnieuw."]) };
+    }
+    if (/Android/.test(ua)) return { waar: opStart ? "Android, app op het beginscherm" : "Android, Chrome", stappen: [
+      "Zet <b>Locatie</b> aan: veeg van boven naar beneden en tik op de tegel <b>Locatie</b>.",
+      opStart ? "Open <b>Chrome → ⋮ → Instellingen → Site-instellingen → Locatie</b>, zoek <b>" + location.host + "</b> en kies <b>Toestaan</b>."
+        : "Tik op het icoontje <b>links van het webadres</b> → <b>Rechten</b> (of Site-instellingen) → <b>Locatie</b> → <b>Toestaan</b>.",
+      "Staat het daar al goed? Kijk dan bij <b>Instellingen → Apps → Chrome → Rechten → Locatie</b>: <b>Toestaan tijdens gebruik van app</b>, met <b>Nauwkeurige locatie</b> aan.",
+      "Tik hieronder op <b>Opnieuw proberen</b>."] };
+    return { waar: "Computer", stappen: ["Klik op het icoontje <b>links van het webadres</b> en zet <b>Locatie</b> op <b>Toestaan</b>.", "Klik hieronder op <b>Opnieuw proberen</b>."] };
+  }
+  let locOpnieuw = null;
+  function toonLocHulp(soort, opnieuw) {
+    const s = locStappen(soort);
+    $("locHulpKop").textContent = soort === "geweigerd" ? "Locatie is niet toegestaan" : "Locatie staat uit of geeft niks door";
+    $("locHulpWaar").textContent = "Zo zet je het aan (" + s.waar + "):";
+    $("locHulpStappen").innerHTML = s.stappen.map(t => "<li>" + t + "</li>").join("");
+    locOpnieuw = opnieuw || null; $("locHulpOpnieuw").hidden = !opnieuw;
+    $("locHulp").hidden = false;
+  }
+  $("locHulpDicht").addEventListener("click", () => { $("locHulp").hidden = true; });
+  $("locHulpOpnieuw").addEventListener("click", () => { $("locHulp").hidden = true; if (locOpnieuw) locOpnieuw(); });
+  // Locatie ophalen: de eerste keer (of zolang hij nog moet vragen) eerst uitleggen wat er komt
+  async function pakLocatie(opnieuw) {
+    let stand = "";
+    try { if (navigator.permissions && navigator.permissions.query) stand = (await navigator.permissions.query({ name: "geolocation" })).state; } catch (e) {}
+    if (stand !== "granted") say("Je telefoon vraagt zo of de Perceelkaart je locatie mag gebruiken: kies Toestaan (en Nauwkeurig).");
+    try {
+      const p = await Perceel.positie();
+      $("locHulp").hidden = true;
+      return p;
+    } catch (er) {
+      if (er && (er.code === "gps-geweigerd" || er.code === "gps-onbekend" || er.code === "geen-gps")) {
+        toonLocHulp(er.code === "gps-geweigerd" ? "geweigerd" : "uit", opnieuw);
+        er.message = er.code === "gps-geweigerd" ? "Locatie is niet toegestaan: zie de uitleg onderin." : "Locatie staat uit of geeft niks door: zie de uitleg onderin.";
+      }
+      throw er;
+    }
+  }
   // AB-lijn meten, los van percelen: A en B tikken, slepen, intikken of GPS; koers, afstand, midden en opzij schuiven
   let vrijModus = false;
   const vrij = Object.assign({ a: null, b: null, s: "", links: false, k: "" }, store.get("kaartVrijAB", {}));
@@ -3348,7 +3414,7 @@ function start() {
   [["vrijAgps", "a"], ["vrijBgps", "b"]].forEach(([id, k]) => $(id).addEventListener("click", async e => {
     const btn = e.currentTarget; btn.disabled = true; btn.textContent = "…";
     try {
-      const p = await Perceel.positie();
+      const p = await pakLocatie(() => btn.click());
       vrij[k] = [p.lon, p.lat]; if (k === "a") zetAplus(); else vrij.k = ""; bewaarVrij(); tekenVrij(); map.panTo([p.lat, p.lon]);
       say((k === "a" ? "A" : "B") + " op je GPS-positie (nauwkeurig tot ca. " + Math.round(p.nauwkeurigheid || 0) + " m). Een telefoon is geen RTK: sleep het punt zo nodig nog goed.", (p.nauwkeurigheid || 0) > 5);
     } catch (er) { say(er.message, true); }
@@ -3359,7 +3425,7 @@ function start() {
     const btn = e.currentTarget, old = btn.textContent;
     btn.disabled = true; btn.textContent = "Locatie zoeken…";
     try {
-      const p = await Perceel.positie();
+      const p = await pakLocatie(() => btn.click());
       if (!inNL(p.lat, p.lon)) { say("Je locatie ligt buiten Nederland; daar heeft PDOK geen kaart of percelen.", true); return; }
       if (mij) mij.remove();
       mij = L.marker([p.lat, p.lon], { icon: L.divIcon({ className: "", html: '<div class="me"></div>', iconSize: [22, 22] }), interactive: false }).addTo(map);

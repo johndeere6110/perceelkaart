@@ -122,6 +122,16 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .abl.vrijp.gekozen { background: #fff; color: #e8590c; border-color: #e8590c; box-shadow: 0 0 0 4px rgba(232, 89, 12, .45); }
 .hint { font-size: 15px; color: var(--muted); margin-top: 8px; min-height: 1.4em; }
 .hint.warn { color: var(--warn); font-weight: 600; }
+/* Zoeken op adres, postcode of plaats (PDOK Locatieserver) */
+.zoekadres { margin-top: 8px; }
+.zoekadres input { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: 16px "Barlow", system-ui, sans-serif; padding: 0 12px; outline: none; box-sizing: border-box; }
+.zoekadres input:focus { border-color: var(--accent); }
+#zoekLijst { list-style: none; margin: 4px 0 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+#zoekLijst[hidden] { display: none; }
+#zoekLijst li { padding: 11px 12px; border-top: 1px solid var(--line); cursor: pointer; font-size: 16px; }
+#zoekLijst li:first-child { border-top: 0; }
+#zoekLijst li small { color: var(--muted); margin-left: 6px; }
+#zoekLijst li.leeg { color: var(--muted); cursor: default; }
 /* Uitleg als de locatie uit staat of geweigerd is: onderaan over de kaart heen */
 #locHulp { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 2000; max-width: 560px; margin: 0 auto; max-height: 75vh; overflow: auto; background: var(--surface); color: var(--ink); border: 2px solid var(--warn); border-radius: 14px; padding: 12px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: 15px; }
 #locHulp[hidden] { display: none; }
@@ -312,6 +322,10 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   <div class="row">
     <button type="button" class="btn" id="bMij">Mijn locatie</button>
   </div>
+  <div class="zoekadres">
+    <input id="zoekAdres" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="Of zoek adres, postcode of plaats" aria-label="Zoek adres, postcode of plaats">
+    <ul id="zoekLijst" hidden></ul>
+  </div>
   <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bBron" aria-pressed="false">Grenzen: BRP-gewasperceel</button></div>
   <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bVrij" aria-pressed="false">AB-lijn meten</button><button type="button" class="btn" id="bAB" aria-pressed="false">AB-kant kiezen</button></div>
   <div class="advice vrij" id="vrijBox" hidden>
@@ -461,10 +475,11 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <h3 id="locHulpKop">Locatie staat uit</h3>
     <div class="meta" id="locHulpWaar"></div>
     <ol id="locHulpStappen"></ol>
-    <div class="meta">Een website mag dit niet zelf voor je aanzetten; dat moet je één keer op de telefoon doen.</div>
+    <div class="meta" id="locHulpTip"></div>
+    <div class="meta">Een website mag dit niet zelf voor je aanzetten; dat moet je één keer op de telefoon doen. Lukt het niet? Zoek dan bovenin op adres, postcode of plaats: daar is geen locatie voor nodig.</div>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 131</div>
+  <div class="voet" id="voetVersie">versie 132</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3215,6 +3230,48 @@ function start() {
         : "Opslag: niet beschermd, bij weinig ruimte mag de browser de gegevens opruimen. Op het beginscherm installeren helpt vaak.") + waar;
     } catch (e) { el.textContent = waar.trim(); }
   })();
+  // ---------- Zoeken op adres, postcode of plaats (PDOK Locatieserver, geen locatie-toestemming nodig) ----------
+  const LOCSERVER = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/suggest";
+  const ZOEK_ZOOM = { adres: 17, postcode: 17, weg: 16, woonplaats: 14, gemeente: 12 };
+  const ZOEK_SOORT = { adres: "adres", postcode: "postcode", weg: "straat", woonplaats: "plaats", gemeente: "gemeente" };
+  let zoekTimer = null, zoekNr = 0;
+  function zoekToon(items, tekst) {
+    const ul = $("zoekLijst"); ul.innerHTML = "";
+    if (tekst) { const li = el("li", "leeg", tekst); ul.appendChild(li); }
+    (items || []).forEach(d => {
+      const m = /POINT\(([-\d.]+) ([-\d.]+)\)/.exec(d.centroide_ll || ""); if (!m) return;
+      const li = el("li", "", d.weergavenaam || ""); li.appendChild(el("small", "", ZOEK_SOORT[d.type] || ""));
+      li.addEventListener("click", () => {
+        const lon = +m[1], lat = +m[2];
+        ul.hidden = true; $("zoekAdres").value = d.weergavenaam || ""; $("zoekAdres").blur();
+        if (!inNL(lat, lon)) { say("Dat ligt buiten Nederland.", true); return; }
+        map.setView([lat, lon], Math.max(ZOEK_ZOOM[d.type] || 15, d.type === "adres" || d.type === "postcode" ? 17 : 0));
+        say(d.weergavenaam + ": tik op een perceel op de kaart.");
+      });
+      ul.appendChild(li);
+    });
+    ul.hidden = !ul.childNodes.length;
+  }
+  async function zoekAdres(q) {
+    const nr = ++zoekNr;
+    try {
+      const u = LOCSERVER + "?rows=6&fl=weergavenaam,type,centroide_ll&fq=" + encodeURIComponent("type:(gemeente OR woonplaats OR weg OR postcode OR adres)") + "&q=" + encodeURIComponent(q);
+      const r = await fetch(u); if (!r.ok) throw new Error("server");
+      const d = await r.json(); if (nr !== zoekNr) return; // intussen verder getypt
+      const docs = (d && d.response && d.response.docs) || [];
+      zoekToon(docs, docs.length ? "" : "Niks gevonden. Probeer straat + plaats, of postcode + huisnummer.");
+    } catch (e) { if (nr === zoekNr) zoekToon([], navigator.onLine === false ? "Zoeken lukt niet zonder internet." : "Zoeken lukte niet. Probeer het nog eens."); }
+  }
+  $("zoekAdres").addEventListener("input", e => {
+    clearTimeout(zoekTimer);
+    const q = e.target.value.trim();
+    if (q.length < 3) { zoekNr++; $("zoekLijst").hidden = true; return; }
+    zoekTimer = setTimeout(() => zoekAdres(q), 300);
+  });
+  $("zoekAdres").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); const eerste = $("zoekLijst").querySelector("li:not(.leeg)"); if (eerste) eerste.click(); else { const q = e.target.value.trim(); if (q.length >= 2) zoekAdres(q); } }
+    if (e.key === "Escape") { $("zoekLijst").hidden = true; }
+  });
   // ---------- Locatie: vooraf zeggen dat de telefoon gaat vragen; geweigerd of uit = stappen voor deze telefoon ----------
   // Een website kan de instellingen van de telefoon niet openen of aanzetten; we kunnen wel precies zeggen waar het zit.
   const locIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
@@ -3245,6 +3302,7 @@ function start() {
     $("locHulpKop").textContent = soort === "geweigerd" ? "Locatie is niet toegestaan" : "Locatie staat uit of geeft niks door";
     $("locHulpWaar").textContent = (s.let ? s.let + " " : "") + "Zo zet je het aan (" + s.waar + "):";
     $("locHulpStappen").innerHTML = s.stappen.map(t => "<li>" + t + "</li>").join("");
+    $("locHulpTip").textContent = locIos ? "Tip: kun je het niet vinden? Open Instellingen en typ bovenin bij Zoek \"Locatievoorzieningen\" (of \"Safari\")." : "";
     locOpnieuw = opnieuw || null; $("locHulpOpnieuw").hidden = !opnieuw;
     $("locHulp").hidden = false;
   }

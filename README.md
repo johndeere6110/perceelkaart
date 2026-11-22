@@ -34,6 +34,7 @@ Percelen kiezen op de kaart met het totaal in ha, bufferstroken langs water, spu
 
 ## Bufferstroken langs water
 
+- **Zoeken op adres, postcode of plaats:** onder Mijn locatie. De kaart springt erheen; geen locatie-toestemming nodig (PDOK Locatieserver).
 - **Water op de kaart:** de oevers, de strook en het talud staan alleen op de kaart met **Water tonen** (naast Percelen koppelen), tijdens Oevers aanwijzen en direct na Water zoeken. Bij elke start staat het weer uit; de netto ha en de bufferstrook worden wel altijd uitgerekend.
 - **Water vergeten:** het gevonden water neemt veel ruimte in. Heeft een bedrijf een week niet op de kaart gestaan, dan vergeet de app het gevonden water vanzelf (zelf aangewezen oevers blijven); **Water zoeken** haalt het terug. Met de knop **Water vergeten** (bij de percelen op de kaart, alleen als er water is) doe je het meteen.
 - **Water zoeken** markeert randen langs BGT-water (sloot = 3 m, greppel/droge sloot = 0 m). De strook gaat vanaf de **insteek van het talud**: BGT waterdeel en BGT ondersteunend waterdeel (oever, slootkant) samen, de buitenrand daarvan is de insteek. Alleen het deel binnen het perceel telt; het talud zelf niet. Geen talud in de BGT: dan vanaf de waterlijn, en dat staat erbij. Per perceel zie je de m² strook binnen het perceel (om te vergelijken met RVO of Boer&Bunder) en wat het vanaf de perceelrand zou zijn. Het talud staat licht bruin op de kaart.

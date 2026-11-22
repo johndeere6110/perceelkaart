@@ -27,7 +27,9 @@ jobs:
           sed -i 's#</manifest>#    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n</manifest>#' android/app/src/main/AndroidManifest.xml
           # Icoon uit de site
           mkdir -p assets && cp ../icon-512.png assets/icon-only.png && cp ../icon-512.png assets/icon-foreground.png
-          npx capacitor-assets generate --android --iconBackgroundColor '#2F5A2B' --iconBackgroundColorDark '#2F5A2B' --splashBackgroundColor '#141912' --splashBackgroundColorDark '#141912' || echo "icoon maken lukte niet, standaardicoon"
+          convert -size 1024x1024 xc:'#2F5A2B' assets/icon-background.png
+          npx capacitor-assets generate --android || echo "icoon maken lukte niet, standaardicoon"
+          ls android/app/src/main/res/mipmap-mdpi/
           npx cap sync android
           grep -n "LOCATION" android/app/src/main/AndroidManifest.xml
       - name: APK bouwen

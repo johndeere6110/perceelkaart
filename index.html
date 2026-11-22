@@ -482,7 +482,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 137</div>
+  <div class="voet" id="voetVersie">versie 138</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3292,9 +3292,10 @@ function start() {
         let: opStart ? "Let op: de app op het beginscherm draait in Safari, ook als Chrome je standaardbrowser is. Op nieuwere iPhones (iOS 26) krijgt zo'n app soms geen locatie, ook als alles aan staat: een fout van Apple." : "",
         stappen: ios.concat([
         "Staat daar <b>Safari-websites</b> (of <b>Safari</b>) in de lijst? Kies dan <b>Bij gebruik van de app</b> en zet <b>Nauwkeurige locatie</b> aan. Staat het er niet, ga dan door.",
-        "Open <b>Instellingen → Apps → Safari</b> (oudere iPhone: <b>Instellingen → Safari</b>), scrol naar beneden naar <b>Locatie</b> en kies <b>Vraag</b> of <b>Sta toe</b>.",
+        "Open <b>Instellingen → Apps → Safari</b> (oudere iPhone: <b>Instellingen → Safari</b>), scrol helemaal naar beneden naar <b>Locatie</b> en kies <b>Sta toe</b> (dan vraagt hij het niet steeds opnieuw).",
         opStart ? "Sluit de app helemaal af (omhoog vegen), open hem opnieuw en tik nog eens op de locatieknop." : "Tik hieronder op <b>Opnieuw proberen</b>; werkt het niet, laad de pagina dan opnieuw.",
-        "Lukt het nog steeds niet: <b>Instellingen → Algemeen → Zet over of stel iPhone opnieuw in → Stel opnieuw in → Stel locatie en privacy opnieuw in</b>. Je gegevens blijven staan; alle apps vragen daarna opnieuw of ze je locatie mogen gebruiken. Open de app en kies <b>Toestaan</b>."]) };
+        "Lukt het nog steeds niet: <b>Instellingen → Algemeen → Zet over of stel iPhone opnieuw in → Stel opnieuw in → Stel locatie en privacy opnieuw in</b>. Je gegevens blijven staan; alle apps vragen daarna opnieuw of ze je locatie mogen gebruiken. Open de app en kies <b>Toestaan</b>."]
+        .concat(opStart ? ["Wat wel altijd werkt: open <b>" + location.host + location.pathname.replace(/index\.html$/, "") + "</b> in een gewoon <b>Safari-tabblad</b> (niet via het icoon), met de Safari-instelling uit stap 3 op <b>Sta toe</b>. Let op: dat tabblad heeft eigen opslag, los van deze app. Zet daar de groep aan, dan komen je bedrijven en metingen vanzelf mee."] : [])) };
     }
     if (/Android/.test(ua)) return { waar: opStart ? "Android, app op het beginscherm" : "Android, Chrome", open: "intent:#Intent;action=android.settings.LOCATION_SOURCE_SETTINGS;end", stappen: [
       "Zet <b>Locatie</b> aan: tik op <b>Open locatie-instellingen</b> hieronder (of veeg van boven naar beneden en tik op de tegel <b>Locatie</b>).",

@@ -498,7 +498,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 144</div>
+  <div class="voet" id="voetVersie">versie 145</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1807,6 +1807,8 @@ function start() {
       // Al in de combinatie: eruit; anders de eerste erbij
       const j = kmCombi.findIndex(c => hits.some(h => h.naam === c.naam && h.key === c.key));
       if (j >= 0) kmCombi.splice(j, 1); else kmCombi.push(hits[0]);
+      // Een eerdere melding ("hier ligt geen perceel") weg: dit was een goed perceel
+      kmSay((j >= 0 ? "Eruit gehaald. " : "Erbij. ") + "Tik nog meer percelen, of nog eens om er een uit te halen.");
       kmCombiTeken(); kmKaartTeken();
       return;
     }

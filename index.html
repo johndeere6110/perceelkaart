@@ -123,9 +123,10 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .hint { font-size: 15px; color: var(--muted); margin-top: 8px; min-height: 1.4em; }
 .hint.warn { color: var(--warn); font-weight: 600; }
 /* Zoeken op adres, postcode of plaats (PDOK Locatieserver) */
-.zoekadres { margin-top: 8px; }
-.zoekadres input { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: 16px "Barlow", system-ui, sans-serif; padding: 0 12px; outline: none; box-sizing: border-box; }
-.zoekadres input:focus { border-color: var(--accent); }
+/* Mijn locatie en zoeken naast elkaar */
+.mijnrij #bMij { flex: 0 0 auto; padding: 0 14px; }
+.mijnrij input { flex: 1; min-width: 0; min-height: 52px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: 16px "Barlow", system-ui, sans-serif; padding: 0 12px; outline: none; box-sizing: border-box; }
+.mijnrij input:focus { border-color: var(--accent); }
 #zoekLijst { list-style: none; margin: 4px 0 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
 #zoekLijst[hidden] { display: none; }
 #zoekLijst li { padding: 11px 12px; border-top: 1px solid var(--line); cursor: pointer; font-size: 16px; }
@@ -321,13 +322,11 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <button type="button" role="tab" id="tabMet" aria-selected="false">Meten</button>
   </div>
   <div id="paneelPerc">
-  <div class="row">
+  <div class="row mijnrij">
     <button type="button" class="btn" id="bMij">Mijn locatie</button>
+    <input id="zoekAdres" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="Zoek adres of postcode" aria-label="Zoek adres, postcode of plaats">
   </div>
-  <div class="zoekadres">
-    <input id="zoekAdres" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="Of zoek adres, postcode of plaats" aria-label="Zoek adres, postcode of plaats">
-    <ul id="zoekLijst" hidden></ul>
-  </div>
+  <ul id="zoekLijst" hidden></ul>
   <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bBron" aria-pressed="false">Grenzen: BRP-gewasperceel</button></div>
   <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bVrij" aria-pressed="false">AB-lijn meten</button><button type="button" class="btn" id="bAB" aria-pressed="false">AB-kant kiezen</button></div>
   <div class="advice vrij" id="vrijBox" hidden>
@@ -482,7 +481,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 139</div>
+  <div class="voet" id="voetVersie">versie 140</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>

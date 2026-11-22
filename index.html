@@ -464,7 +464,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div class="meta">Een website mag dit niet zelf voor je aanzetten; dat moet je één keer op de telefoon doen.</div>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 130</div>
+  <div class="voet" id="voetVersie">versie 131</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3226,7 +3226,7 @@ function start() {
         "Scrol in die lijst naar <b>Chrome</b>: kies <b>Bij gebruik van de app</b> en zet <b>Nauwkeurige locatie</b> aan.",
         "Terug in Chrome: tik op het icoontje <b>links van het webadres</b> en zet <b>Locatie</b> aan.",
         "Tik hieronder op <b>Opnieuw proberen</b>."]) };
-      return { waar: opStart ? "iPhone, app op het beginscherm" : "iPhone, Safari", stappen: ios.concat([
+      return { waar: opStart ? "iPhone, app op het beginscherm" : "iPhone, Safari", let: opStart ? "Let op: de app op het beginscherm draait in Safari, ook als Chrome je standaardbrowser is. De locatie-instelling van Chrome telt hier dus niet." : "", stappen: ios.concat([
         "Scrol in die lijst naar <b>Safari-websites</b>: kies <b>Bij gebruik van de app</b> en zet <b>Nauwkeurige locatie</b> aan.",
         "Open <b>Instellingen → Apps → Safari → Locatie</b> (oudere iPhone: <b>Instellingen → Safari → Locatie</b>) en kies <b>Vraag</b> of <b>Sta toe</b>.",
         opStart ? "Sluit de app helemaal af (omhoog vegen), open hem opnieuw en tik nog eens op de locatieknop." : "Tik hieronder op <b>Opnieuw proberen</b>; werkt het niet, laad de pagina dan opnieuw."]) };
@@ -3243,7 +3243,7 @@ function start() {
   function toonLocHulp(soort, opnieuw) {
     const s = locStappen(soort);
     $("locHulpKop").textContent = soort === "geweigerd" ? "Locatie is niet toegestaan" : "Locatie staat uit of geeft niks door";
-    $("locHulpWaar").textContent = "Zo zet je het aan (" + s.waar + "):";
+    $("locHulpWaar").textContent = (s.let ? s.let + " " : "") + "Zo zet je het aan (" + s.waar + "):";
     $("locHulpStappen").innerHTML = s.stappen.map(t => "<li>" + t + "</li>").join("");
     locOpnieuw = opnieuw || null; $("locHulpOpnieuw").hidden = !opnieuw;
     $("locHulp").hidden = false;

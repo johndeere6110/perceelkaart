@@ -1,0 +1,53 @@
+name: Android-app
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['app-android/**', '.github/workflows/android.yml']
+permissions:
+  contents: write
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Capacitor-project maken
+        working-directory: app-android
+        run: |
+          npm install --no-audit --no-fund
+          npx cap add android
+          # Locatie via Android zelf (de app vraagt het één keer, zoals andere apps)
+          sed -i 's#</manifest>#    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n</manifest>#' android/app/src/main/AndroidManifest.xml
+          # Icoon uit de site
+          mkdir -p assets && cp ../icon-512.png assets/icon-only.png && cp ../icon-512.png assets/icon-foreground.png
+          npx capacitor-assets generate --android --iconBackgroundColor '#2F5A2B' --iconBackgroundColorDark '#2F5A2B' --splashBackgroundColor '#141912' --splashBackgroundColorDark '#141912' || echo "icoon maken lukte niet, standaardicoon"
+          npx cap sync android
+          grep -n "LOCATION" android/app/src/main/AndroidManifest.xml
+      - name: APK bouwen
+        working-directory: app-android/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../../perceelkaart-test.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: perceelkaart-apk
+          path: perceelkaart-test.apk
+      - name: Op de releasepagina zetten
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-test
+          name: Android-app (test)
+          prerelease: true
+          body: |
+            Testversie van de Perceelkaart als Android-app (laadt de site, updates komen vanzelf).
+            Installeren: download perceelkaart-test.apk op de telefoon en open hem; sta "installeren uit deze bron" toe.
+            Gebouwd van ${{ github.sha }}.
+          files: perceelkaart-test.apk

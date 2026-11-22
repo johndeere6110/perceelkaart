@@ -1,0 +1,11 @@
+{
+  "name": "perceelkaart-android",
+  "private": true,
+  "description": "Android-app (Capacitor) die de Perceelkaart van johndeere6110.github.io laadt. Gebouwd door .github/workflows/android.yml.",
+  "devDependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/assets": "^3.0.5"
+  }
+}

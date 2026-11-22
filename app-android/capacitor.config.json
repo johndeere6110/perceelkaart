@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.johndeere6110.perceelkaart",
+  "appName": "Perceelkaart",
+  "webDir": "www",
+  "server": {
+    "url": "https://johndeere6110.github.io/perceelkaart/",
+    "cleartext": false
+  },
+  "android": {
+    "backgroundColor": "#141912"
+  }
+}

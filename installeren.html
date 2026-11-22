@@ -136,11 +136,12 @@ body.metpijl main { padding-bottom: 90px; }
   <section class="card main" id="vIos" hidden>
     <h2>Installeren op iPhone</h2>
     <ol class="steps">
-      <li><div>Tik onderin op het deel-knopje <span class="ico" aria-label="deel-knop"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11v9h12v-9"/></svg></span></div></li>
+      <li><div><span id="iosStap1">Tik onderin op het deel-knopje</span> <span class="ico" aria-label="deel-knop"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11v9h12v-9"/></svg></span></div></li>
       <li><div>Scroll omlaag en kies <strong>Zet op beginscherm</strong> <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg></span></div></li>
       <li><div>Tik rechtsboven op <strong>Voeg toe</strong>. Het icoon staat daarna op je beginscherm.</div></li>
     </ol>
-    <div class="tip"><strong>Staat "Zet op beginscherm" er niet bij?</strong> Dan is de link geopend in WhatsApp of een andere app. Tik eerst op het <strong>Safari-kompasje</strong> of op "Open in Safari", en doe het daar opnieuw.</div>
+    <div class="tip" id="tipIosChrome" hidden><strong>Chrome op de iPhone kan dit ook</strong> (iOS 16.4 of nieuwer). Staat "Zet op beginscherm" er niet bij, tik dan in het deelmenu op <strong>Meer</strong>, of open de link in Safari en doe het daar.</div>
+    <div class="tip" id="tipIosApp"><strong>Staat "Zet op beginscherm" er niet bij?</strong> Dan is de link geopend in WhatsApp of een andere app. Tik eerst op het <strong>Safari-kompasje</strong> of op "Open in Safari", en doe het daar opnieuw.</div>
     <div class="tip" id="tipIosBrowser" hidden>Je gebruikt niet Safari. Het werkt het betrouwbaarst in <strong>Safari</strong>: kopieer de link en plak hem daar.</div>
   </section>
 
@@ -234,7 +235,11 @@ body.metpijl main { padding-bottom: 90px; }
 
   if (ios) {
     show("vIos");
-    if (!iosSafari) show("tipIosBrowser");
+    if (/CriOS/.test(ua)) {
+      // Chrome op iPhone: deel-knopje zit rechtsboven in de adresbalk; installeren kan sinds iOS 16.4
+      $("iosStap1").textContent = "Tik rechtsboven in de adresbalk op het deel-knopje";
+      show("tipIosChrome"); $("tipIosApp").hidden = true;
+    } else if (!iosSafari) show("tipIosBrowser");
     // Pijl naar het deel-knopje onderin (iPhone, in Safari zit die onderaan)
     if (iosSafari && /iPhone|iPod/.test(ua)) { show("pijl"); document.body.classList.add("metpijl"); }
   } else if (android) {

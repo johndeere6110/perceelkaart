@@ -498,7 +498,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 142</div>
+  <div class="voet" id="voetVersie">versie 143</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -2027,7 +2027,14 @@ function start() {
     sub.textContent = t;
   }
   $("kmCombiKnop").addEventListener("click", () => {
-    kmCombiAan = !kmCombiAan; kmCombiTeken(); kmKaartTeken();
+    kmCombiAan = !kmCombiAan;
+    // Was er al een perceel (of kavel) gekozen: dat gaat als eerste de combinatie in, en het invulscherm gaat dicht,
+    // zodat alles wat oranje is ook echt de combinatie is
+    if (kmCombiAan && kmKeus) {
+      if (kmKeus.key && !kmCombi.some(c => c.naam === kmKeus.naam && c.key === kmKeus.key)) kmCombi.push({ naam: kmKeus.naam, key: kmKeus.key });
+      kmKeus = null; kmTab();
+    }
+    kmCombiTeken(); kmKaartTeken();
     kmSay(kmCombiAan ? "Combineren: tik percelen op de kaart om de liters bij elkaar op te tellen (ook van verschillende bedrijven); nog eens tikken haalt er een uit." : "Combineren uit. Tik een perceel om het in te vullen.");
   });
   $("kmCombiWis").addEventListener("click", () => { kmCombi.length = 0; kmCombiTeken(); kmKaartTeken(); });

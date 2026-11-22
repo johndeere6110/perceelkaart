@@ -139,6 +139,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 #locHulp ol { margin: 6px 0; padding-left: 22px; }
 #locHulp li { margin: 5px 0; }
 #locHulp .row { display: flex; gap: 8px; margin-top: 8px; }
+#locHulp a.btn { display: flex; align-items: center; justify-content: center; margin-top: 8px; text-decoration: none; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#locHulp a.btn[hidden] { display: none; }
 .advice { margin-top: 10px; background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
 .advice .adv-main { font-size: 36px; line-height: 1.1; }
 .advice .meta { color: var(--muted); }
@@ -477,9 +479,10 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <ol id="locHulpStappen"></ol>
     <div class="meta" id="locHulpTip"></div>
     <div class="meta">Een website mag dit niet zelf voor je aanzetten; dat moet je één keer op de telefoon doen. Lukt het niet? Zoek dan bovenin op adres, postcode of plaats: daar is geen locatie voor nodig.</div>
+    <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 133</div>
+  <div class="voet" id="voetVersie">versie 134</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3288,8 +3291,8 @@ function start() {
         "Open <b>Instellingen → Apps → Safari → Locatie</b> (oudere iPhone: <b>Instellingen → Safari → Locatie</b>) en kies <b>Vraag</b> of <b>Sta toe</b>.",
         opStart ? "Sluit de app helemaal af (omhoog vegen), open hem opnieuw en tik nog eens op de locatieknop." : "Tik hieronder op <b>Opnieuw proberen</b>; werkt het niet, laad de pagina dan opnieuw."]) };
     }
-    if (/Android/.test(ua)) return { waar: opStart ? "Android, app op het beginscherm" : "Android, Chrome", stappen: [
-      "Zet <b>Locatie</b> aan: veeg van boven naar beneden en tik op de tegel <b>Locatie</b>.",
+    if (/Android/.test(ua)) return { waar: opStart ? "Android, app op het beginscherm" : "Android, Chrome", open: "intent:#Intent;action=android.settings.LOCATION_SOURCE_SETTINGS;end", stappen: [
+      "Zet <b>Locatie</b> aan: tik op <b>Open locatie-instellingen</b> hieronder (of veeg van boven naar beneden en tik op de tegel <b>Locatie</b>).",
       opStart ? "Open <b>Chrome → ⋮ → Instellingen → Site-instellingen → Locatie</b>, zoek <b>" + location.host + "</b> en kies <b>Toestaan</b>."
         : "Tik op het icoontje <b>links van het webadres</b> → <b>Rechten</b> (of Site-instellingen) → <b>Locatie</b> → <b>Toestaan</b>.",
       "Staat het daar al goed? Kijk dan bij <b>Instellingen → Apps → Chrome → Rechten → Locatie</b>: <b>Toestaan tijdens gebruik van app</b>, met <b>Nauwkeurige locatie</b> aan.",
@@ -3304,6 +3307,7 @@ function start() {
     $("locHulpStappen").innerHTML = s.stappen.map(t => "<li>" + t + "</li>").join("");
     $("locHulpTip").textContent = locIos ? "Tip: kun je het niet vinden? Open Instellingen en typ bovenin bij Zoek \"Locatievoorzieningen\" (of \"Safari\")." : "";
     locOpnieuw = opnieuw || null; $("locHulpOpnieuw").hidden = !opnieuw;
+    $("locHulpOpen").hidden = !s.open; if (s.open) $("locHulpOpen").href = s.open;
     $("locHulp").hidden = false;
   }
   $("locHulpDicht").addEventListener("click", () => { $("locHulp").hidden = true; });

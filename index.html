@@ -142,6 +142,11 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 #locHulp .row { display: flex; gap: 8px; margin-top: 8px; }
 #locHulp a.btn { display: flex; align-items: center; justify-content: center; margin-top: 8px; text-decoration: none; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 #locHulp a.btn[hidden] { display: none; }
+/* Gekozen percelen samen (bij een bedrijf op de kaart) */
+.keuze { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, #e8590c 14%, transparent); color: var(--ink); font-weight: 600; font-size: 15px; }
+.keuze[hidden] { display: none; }
+.keuze span { flex: 1; }
+.keuze .btn { flex: none; min-height: 36px; padding: 0 10px; font-size: 14px; }
 .advice { margin-top: 10px; background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
 .advice .adv-main { font-size: 36px; line-height: 1.1; }
 .advice .meta { color: var(--muted); }
@@ -342,6 +347,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   <div class="advice" id="info" aria-live="polite" hidden>
     <div class="tot"><span id="totLbl"></span><span class="adv-main num" id="totHa"></span></div>
     <div class="meta" id="totSub"></div>
+    <div class="keuze" id="keuzeBox" hidden><span id="keuzeTxt"></span><button type="button" class="btn klein" id="keuzeWis">Keuze wissen</button></div>
     <div class="row" style="margin-top:10px">
       <button type="button" class="btn" id="bWater">Water zoeken</button>
       <button type="button" class="btn" id="bOever" aria-pressed="false">Oevers aanwijzen</button>
@@ -481,7 +487,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 140</div>
+  <div class="voet" id="voetVersie">versie 141</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -749,7 +755,8 @@ function start() {
   let groepPlanFn = () => {}; // groep bijwerken na een wijziging (wordt verderop ingevuld)
   const eigenCache = new Map(); // perceel -> namen (niet de naam op de kaart) waar het ook onder staat; leeg bij elke wijziging van de namen
   // Staat er een naam op de kaart, dan is een tik bekijken (uitgelicht); toevoegen of weghalen alleen na Percelen wijzigen
-  let wijzigen = false, uitgelicht = null;
+  // Meerdere percelen kunnen gekozen zijn (oranje, bovenaan de lijst); hun ha staat samen bij het totaal
+  let wijzigen = false; const uitgelicht = new Set(); const keuzeVolg = [];
   // De naam die op de kaart staat, is niet dubbel bewaard: zijn percelen zijn de kaart (kaartTestSelectie)
   const opKaart = namen.find(n => n.opKaart);
   if (opKaart) naamActief = opKaart.naam;
@@ -1311,16 +1318,17 @@ function start() {
       g.bindTooltip(String(i + 1) + "<small>" + haTxt(q.ha) + " ha</small>", { permanent: true, direction: "center", className: "pnr" });
       pnrLagen.push({ g, ha: q.ha || 0 });
       laag.addLayer(g);
-      if (uitgelicht === q.key) laag.addLayer(L.geoJSON(q.geometry, { style: { color: "#e8590c", weight: 6, fill: false }, interactive: false }));
+      if (uitgelicht.has(q.key)) laag.addLayer(L.geoJSON(q.geometry, { style: { color: "#e8590c", weight: 6, fill: false }, interactive: false }));
       if (waterZicht || oeverModus) Perceel.zijden(q.geometry).filter(z => q.oever[z.key] != null).forEach(z => {
         const t = typeVan(q.oever[z.key]);
         laag.addLayer(L.polyline([[z.a[1], z.a[0]], [z.b[1], z.b[0]]], { color: t.c, weight: t.w, opacity: .95, dashArray: t.d || null, lineCap: "butt", interactive: false }));
       });
     });
     const ul = $("lijst"); ul.innerHTML = "";
+    const keuzeLi = {};
     sel.forEach((q, i) => {
       const li = document.createElement("li");
-      if (uitgelicht === q.key) li.className = "uitgelicht";
+      if (uitgelicht.has(q.key)) li.className = "uitgelicht";
       const nr = document.createElement("div"); nr.className = "nr num"; nr.textContent = i + 1;
       const go = document.createElement("button"); go.type = "button"; go.className = "go";
       go.setAttribute("aria-label", "Toon perceel " + (i + 1) + " op de kaart");
@@ -1448,7 +1456,7 @@ function start() {
       // Staat dit perceel al onder een (andere) naam: kopje met van wie het is
       { const wie = eigenaars(q); if (wie.length) go.insertBefore(Object.assign(document.createElement("div"), { className: "van", textContent: "Van " + wie.join(", ") }), nm); }
       { const rk = routeKnop(q); if (rk) { const d = document.createElement("div"); d.appendChild(rk); maakDetail().appendChild(d); } }
-      go.addEventListener("click", () => naamActief ? toonPerceel(i) : map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
+      go.addEventListener("click", () => naamActief ? toonPerceel(i, true) : map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 }));
       // Bruto groot (zoals RVO), klein eronder de netto en wat eraf (bufferstrook) of erbij (langs water) gaat
       const w = document.createElement("div"); w.className = "w num"; w.textContent = haTxt(q.ha) + " ha";
       { const k = document.createElement("small"); k.textContent = nettoUitleg(q, bf); w.appendChild(k); }
@@ -1457,9 +1465,19 @@ function start() {
       del.addEventListener("click", () => { sel.splice(i, 1); bewaar(); teken(); });
       // Bij een naam op de kaart alleen weghalen in Percelen wijzigen
       li.append(nr, go, w, naamActief && !wijzigen ? document.createElement("span") : del); if (detail) li.appendChild(detail);
-      // Het bekeken perceel bovenaan de lijst, dan hoef je het niet te zoeken
-      if (uitgelicht === q.key) ul.prepend(li); else ul.appendChild(li);
+      // De gekozen percelen bovenaan de lijst (in de volgorde van kiezen), dan hoef je ze niet te zoeken
+      if (uitgelicht.has(q.key)) keuzeLi[q.key] = li; else ul.appendChild(li);
     });
+    ul.prepend(...keuzeVolg.filter(k => keuzeLi[k]).map(k => keuzeLi[k]));
+    // Gekozen percelen samen
+    {
+      const k = sel.filter(q => uitgelicht.has(q.key)), box = $("keuzeBox");
+      box.hidden = k.length < 1 || !naamActief;
+      if (!box.hidden) {
+        const kb = k.map(buffer), b = k.reduce((t, q) => t + q.ha, 0), af = kb.reduce((t, x) => t + x.af, 0), bij = kb.reduce((t, x) => t + x.extra, 0);
+        $("keuzeTxt").textContent = "Gekozen: " + (k.length === 1 ? "1 perceel" : k.length + " percelen") + ", " + haTxt(b) + " ha bruto" + (af || bij ? " · netto " + haTxt(b + bij - af) + " ha" : "");
+      }
+    }
     const kb = $("kavelBox"); kb.innerHTML = "";
     kavels.forEach(kv => {
       const vorm = kavelVorm(kv), leden = kv.leden.map(k => sel.find(q => q.key === k));
@@ -1518,7 +1536,7 @@ function start() {
     if (!armed(e.currentTarget, "Tik nog eens om te wissen")) return;
     // Een actieve naam eerst loslaten: zijn percelen blijven bewaard
     bewaarNaam();
-    wijzigen = false; uitgelicht = null;
+    wijzigen = false; (uitgelicht.clear(), keuzeVolg.length = 0);
     const was = naamActief; naamActief = null; store.set("kaartNaamActief", null); zetNamen();
     sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
     say(was ? "Kaart leeg. De percelen van " + was + " blijven bewaard: tik het bedrijf aan onder Bedrijven om ze terug te halen." : "Selectie gewist. Tik op een perceel om te beginnen.");
@@ -1551,7 +1569,7 @@ function start() {
     const n = namen.find(x => x.naam === naam);
     if (!n) return;
     bewaarNaam();
-    wijzigen = false; uitgelicht = null;
+    wijzigen = false; (uitgelicht.clear(), keuzeVolg.length = 0);
     n.bekeken = Date.now();
     naamActief = naam; store.set("kaartNaamActief", naam);
     sel = JSON.parse(JSON.stringify(n.sel || [])); kavels = JSON.parse(JSON.stringify(n.kavels || []));
@@ -2545,7 +2563,7 @@ function start() {
         if (!R) {
           // Bij een ander weggehaald (of in de sheet op weg gezet) en hier niet veranderd: hier ook weg
           if (B && vast(hashes(L)) === vast(B)) {
-            if (n.naam === naamActief) { naamActief = null; store.set("kaartNaamActief", null); wijzigen = false; uitgelicht = null; }
+            if (n.naam === naamActief) { naamActief = null; store.set("kaartNaamActief", null); wijzigen = false; (uitgelicht.clear(), keuzeVolg.length = 0); }
             namen = namen.filter(x => x !== n); delete groepBasis.n[id]; binnen++;
             return;
           }
@@ -2821,11 +2839,11 @@ function start() {
     if (naamActief) {
       const m = document.createElement("div"); m.className = "meta";
       m.textContent = wijzigen ? "Percelen wijzigen: tik een perceel om het toe te voegen of weg te halen. Wordt vanzelf bewaard onder " + naamActief + "."
-        : "✓ " + naamActief + " staat op de kaart. Tik een perceel om het te bekijken; met Percelen wijzigen voeg je toe of haal je weg.";
+        : "✓ " + naamActief + " staat op de kaart. Tik percelen om ze te bekijken en de ha samen te tellen (nog eens tikken haalt er een uit); met Percelen wijzigen voeg je toe of haal je weg.";
       const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
       // Afronden: kaart leeg, de naam blijft bewaard; daarna percelen voor de volgende naam aantikken
       const klaar = kn("Klaar met " + naamActief, () => {
-        wijzigen = false; uitgelicht = null; hernoemOpen = false;
+        wijzigen = false; (uitgelicht.clear(), keuzeVolg.length = 0); hernoemOpen = false;
         const was = naamActief; bewaarNaam(); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
         sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
         say(was + " is bewaard (zie Bedrijven). Tik percelen aan voor het volgende bedrijf.");
@@ -2833,7 +2851,7 @@ function start() {
       klaar.setAttribute("aria-pressed", "true");
       r.appendChild(klaar);
       r.appendChild(kn(wijzigen ? "Klaar met wijzigen" : "Percelen wijzigen", () => {
-        wijzigen = !wijzigen; uitgelicht = null; teken();
+        wijzigen = !wijzigen; (uitgelicht.clear(), keuzeVolg.length = 0); teken();
         say(wijzigen ? "Tik percelen aan om ze toe te voegen of weg te halen." : "Klaar met wijzigen. " + naamActief + " is bewaard.");
       }, wijzigen));
       r.appendChild(kn("Naam wijzigen", () => { hernoemOpen = !hernoemOpen; teken(); if (hernoemOpen) setTimeout(() => { const i = $("hernoemNaam"); if (i) { i.focus(); i.select(); } }, 0); }, hernoemOpen));
@@ -2841,7 +2859,7 @@ function start() {
       { const b = kn(offlineLabel(naamActief), () => bewaarOffline(naamActief)); b.id = "bOffline"; r.appendChild(b); }
       r.appendChild(kn("Bedrijf weghalen", e => {
         if (!armed(e.currentTarget, "Tik nog eens om " + naamActief + " weg te halen")) return;
-        wijzigen = false; uitgelicht = null; hernoemOpen = false;
+        wijzigen = false; (uitgelicht.clear(), keuzeVolg.length = 0); hernoemOpen = false;
         const was = naamActief; namen = namen.filter(x => x.naam !== was); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
         if (offline[was]) { delete offline[was]; store.set("kaartOffline", offline); }
         teken();
@@ -2863,7 +2881,7 @@ function start() {
         if (!naam) { say("Vul eerst een bedrijf in.", true); inp.focus(); return; }
         const bestaat = namen.find(x => x.naam === naam);
         if (bestaat && !armed(e.currentTarget, naam + " overschrijven? Tik nog eens")) return;
-        wijzigen = false; uitgelicht = null;
+        wijzigen = false; (uitgelicht.clear(), keuzeVolg.length = 0);
         const nw = { naam, sel: [], kavels: [], ts: Date.now() };
         if (bestaat && bestaat.km) nw.km = bestaat.km;
         if (bestaat && bestaat.mest) nw.mest = bestaat.mest;
@@ -2996,10 +3014,17 @@ function start() {
     return o || null;
   }
   // Eén perceel van de naam laten zien: oranje omlijnd, de kaart erheen, gewas en ha in de melding
-  function toonPerceel(i) {
+  $("keuzeWis").addEventListener("click", () => { uitgelicht.clear(); keuzeVolg.length = 0; teken(); say("Keuze gewist. Tik percelen om ze samen te tellen."); });
+  function toonPerceel(i, vanLijst) {
     const q = sel[i];
-    uitgelicht = q.key; teken();
-    map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 });
+    if (uitgelicht.has(q.key)) {
+      uitgelicht.delete(q.key); keuzeVolg.splice(keuzeVolg.indexOf(q.key), 1); teken();
+      say("Perceel " + (i + 1) + " niet meer gekozen." + (uitgelicht.size ? "" : " Tik percelen om ze samen te tellen."));
+      return;
+    }
+    uitgelicht.add(q.key); keuzeVolg.push(q.key); teken();
+    if (vanLijst) map.fitBounds(L.geoJSON(q.geometry).getBounds(), { padding: [24, 24], maxZoom: 17 });
+    if (uitgelicht.size > 1) { say($("keuzeTxt").textContent + ". Nog eens tikken haalt een perceel eruit."); return; }
     const n = namen.find(m => m.naam === naamActief);
     const km = [["km", " Kunstmest: "], ["mest", " Mest: "]].map(([soort, kop]) => metSoort(soort, () => { const x = lhaVan(q, n); return x == null ? "" : kop + (x > 0 ? ph(n, x) + " = " + hv(n, x * haVan(q)) : "niet") + (q[KV] && q[KV].gedaan ? ", gedaan" : "") + "."; })).join("");
     say("Perceel " + (i + 1) + " van " + naamActief + ": " + (q.gewas || "onbekend gewas") + ", " + haTxt(q.ha) + " ha" + (q.jaar ? " (BRP " + q.jaar + ")" : "") + "." + km);

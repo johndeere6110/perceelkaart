@@ -195,6 +195,10 @@ details pre { white-space: pre-wrap; word-break: break-all; background: var(--su
 #paneelKm .uit div { display: grid; grid-template-columns: 6em 1fr; gap: 8px; align-items: baseline; }
 #paneelKm .uit span { color: var(--muted); font-size: 14px; }
 #paneelKm .knoppen { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+#paneelKm .kmcombi { border-color: #e8590c; }
+#paneelKm .kmcombi[hidden] { display: none; }
+#kmCombiLijst .x { flex: none; min-width: 40px; min-height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 18px; }
+#kmCombiSub.warn { color: var(--warn); }
 #paneelKm .knoppen[hidden] { display: none; }
 #paneelKm .btn { flex: none; min-height: 44px; font-size: 15px; padding: 0 12px; }
 #paneelKm .btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
@@ -393,6 +397,13 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   <div id="paneelKm" hidden>
     <div class="kmbalk"><div class="soort" role="group" aria-label="Soort bemesting"><button type="button" class="btn" id="soortKm" aria-pressed="true">Kunstmest (l/ha)</button><button type="button" class="btn" id="soortMest" aria-pressed="false">Mest (m³/ha)</button></div><button type="button" class="tandwiel" id="kmInstKnop" aria-expanded="false" aria-controls="kmInst" aria-label="Instellingen voor de kaart"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.3 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button></div>
     <div class="hint" id="kmHint"></div>
+    <div class="knoppen"><button type="button" class="btn" id="kmCombiKnop" aria-pressed="false">Combineren: uit</button></div>
+    <div class="advice kmcombi" id="kmCombi" hidden>
+      <div class="tot"><span id="kmCombiLbl">Combinatie</span><span class="adv-main num" id="kmCombiL"></span></div>
+      <div class="meta" id="kmCombiSub"></div>
+      <ul class="log" id="kmCombiLijst"></ul>
+      <div class="knoppen"><button type="button" class="btn" id="kmCombiWis">Combinatie wissen</button></div>
+    </div>
     <div class="advice kminst" id="kmInst" hidden>
       <div class="wie">Kaart</div>
       <div class="meta">Onder de liters op de kaart:</div>
@@ -487,7 +498,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 141</div>
+  <div class="voet" id="voetVersie">versie 142</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1779,6 +1790,8 @@ function start() {
         kmLaag.addLayer(L.tooltip({ direction: "center", className: "kml" + (klaar ? " klaar" : "") }).setLatLng(c).setContent(kmLabel(l > 0 ? hv(n, l) : "niet", leden.reduce((t, q) => t + haVan(q), 0), l > 0 ? stukLhaTxt(n, leden) : "")));
       });
     });
+    // Combinatie: oranje omlijnd (ook bij andere bedrijven)
+    kmCombiStukken().forEach(c => c.leden.forEach(q => kmLaag.addLayer(L.geoJSON(q.geometry, { style: { color: "#e8590c", weight: 5, fillColor: "#e8590c", fillOpacity: .2 }, interactive: false }))));
     // Percelen op de kaart zonder naam: gestippeld
     if (!naamActief) sel.forEach(q => kmLaag.addLayer(L.geoJSON(q.geometry, { style: { color: "#8a8f86", weight: 2, dashArray: "4 4", fillOpacity: .05 }, interactive: false })));
   }
@@ -1788,6 +1801,13 @@ function start() {
     if (!hits.length) {
       kmSay(!naamActief && sel.some(q => Perceel.bevatPunt(q.geometry, lon, lat)) ? "Dit perceel staat nog niet onder een bedrijf. Bewaar het eerst onder Percelen."
         : "Hier ligt geen perceel van een bedrijf. Percelen kies je onder Percelen en bewaar je daar onder een bedrijf.", true);
+      return;
+    }
+    if (kmCombiAan) {
+      // Al in de combinatie: eruit; anders de eerste erbij
+      const j = kmCombi.findIndex(c => hits.some(h => h.naam === c.naam && h.key === c.key));
+      if (j >= 0) kmCombi.splice(j, 1); else kmCombi.push(hits[0]);
+      kmCombiTeken(); kmKaartTeken();
       return;
     }
     // Staat het onder twee namen: nog eens tikken wisselt
@@ -1807,6 +1827,7 @@ function start() {
     else kmSay("");
     if (kmKeus) { if (stuk) kaart.appendChild(kmStukKaart(stuk, n, lijst)); kaart.appendChild(kmEigenaar(n, lijst, stuk)); kmTotaal(n); kmRijen(n, lijst, stuk); }
     kmOverzicht();
+    kmCombiTeken();
     kmKaartTeken();
   }
   // Het aangetikte stuk (perceel of kavel): van wie, bruto ha, l/ha en liters, notitie, gedaan, route.
@@ -1968,7 +1989,49 @@ function start() {
     });
     box.appendChild(ul);
   }
-  tankEl.addEventListener("input", () => { store.set(tankEl.dataset.eh === "m3" ? "kaartTankM3" : "kaartTankL", tankEl.value); if (kmKeus) { const n = namen.find(x => x.naam === kmKeus.naam); if (n) kmTotaal(n); } });
+  // ---------- Combineren: percelen (ook van verschillende bedrijven) samen in de tank ----------
+  // Aan = tikken op de kaart zet een stuk (perceel of kavel) in de combinatie of haalt het eruit. Liters per stuk met de
+  // l/ha (of m³/ha) van dat bedrijf; samen omgerekend naar de tank. Niet bewaard: alleen voor nu.
+  // var + functies: de kaarttekening (eerder in de code) mag ze al gebruiken
+  var kmCombiAan = false, kmCombi = []; // [{ naam, key }]
+  function kmCombiStukken() { return (kmCombi || []).map(c => { const n = namen.find(x => x.naam === c.naam), st = n && stukVan(n, c.key); return st ? Object.assign({ n }, c, st) : null; }).filter(Boolean); }
+  function kmCombiTeken() {
+    if (!$("kmCombiKnop")) return;
+    const knop = $("kmCombiKnop"); knop.setAttribute("aria-pressed", kmCombiAan); knop.textContent = "Combineren: " + (kmCombiAan ? "aan" : "uit");
+    const st = kmCombiStukken(), box = $("kmCombi");
+    box.hidden = !kmCombiAan && !st.length;
+    if (box.hidden) return;
+    const m3 = isM3(), tank = tankVan();
+    let liters = 0, ha = 0, leeg = 0;
+    const ul = $("kmCombiLijst"); ul.innerHTML = "";
+    st.forEach((c, i) => {
+      const l = stukLiters(c.n, c.leden), h = c.leden.reduce((t, q) => t + haVan(q), 0), ingevuld = c.leden.every(q => lhaVan(q, c.n) != null);
+      liters += l; ha += h; if (!ingevuld) leeg++;
+      const lijst = percelenVan(c.n), li = el("li"), go = el("div");
+      go.append(el("div", "name", c.n.naam + " · " + (c.kv ? c.kv.naam : "perceel " + (lijst.indexOf(c.leden[0]) + 1))),
+        el("div", "meta", haTxt(h) + " ha · " + (ingevuld ? stukLhaTxt(c.n, c.leden) : "nog niet ingevuld")));
+      const x = el("button", "x", "×"); x.type = "button"; x.setAttribute("aria-label", "Uit de combinatie");
+      x.addEventListener("click", ev => { ev.stopPropagation(); kmCombi.splice(kmCombi.findIndex(k => k.naam === c.naam && k.key === c.key), 1); kmCombiTeken(); kmKaartTeken(); });
+      li.append(el("div", "nr num", String(i + 1)), go, el("div", "w num", l > 0 ? hv(c.n, l) : ""), x);
+      ul.appendChild(li);
+    });
+    $("kmCombiLbl").textContent = st.length ? "Combinatie: " + st.length + (st.length === 1 ? " stuk" : " stukken") + ", " + haTxt(ha) + " ha" : "Combinatie";
+    $("kmCombiL").textContent = st.length ? hv(null, liters) : "";
+    const sub = $("kmCombiSub"); sub.className = "meta";
+    if (!st.length) { sub.textContent = "Tik percelen op de kaart om ze samen te tellen; nog eens tikken haalt er een uit."; return; }
+    let t = "";
+    if (!(tank > 0)) t = "Vul onderaan je " + (m3 ? "mesttank (m³)" : "tank (l)") + " in, dan zie je of het past.";
+    else if (liters <= tank + 1e-9) t = "Past in 1 tank: nog " + hv(null, tank - liters) + " over.";
+    else { const vol = Math.floor(liters / tank + 1e-9), rest = liters - vol * tank; t = "Te veel voor 1 tank: " + vol + (vol === 1 ? " volle tank" : " volle tanks") + (rest >= (m3 ? 0.05 : 1) ? " + " + hv(null, rest) : "") + " (" + hv(null, liters - tank) + " te veel)."; }
+    if (leeg) { t += " Let op: bij " + leeg + (leeg === 1 ? " stuk" : " stukken") + " is nog niks ingevuld, die tellen niet mee."; sub.className = "meta warn"; }
+    sub.textContent = t;
+  }
+  $("kmCombiKnop").addEventListener("click", () => {
+    kmCombiAan = !kmCombiAan; kmCombiTeken(); kmKaartTeken();
+    kmSay(kmCombiAan ? "Combineren: tik percelen op de kaart om de liters bij elkaar op te tellen (ook van verschillende bedrijven); nog eens tikken haalt er een uit." : "Combineren uit. Tik een perceel om het in te vullen.");
+  });
+  $("kmCombiWis").addEventListener("click", () => { kmCombi.length = 0; kmCombiTeken(); kmKaartTeken(); });
+  tankEl.addEventListener("input", () => { store.set(tankEl.dataset.eh === "m3" ? "kaartTankM3" : "kaartTankL", tankEl.value); if (kmKeus) { const n = namen.find(x => x.naam === kmKeus.naam); if (n) kmTotaal(n); } kmCombiTeken(); });
   // ---------- Tabblad Meten: stukken zonder RVO-perceel (tuin, weide) meten door hoeken te tikken, zaad uitrekenen ----------
   // Eén meting (klus) kan meerdere stukken hebben (Stuk erbij); zaad over het totaal. Tik op de kaart = hoekpunt erbij in het
   // stuk dat je bewerkt; punten slepen; bolletje tussen twee punten = punt ertussen; tik een ander stuk om dat te bewerken.

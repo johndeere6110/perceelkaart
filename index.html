@@ -482,7 +482,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 138</div>
+  <div class="voet" id="voetVersie">versie 139</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3214,17 +3214,10 @@ function start() {
   // Opslag beschermen: vraag de browser de gegevens niet op te ruimen bij weinig ruimte, en laat zien of dat lukte
   (async () => {
     const el = $("opslagStand");
-    // Waar de bedrijven en percelen staan, en hoeveel ruimte dat is
-    const mb = n => (n / 1e6).toLocaleString("nl-NL", { maximumFractionDigits: n < 1e7 ? 1 : 0 }) + " MB";
-    let waar = Opslag.modus === "idb"
-      ? " Bedrijven en percelen: " + mb(Opslag.grootte()) + " in de database van de app."
-      : " Bedrijven en percelen: " + mb(Opslag.grootte()) + " in de gewone opslag (± 5 MB voor dit adres, samen met de Zaaihulp).";
-    try {
-      if (Opslag.modus === "idb" && navigator.storage && navigator.storage.estimate) {
-        const e = await navigator.storage.estimate();
-        if (e && e.quota) waar += " Ruimte die de browser toestaat: " + mb(e.quota) + ".";
-      }
-    } catch (e) {}
+    // In de database is ruimte genoeg: geen MB's tonen. Alleen als de app op de oude opslag (± 5 MB) terugvalt een waarschuwing.
+    const mb = n => (n / 1e6).toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + " MB";
+    const waar = Opslag.modus === "idb" ? ""
+      : " Let op: de database van de app werkt hier niet; bedrijven en percelen (" + mb(Opslag.grootte()) + ") staan in de gewone opslag, waar maar ± 5 MB in past (samen met de Zaaihulp).";
     try {
       if (!navigator.storage || !navigator.storage.persisted) { el.textContent = "Opslag: deze browser zegt niet of de gegevens beschermd zijn." + waar; return; }
       let p = await navigator.storage.persisted();

@@ -126,6 +126,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .erf { width: 30px; height: 30px; border-radius: 50%; background: #F8FAF6; border: 2px solid #2F5A2B; color: #2F5A2B; font: 900 22px/25px system-ui, sans-serif; -webkit-text-stroke: .6px currentColor; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
 .erf.actief { background: #E8B400; border-color: #1C2318; color: #1C2318; }
 .leaflet-tooltip.erfnaam { font: 600 13px "Barlow", system-ui, sans-serif; padding: 1px 6px; }
+#map.erfVer .leaflet-tooltip.erfnaam:not(.actief) { display: none; }
 .erfpop { display: grid; gap: 6px; min-width: 160px; font: 14px "Barlow", system-ui, sans-serif; }
 .erfpop .btn { min-height: 38px; font-size: 15px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
 .erfpaneel { border-color: #2F5A2B; }
@@ -512,7 +513,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 146</div>
+  <div class="voet" id="voetVersie">versie 147</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -997,6 +998,10 @@ function start() {
     if (e.adres) o.adres = String(e.adres).slice(0, 120);
     return o;
   }
+  // Namen bij de huisjes: dichtbij (zoom 16 en verder) bij alle bedrijven, verder weg alleen bij het bedrijf op de kaart
+  const ERF_NAAM_ZOOM = 16;
+  const erfNaamZicht = () => $("map").classList.toggle("erfVer", map.getZoom() < ERF_NAAM_ZOOM);
+  map.on("zoomend", erfNaamZicht); erfNaamZicht();
   const erfRoute = e => "https://www.google.com/maps/dir/?api=1&destination=" + e.lat.toFixed(6) + "," + e.lon.toFixed(6);
   const erfTxt = e => e.adres || (e.lat.toFixed(5).replace(".", ",") + " / " + e.lon.toFixed(5).replace(".", ","));
   function tekenErven() {
@@ -1006,7 +1011,7 @@ function start() {
       const e = erfSchoon(n.erf); if (!e) return;
       const actief = n.naam === naamActief;
       const m = L.marker([e.lat, e.lon], { icon: L.divIcon({ className: "", html: '<div class="erf' + (actief ? " actief" : "") + '" aria-hidden="true">⌂</div>', iconSize: [30, 30], iconAnchor: [15, 15] }), keyboard: false, zIndexOffset: 500 });
-      m.bindTooltip(n.naam, { direction: "top", offset: [0, -14], permanent: actief, className: "erfnaam" });
+      m.bindTooltip(n.naam, { direction: "top", offset: [0, -14], permanent: true, className: "erfnaam" + (actief ? " actief" : "") });
       m.on("click", ev => {
         L.DomEvent.stop(ev);
         const d = document.createElement("div"); d.className = "erfpop";

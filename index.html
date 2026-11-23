@@ -122,6 +122,20 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .abl.vrijp.gekozen { background: #fff; color: #e8590c; border-color: #e8590c; box-shadow: 0 0 0 4px rgba(232, 89, 12, .45); }
 .hint { font-size: 15px; color: var(--muted); margin-top: 8px; min-height: 1.4em; }
 .hint.warn { color: var(--warn); font-weight: 600; }
+/* Boerderij: huisje op de kaart */
+.erf { width: 30px; height: 30px; border-radius: 50%; background: #F8FAF6; border: 2px solid #2F5A2B; color: #2F5A2B; font: 900 22px/25px system-ui, sans-serif; -webkit-text-stroke: .6px currentColor; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.erf.actief { background: #E8B400; border-color: #1C2318; color: #1C2318; }
+.leaflet-tooltip.erfnaam { font: 600 13px "Barlow", system-ui, sans-serif; padding: 1px 6px; }
+.erfpop { display: grid; gap: 6px; min-width: 160px; font: 14px "Barlow", system-ui, sans-serif; }
+.erfpop .btn { min-height: 38px; font-size: 15px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
+.erfpaneel { border-color: #2F5A2B; }
+.erfpaneel input { font: inherit; font-size: 16px; }
+.zoeklijst { list-style: none; margin: 4px 0 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.zoeklijst[hidden] { display: none; }
+.zoeklijst li { padding: 10px 12px; border-top: 1px solid var(--line); cursor: pointer; }
+.zoeklijst li:first-child { border-top: 0; }
+.zoeklijst li.leeg { color: var(--muted); cursor: default; }
+a.btn#erfRoute { display: flex; align-items: center; justify-content: center; text-decoration: none; }
 /* Zoeken op adres, postcode of plaats (PDOK Locatieserver) */
 /* Mijn locatie en zoeken naast elkaar */
 .mijnrij #bMij { flex: 0 0 auto; padding: 0 14px; }
@@ -498,7 +512,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 145</div>
+  <div class="voet" id="voetVersie">versie 146</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -972,6 +986,63 @@ function start() {
   // Spuitsporen onder de perceelranden tekenen
   const spoorLaag = L.layerGroup().addTo(map);
   const laag = L.layerGroup().addTo(map);
+  // ---------- Boerderij per bedrijf (n.erf = { lat, lon, adres }): huisje op de kaart, route, gaat mee in de groep ----------
+  const erfLaag = L.layerGroup().addTo(map);
+  let erfModus = null, erfOpen = false; // erfModus: naam waarvoor de volgende tik op de kaart de boerderij zet
+  function erfSchoon(e) {
+    if (!e || typeof e !== "object") return null;
+    const lat = Number(e.lat), lon = Number(e.lon);
+    if (!isFinite(lat) || !isFinite(lon) || lat < 50.6 || lat > 53.7 || lon < 3.1 || lon > 7.4) return null;
+    const o = { lat: Math.round(lat * 1e6) / 1e6, lon: Math.round(lon * 1e6) / 1e6 };
+    if (e.adres) o.adres = String(e.adres).slice(0, 120);
+    return o;
+  }
+  const erfRoute = e => "https://www.google.com/maps/dir/?api=1&destination=" + e.lat.toFixed(6) + "," + e.lon.toFixed(6);
+  const erfTxt = e => e.adres || (e.lat.toFixed(5).replace(".", ",") + " / " + e.lon.toFixed(5).replace(".", ","));
+  function tekenErven() {
+    erfLaag.clearLayers();
+    if (typeof namen === "undefined") return;
+    namen.forEach(n => {
+      const e = erfSchoon(n.erf); if (!e) return;
+      const actief = n.naam === naamActief;
+      const m = L.marker([e.lat, e.lon], { icon: L.divIcon({ className: "", html: '<div class="erf' + (actief ? " actief" : "") + '" aria-hidden="true">⌂</div>', iconSize: [30, 30], iconAnchor: [15, 15] }), keyboard: false, zIndexOffset: 500 });
+      m.bindTooltip(n.naam, { direction: "top", offset: [0, -14], permanent: actief, className: "erfnaam" });
+      m.on("click", ev => {
+        L.DomEvent.stop(ev);
+        const d = document.createElement("div"); d.className = "erfpop";
+        const b = document.createElement("b"); b.textContent = n.naam; d.appendChild(b);
+        if (e.adres) { const a = document.createElement("div"); a.textContent = e.adres; d.appendChild(a); }
+        const ro = document.createElement("a"); ro.href = erfRoute(e); ro.target = "_blank"; ro.rel = "noopener"; ro.className = "btn klein"; ro.textContent = "Route (Maps)"; d.appendChild(ro);
+        if (!actief) { const t = document.createElement("button"); t.type = "button"; t.className = "btn klein"; t.textContent = "Percelen tonen"; t.addEventListener("click", () => { map.closePopup(); laadNaam(n.naam); toonTab("perc"); }); d.appendChild(t); }
+        L.popup({ offset: [0, -10] }).setLatLng([e.lat, e.lon]).setContent(d).openOn(map);
+      });
+      erfLaag.addLayer(m);
+    });
+  }
+  // Adres bij een punt (PDOK Locatieserver); lukt het niet, dan zonder adres
+  async function erfAdres(lat, lon) {
+    try {
+      const r = await fetch("https://api.pdok.nl/bzk/locatieserver/search/v3_1/reverse?type=adres&rows=1&fl=weergavenaam&lat=" + lat.toFixed(6) + "&lon=" + lon.toFixed(6));
+      const d = await r.json(), doc = d && d.response && d.response.docs && d.response.docs[0];
+      return doc && doc.weergavenaam ? String(doc.weergavenaam) : "";
+    } catch (e) { return ""; }
+  }
+  function zetErf(naam, e) {
+    const n = namen.find(x => x.naam === naam); if (!n) return;
+    const s = erfSchoon(e);
+    if (s) n.erf = s; else delete n.erf;
+    if (n.naam === naamActief) bewaarNaam(); else zetNamen();
+    teken();
+  }
+  // Punt gekozen (kaart of GPS): meteen zetten, adres erbij zodra het binnen is
+  async function erfOpPunt(naam, lat, lon) {
+    zetErf(naam, { lat, lon });
+    say("Boerderij van " + naam + " staat op de kaart. Adres opzoeken…");
+    const adres = await erfAdres(lat, lon);
+    const n = namen.find(x => x.naam === naam);
+    if (adres && n && n.erf && Math.abs(n.erf.lat - lat) < 1e-6) zetErf(naam, { lat, lon, adres });
+    say("Boerderij van " + naam + ": " + (adres || "punt op de kaart") + ".");
+  }
   const bewaar = () => { store.set("kaartTestSelectie", sel); bewaarNaam(); };
   const spuitEl = $("spuitB");
   spuitEl.value = store.get("kaartSpuitBreedte", "27");
@@ -1300,6 +1371,7 @@ function start() {
   function teken() {
     laag.clearLayers(); spoorLaag.clearLayers();
     pnrLagen.length = 0; planLabels(); // labels opnieuw passen zodra alles getekend is
+    tekenErven();
     const sb = spuitBreedte();
     $("bSpuit").setAttribute("aria-pressed", spuitAan);
     $("bSpuit").textContent = "Spuiten: " + (spuitAan ? "aan" : "uit");
@@ -1561,6 +1633,7 @@ function start() {
     if (n.km) o.km = n.km;
     if (n.mest) o.mest = n.mest;
     if (n.wacht) o.wacht = n.wacht;
+    if (n.erf) o.erf = n.erf;
     return o;
   }
   function zetNamen() {
@@ -2550,14 +2623,15 @@ function start() {
     const it = {}, km = kmSchoon(n.km), mest = kmSchoon(n.mest), kv = n.naam === naamActief ? kavels : (n.kavels || []);
     if (km) it.km = km;
     if (mest) it.mest = mest;
+    { const e = erfSchoon(n.erf); if (e) it.erf = e; }
     if (kv.length) it.k = kv.map(v => abVelden(v, { n: v.naam, l: v.leden.slice() }));
     percelenNaam(n).forEach(q => { it["p:" + q.key] = perceelDeel(q); });
     (n.wacht || []).forEach(w => { if (!it["p:" + w.key]) it["p:" + w.key] = w.x; });
     return it;
   }
   const hashes = it => Object.fromEntries(Object.entries(it).map(([k, v]) => [k, itemHash(k, v)]));
-  const docUit = (naam, it) => ({ v: 1, n: naam, km: it.km || null, mest: it.mest || null, k: it.k || [], p: Object.fromEntries(Object.entries(it).filter(([k]) => k.startsWith("p:")).map(([k, v]) => [k.slice(2), v])) });
-  const docItems = d => { const it = {}; if (d.km) it.km = d.km; if (d.mest) it.mest = d.mest; if (Array.isArray(d.k) && d.k.length) it.k = d.k; Object.entries(d.p || {}).forEach(([k, v]) => { if (v && Array.isArray(v.pt)) it["p:" + k] = v; }); return it; };
+  const docUit = (naam, it) => ({ v: 1, n: naam, km: it.km || null, mest: it.mest || null, erf: it.erf || null, k: it.k || [], p: Object.fromEntries(Object.entries(it).filter(([k]) => k.startsWith("p:")).map(([k, v]) => [k.slice(2), v])) });
+  const docItems = d => { const it = {}; if (d.km) it.km = d.km; if (d.mest) it.mest = d.mest; { const e = erfSchoon(d.erf); if (e) it.erf = e; } if (Array.isArray(d.k) && d.k.length) it.k = d.k; Object.entries(d.p || {}).forEach(([k, v]) => { if (v && Array.isArray(v.pt)) it["p:" + k] = v; }); return it; };
   function voegSamen(L, R, B) {
     const uit = {}, keys = new Set([...Object.keys(L), ...Object.keys(R), ...Object.keys(B)]);
     keys.forEach(k => {
@@ -2571,6 +2645,7 @@ function start() {
   function zetNaam(n, it) {
     const km = kmSchoon(it.km); if (km) n.km = km; else delete n.km;
     const mest = kmSchoon(it.mest); if (mest) n.mest = mest; else delete n.mest;
+    { const e = erfSchoon(it.erf); if (e) n.erf = e; else delete n.erf; }
     const kv = (it.k || []).map(v => abTerug(v, { naam: v.n, leden: (v.l || []).slice() }));
     const lijst = percelenNaam(n), wil = Object.keys(it).filter(k => k.startsWith("p:")).map(k => k.slice(2));
     const blijft = lijst.filter(q => wil.includes(q.key));
@@ -2860,7 +2935,7 @@ function start() {
         const nm = document.createElement("div"); nm.className = "name"; nm.textContent = n.naam;
         const mt = document.createElement("div"); mt.className = "meta";
         const kv = (n.kavels || []).length;
-        mt.textContent = n.sel.length + (n.sel.length === 1 ? " perceel" : " percelen") + (kv ? ", " + kv + (kv === 1 ? " kavel" : " kavels") : "") + (actief ? " · nu op de kaart" : "") + (offline[n.naam] ? " · kaart offline" : "") +
+        mt.textContent = n.sel.length + (n.sel.length === 1 ? " perceel" : " percelen") + (erfSchoon(n.erf) ? " · ⌂ boerderij" : "") + (kv ? ", " + kv + (kv === 1 ? " kavel" : " kavels") : "") + (actief ? " · nu op de kaart" : "") + (offline[n.naam] ? " · kaart offline" : "") +
           ((n.wacht || []).length ? " · " + n.wacht.length + " nog ophalen" : "") + (groepActief() && groepVan[naamId(n.naam)] && groepVan[naamId(n.naam)] !== groep.naam.trim() ? " · laatst door " + groepVan[naamId(n.naam)] : "");
         go.append(nm, mt);
         [["km", "Kunstmest: "], ["mest", "Mest: "]].forEach(([soort, kop]) => { const t = metSoort(soort, () => kmKort(n)); if (t) { const k = document.createElement("div"); k.className = "meta"; k.textContent = kop + t; go.appendChild(k); } });
@@ -2915,7 +2990,7 @@ function start() {
       const r = document.createElement("div"); r.className = "lijst"; r.style.marginTop = "6px";
       // Afronden: kaart leeg, de naam blijft bewaard; daarna percelen voor de volgende naam aantikken
       const klaar = kn("Klaar met " + naamActief, () => {
-        wijzigen = false; (uitgelicht.clear(), keuzeVolg.length = 0); hernoemOpen = false;
+        wijzigen = false; (uitgelicht.clear(), keuzeVolg.length = 0); hernoemOpen = false; erfOpen = false; erfModus = null;
         const was = naamActief; bewaarNaam(); naamActief = null; store.set("kaartNaamActief", null); zetNamen();
         sel = []; kavels = []; bewaar(); bewaarK(); setOever(false); setKoppel(false); setAB(false); teken();
         say(was + " is bewaard (zie Bedrijven). Tik percelen aan voor het volgende bedrijf.");
@@ -2927,6 +3002,7 @@ function start() {
         say(wijzigen ? "Tik percelen aan om ze toe te voegen of weg te halen." : "Klaar met wijzigen. " + naamActief + " is bewaard.");
       }, wijzigen));
       r.appendChild(kn("Naam wijzigen", () => { hernoemOpen = !hernoemOpen; teken(); if (hernoemOpen) setTimeout(() => { const i = $("hernoemNaam"); if (i) { i.focus(); i.select(); } }, 0); }, hernoemOpen));
+      r.appendChild(kn("Boerderij", () => { erfOpen = !erfOpen; erfModus = null; teken(); }, erfOpen));
       r.appendChild(kn("Delen", e => deel(e.currentTarget)));
       { const b = kn(offlineLabel(naamActief), () => bewaarOffline(naamActief)); b.id = "bOffline"; r.appendChild(b); }
       r.appendChild(kn("Bedrijf weghalen", e => {
@@ -2938,6 +3014,48 @@ function start() {
         say(was + " is weggehaald. De percelen staan nog op de kaart, zonder bedrijf.");
       }));
       box.append(m, r);
+      // Boerderij: route als hij er is; instellen met adres zoeken, aantikken of de eigen locatie
+      {
+        const nA = namen.find(x => x.naam === naamActief), e = nA && erfSchoon(nA.erf);
+        if (e && !erfOpen) {
+          const rr = document.createElement("div"); rr.className = "lijst"; rr.style.marginTop = "6px";
+          const a = document.createElement("a"); a.className = "btn"; a.id = "erfRoute"; a.href = erfRoute(e); a.target = "_blank"; a.rel = "noopener"; a.textContent = "Route naar de boerderij";
+          rr.appendChild(a); box.appendChild(rr);
+        }
+        if (erfOpen) {
+          const p = document.createElement("div"); p.className = "advice erfpaneel";
+          const kop = document.createElement("div"); kop.className = "wie"; kop.textContent = "Boerderij van " + naamActief;
+          const nu = document.createElement("div"); nu.className = "meta"; nu.id = "erfNu";
+          nu.textContent = e ? erfTxt(e) : "Nog niet ingesteld. Zoek het adres, tik hem aan op de kaart, of zet hem op je eigen plek.";
+          const zr = document.createElement("div"); zr.className = "opslaan";
+          const inp = document.createElement("input"); inp.type = "search"; inp.id = "erfZoek"; inp.placeholder = "Adres, bijv. Dijkweg 100 Andijk"; inp.autocomplete = "off"; inp.setAttribute("aria-label", "Adres van de boerderij");
+          zr.appendChild(inp);
+          const ul = document.createElement("ul"); ul.id = "erfLijst"; ul.className = "zoeklijst"; ul.hidden = true;
+          let t = null, nr = 0;
+          const kies = d => { const m2 = /POINT\(([-\d.]+) ([-\d.]+)\)/.exec(d.centroide_ll || ""); if (!m2) return; zetErf(naamActief, { lat: +m2[2], lon: +m2[1], adres: d.weergavenaam }); erfOpen = false; teken(); map.setView([+m2[2], +m2[1]], 16); say("Boerderij van " + naamActief + ": " + d.weergavenaam + "."); };
+          inp.addEventListener("input", () => {
+            clearTimeout(t); const q = inp.value.trim(); const mijn = ++nr;
+            if (q.length < 3) { ul.hidden = true; return; }
+            t = setTimeout(async () => {
+              try {
+                const r = await fetch(LOCSERVER + "?rows=5&fl=weergavenaam,type,centroide_ll&fq=" + encodeURIComponent("type:(adres OR postcode OR weg)") + "&q=" + encodeURIComponent(q));
+                const d = await r.json(); if (mijn !== nr) return;
+                ul.innerHTML = ""; (d.response.docs || []).forEach(x => { const li = document.createElement("li"); li.textContent = x.weergavenaam; li.addEventListener("click", () => kies(x)); ul.appendChild(li); });
+                if (!ul.childNodes.length) { const li = document.createElement("li"); li.className = "leeg"; li.textContent = "Niks gevonden. Probeer straat + huisnummer + plaats."; ul.appendChild(li); }
+                ul.hidden = false;
+              } catch (er) { ul.innerHTML = ""; const li = document.createElement("li"); li.className = "leeg"; li.textContent = "Zoeken lukte niet (internet?)."; ul.appendChild(li); ul.hidden = false; }
+            }, 300);
+          });
+          inp.addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); const li = ul.querySelector("li:not(.leeg)"); if (li) li.click(); } });
+          const kr = document.createElement("div"); kr.className = "lijst"; kr.style.marginTop = "6px";
+          kr.appendChild(kn("Aantikken op de kaart", () => { erfModus = naamActief; $("map").classList.add("oever"); say("Tik op de kaart waar de boerderij (het erf) is."); window.scrollTo(0, 0); }));
+          kr.appendChild(kn("Ik sta er nu", async ev => { const b = ev.currentTarget; b.disabled = true; try { const pos = await pakLocatie(() => b.click()); erfOpen = false; await erfOpPunt(naamActief, pos.lat, pos.lon); } catch (er) { say(er.message, true); } finally { b.disabled = false; } }));
+          if (e) kr.appendChild(kn("Weghalen", ev => { if (!armed(ev.currentTarget, "Tik nog eens")) return; zetErf(naamActief, null); say("Boerderij weggehaald."); }));
+          kr.appendChild(kn("Klaar", () => { erfOpen = false; erfModus = null; $("map").classList.remove("oever"); teken(); }));
+          p.append(kop, nu, zr, ul, kr);
+          box.appendChild(p);
+        }
+      }
       if (hernoemOpen) {
         const rr = document.createElement("div"); rr.className = "opslaan"; rr.style.marginTop = "8px";
         const inp = document.createElement("input"); inp.type = "text"; inp.maxLength = 40; inp.id = "hernoemNaam"; inp.value = naamActief; inp.setAttribute("aria-label", "Nieuwe naam voor " + naamActief);
@@ -3206,7 +3324,7 @@ function start() {
     });
   }
   renderTypes();
-  map.on("click", ev => tabNu === "met" ? metTik(ev.latlng) : tabNu === "km" ? kmTik(ev.latlng.lat, ev.latlng.lng) : vrijModus ? vrijTik(ev.latlng) : abModus ? abTik(ev.latlng) : koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
+  map.on("click", ev => erfModus ? (() => { const naam = erfModus; erfModus = null; erfOpen = false; $("map").classList.remove("oever"); erfOpPunt(naam, ev.latlng.lat, ev.latlng.lng); })() : tabNu === "met" ? metTik(ev.latlng) : tabNu === "km" ? kmTik(ev.latlng.lat, ev.latlng.lng) : vrijModus ? vrijTik(ev.latlng) : abModus ? abTik(ev.latlng) : koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
   teken();
   // Paneel eronder groeit/krimpt: kaart laten meeschalen
   if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe($("map"));

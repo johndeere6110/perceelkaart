@@ -96,6 +96,11 @@ header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-
 .namen input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .namen .meta { margin-top: 6px; }
 .namenlijst { margin-top: 4px; }
+.namenzoek { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; }
+.namenzoek[hidden] { display: none; }
+.namenzoek input { flex: 1; min-width: 0; font: inherit; font-size: 16px; }
+.namenzoek .meta { flex: none; white-space: nowrap; }
+.namenlijst li[hidden] { display: none; }
 .namen .binnen { margin: 6px 0 8px; }
 .log li.uitgelicht .name { color: #e8590c; font-weight: 700; }
 .namenlijst li { cursor: pointer; }
@@ -456,6 +461,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
   </div>
   <div id="paneelNamen" class="namen" hidden>
     <div class="hint" id="namenHint"></div>
+    <div class="namenzoek" id="namenZoekRij" hidden><input type="search" id="namenZoek" placeholder="Zoek bedrijf (naam of adres)" autocomplete="off" aria-label="Zoek bedrijf"><span class="meta" id="namenZoekTel"></span></div>
     <div id="namenLijstBox"></div>
   </div>
   <div id="paneelInst" class="namen" hidden>
@@ -513,7 +519,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 148</div>
+  <div class="voet" id="voetVersie">versie 149</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -2913,6 +2919,25 @@ function start() {
     if (offline[oud]) { offline[nieuw] = offline[oud]; delete offline[oud]; store.set("kaartOffline", offline); }
     if (kmKeus && kmKeus.naam === oud) kmKeus.naam = nieuw;
   }
+  // Zoeken in de bedrijvenlijst (vanaf NAMEN_ZOEK_VANAF bedrijven): op naam, adres van de boerderij en middel; zonder hoofdletters en accenten
+  // var/function: renderNamen kan al draaien voordat dit stuk code aan de beurt was
+  var NAMEN_ZOEK_VANAF = 6;
+  function zoekVorm(t) { return String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim(); }
+  function namenFilter() {
+    const rij = $("namenZoekRij"), inp = $("namenZoek");
+    rij.hidden = namen.length < (NAMEN_ZOEK_VANAF || 6);
+    if (rij.hidden && inp.value) inp.value = "";
+    const woorden = zoekVorm(inp.value).split(" ").filter(Boolean), lis = [...document.querySelectorAll("#namenLijstBox .namenlijst > li")];
+    let n = 0;
+    lis.forEach(li => { const ok = woorden.every(w => (li.dataset.zoek || "").includes(w)); li.hidden = !ok; if (ok) n++; });
+    $("namenZoekTel").textContent = woorden.length ? (n ? n + " van " + lis.length : "niks gevonden") : "";
+    return lis.filter(li => !li.hidden);
+  }
+  $("namenZoek").addEventListener("input", namenFilter);
+  $("namenZoek").addEventListener("keydown", ev => {
+    if (ev.key === "Enter") { const over = namenFilter(); if (over.length === 1) { ev.preventDefault(); $("namenZoek").blur(); over[0].click(); } }
+    if (ev.key === "Escape") { $("namenZoek").value = ""; namenFilter(); }
+  });
   function renderNamen() {
     const box = $("namenBox"), lijstBox = $("namenLijstBox");
     box.innerHTML = ""; lijstBox.innerHTML = "";
@@ -2934,6 +2959,7 @@ function start() {
       namen.slice().sort((a, b) => a.naam.localeCompare(b.naam, "nl")).forEach(n => {
         const li = document.createElement("li"), actief = n.naam === naamActief;
         if (actief) li.className = "actief";
+        li.dataset.zoek = zoekVorm(n.naam + " " + ((erfSchoon(n.erf) || {}).adres || "") + " " + ((n.km || {}).wat || ""));
         const nr = document.createElement("div"); nr.className = "nr"; nr.textContent = actief ? "✓" : "";
         const go = document.createElement("button"); go.type = "button"; go.className = "go";
         go.setAttribute("aria-label", "Toon de percelen van " + n.naam);
@@ -2954,11 +2980,13 @@ function start() {
             setTimeout(() => { li.dataset.armed = ""; mt.textContent = oud; mt.style.color = ""; }, 3000);
             return;
           }
+          $("namenZoek").value = ""; // terug bij Bedrijven: weer de hele lijst
           laadNaam(n.naam); toonTab("perc"); window.scrollTo(0, 0);
         });
         ul.appendChild(li);
       });
       lijstBox.appendChild(ul);
+      namenFilter();
     } else {
       const m = document.createElement("div"); m.className = "meta";
       m.textContent = "Nog geen bedrijven. Kies percelen onder Percelen en tik daar Bewaar onder bedrijf.";

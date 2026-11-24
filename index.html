@@ -129,10 +129,12 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .hint.warn { color: var(--warn); font-weight: 600; }
 /* Boerderij: huisje op de kaart */
 .erf { width: 30px; height: 30px; border-radius: 50%; background: #F8FAF6; border: 2px solid #2F5A2B; color: #2F5A2B; font: 900 22px/25px system-ui, sans-serif; -webkit-text-stroke: .6px currentColor; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
-.erf.actief { background: #E8B400; border-color: #1C2318; color: #1C2318; transform: scale(var(--erf-schaal-actief, 1)); }
+.erf.actief { background: #E8B400; border-color: #1C2318; color: #1C2318; }
 .erf { transform: scale(var(--erf-schaal, 1)); transform-origin: 50% 50%; transition: transform .15s; }
 .leaflet-tooltip.erfnaam { font: 600 var(--erf-tekst, 12px)/1.25 "Barlow", system-ui, sans-serif; padding: 0 5px; }
-#map.erfVer .leaflet-tooltip.erfnaam:not(.actief) { visibility: hidden; } /* niet display:none: dan meet Leaflet breedte 0 en staat het label er na inzoomen naast */
+#map.erfVer .leaflet-tooltip.erfnaam:not(.actief), #map.erfVerAlles .leaflet-tooltip.erfnaam { visibility: hidden; }
+/* naam vlak boven het huisje, ook als het huisje kleiner is (15px = halve maat, 7px = pijltje) */
+.leaflet-tooltip-top.erfnaam { margin-top: calc(-7px - 15px * var(--erf-schaal, 1)); } /* niet display:none: dan meet Leaflet breedte 0 en staat het label er na inzoomen naast */
 .erfpop { display: grid; gap: 6px; min-width: 160px; font: 14px "Barlow", system-ui, sans-serif; }
 .erfpop .btn { min-height: 38px; font-size: 15px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
 .erfpaneel { border-color: #2F5A2B; }
@@ -520,7 +522,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 151</div>
+  <div class="voet" id="voetVersie">versie 152</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1008,11 +1010,12 @@ function start() {
   // Namen bij de huisjes: dichtbij (zoom 16 en verder) bij alle bedrijven, verder weg alleen bij het bedrijf op de kaart
   const ERF_NAAM_ZOOM = 16;
   // Huisjes krimpen mee bij uitzoomen (zoom 16+ vol, daaronder kleiner, ver weg een stipje); die van het bedrijf op de kaart iets minder
+  const ERF_NAAM_ZOOM_ACTIEF = 14; // daaronder ook geen naam bij het bedrijf op de kaart (dat perceel is al geel)
   const ERF_SCHAAL = { 15: 0.8, 14: 0.6, 13: 0.45, 12: 0.32 };
   const erfNaamZicht = () => {
     const z = Math.round(map.getZoom()), sc = z >= 16 ? 1 : (ERF_SCHAAL[z] || 0.25), m = $("map");
-    m.classList.toggle("erfVer", z < ERF_NAAM_ZOOM);
-    m.style.setProperty("--erf-schaal", sc); m.style.setProperty("--erf-schaal-actief", Math.max(sc, 0.6));
+    m.classList.toggle("erfVer", z < ERF_NAAM_ZOOM); m.classList.toggle("erfVerAlles", z < ERF_NAAM_ZOOM_ACTIEF);
+    m.style.setProperty("--erf-schaal", sc);
     m.style.setProperty("--erf-tekst", (z >= 17 ? 12 : z >= 16 ? 11 : 10) + "px"); // namen ook kleiner bij uitzoomen
     if (typeof erfLaag !== "undefined") erfLaag.eachLayer(l => { const t = l.getTooltip && l.getTooltip(); if (t && t.isOpen()) t.update(); }); // opnieuw centreren met de nieuwe maat
   };
@@ -1026,7 +1029,7 @@ function start() {
       const e = erfSchoon(n.erf); if (!e) return;
       const actief = n.naam === naamActief;
       const m = L.marker([e.lat, e.lon], { icon: L.divIcon({ className: "", html: '<div class="erf' + (actief ? " actief" : "") + '" aria-hidden="true">⌂</div>', iconSize: [30, 30], iconAnchor: [15, 15] }), keyboard: false, zIndexOffset: 500 });
-      m.bindTooltip(n.naam, { direction: "top", offset: [0, -14], permanent: true, className: "erfnaam" + (actief ? " actief" : "") });
+      m.bindTooltip(n.naam, { direction: "top", offset: [0, 0], permanent: true, className: "erfnaam" + (actief ? " actief" : "") });
       m.on("click", ev => {
         L.DomEvent.stop(ev);
         const d = document.createElement("div"); d.className = "erfpop";

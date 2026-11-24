@@ -209,6 +209,8 @@ body.metpijl main { padding-bottom: 90px; }
       if (!g || typeof g !== "object" || Array.isArray(g)) g = {};
       g.code = uitnodiging; g.aan = true;
       localStorage.setItem("kaartGroep", JSON.stringify(g));
+      // Seintje voor de app: ook als hij al open stond (op de achtergrond) of er al een naam in staat, opent hij Instellingen
+      localStorage.setItem("kaartGroepUitnodiging", JSON.stringify({ code: uitnodiging, ts: Date.now() }));
     } catch (e) { /* geen opslag: de app vraagt dan om de code (zie iPhone-uitleg) */ }
     show("vGroep");
     // iPhone: de app op het beginscherm heeft vaak eigen opslag, los van Safari: dan de code zelf invullen

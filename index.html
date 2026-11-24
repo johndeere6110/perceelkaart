@@ -522,7 +522,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 152</div>
+  <div class="voet" id="voetVersie">versie 153</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -2874,10 +2874,28 @@ function start() {
   // Uitgenodigd (groepslink of installatielink met groep): wel een code, nog geen naam. Dan bij het opstarten meteen
   // Instellingen open, cursor in het naamveld, met "Je bent uitgenodigd voor de groep. Vul je naam in."
   const uitgenodigd = () => !!(groep.aan && String(groep.code || "").trim() && !String(groep.naam || "").trim());
-  if (viaGroepslink || uitgenodigd()) {
+  // Uitnodiging van de installatiepagina (installeren.html?groep=): die zet kaartGroepUitnodiging {code, ts} klaar.
+  // Oppakken bij het starten, bij terugkomen in de app (stond hij op de achtergrond open) en als de opslag verandert.
+  function neemUitnodiging() {
+    const u = store.get("kaartGroepUitnodiging", null);
+    if (!u) return false;
+    try { Opslag.removeItem("kaartGroepUitnodiging"); } catch (e) {}
+    const c = String((u && u.code) || "").trim().slice(0, 100);
+    if (!c || !(Date.now() - (+u.ts || 0) < 7 * 864e5)) return false; // oud seintje: negeren
+    groep.code = c; groep.aan = true; store.set("kaartGroep", groep);
+    $("grCode").value = groep.code; $("grAan").checked = true;
+    return true;
+  }
+  function toonUitnodiging() {
     toonTab("inst");
     if (uitgenodigd()) setTimeout(() => { const i = $("grNaam"); try { i.scrollIntoView({ block: "center" }); i.focus(); } catch (e) {} }, 300);
+    else say("Groepscode van de uitnodiging staat erin.");
   }
+  if (neemUitnodiging()) viaGroepslink = true;
+  if (viaGroepslink || uitgenodigd()) toonUitnodiging();
+  const laterUitnodiging = () => { if (neemUitnodiging()) { renderGroep(); toonUitnodiging(); if (groepOk()) groepSync(); } };
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") laterUitnodiging(); });
+  window.addEventListener("storage", e => { if (e.key === "kaartGroepUitnodiging" && e.newValue) laterUitnodiging(); });
   renderGroep(); setTimeout(groepSync, 1500);
   {
     const d = leesDeel(location.hash);
@@ -3392,7 +3410,7 @@ function start() {
   // ---------- Back-up: alles in één bestand buiten de app (Downloads of Bestanden) ----------
   // Bevat de sleutels zoals ze bewaard zijn (letterlijke tekst): alle kaart*-sleutels en de grote gegevens uit de database.
   // Niet: de perceelcache (haalt hij zo weer op), het merkteken van de opslag en wanneer de laatste back-up was.
-  const BU_NIET = ["kaartOpslag", "kaartBackupTs"];
+  const BU_NIET = ["kaartOpslag", "kaartBackupTs", "kaartGroepUitnodiging"];
   function backupSleutels() {
     const ks = new Set(["kaartNamen", "kaartTestSelectie", "kaartKavels"]);
     try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^kaart/.test(k)) ks.add(k); } } catch (e) {}

@@ -129,7 +129,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .hint.warn { color: var(--warn); font-weight: 600; }
 /* Boerderij: huisje op de kaart */
 .erf { width: 30px; height: 30px; border-radius: 50%; background: #F8FAF6; border: 2px solid #2F5A2B; color: #2F5A2B; font: 900 22px/25px system-ui, sans-serif; -webkit-text-stroke: .6px currentColor; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
-.erf.actief { background: #E8B400; border-color: #1C2318; color: #1C2318; }
+.erf.actief { background: #E8B400; border-color: #1C2318; color: #1C2318; transform: scale(var(--erf-schaal-actief, 1)); }
+.erf { transform: scale(var(--erf-schaal, 1)); transform-origin: 50% 50%; transition: transform .15s; }
 .leaflet-tooltip.erfnaam { font: 600 13px "Barlow", system-ui, sans-serif; padding: 1px 6px; }
 #map.erfVer .leaflet-tooltip.erfnaam:not(.actief) { visibility: hidden; } /* niet display:none: dan meet Leaflet breedte 0 en staat het label er na inzoomen naast */
 .erfpop { display: grid; gap: 6px; min-width: 160px; font: 14px "Barlow", system-ui, sans-serif; }
@@ -519,7 +520,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 149</div>
+  <div class="voet" id="voetVersie">versie 150</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1006,7 +1007,13 @@ function start() {
   }
   // Namen bij de huisjes: dichtbij (zoom 16 en verder) bij alle bedrijven, verder weg alleen bij het bedrijf op de kaart
   const ERF_NAAM_ZOOM = 16;
-  const erfNaamZicht = () => $("map").classList.toggle("erfVer", map.getZoom() < ERF_NAAM_ZOOM);
+  // Huisjes krimpen mee bij uitzoomen (zoom 16+ vol, daaronder kleiner, ver weg een stipje); die van het bedrijf op de kaart iets minder
+  const ERF_SCHAAL = { 15: 0.8, 14: 0.6, 13: 0.45, 12: 0.32 };
+  const erfNaamZicht = () => {
+    const z = Math.round(map.getZoom()), sc = z >= 16 ? 1 : (ERF_SCHAAL[z] || 0.25), m = $("map");
+    m.classList.toggle("erfVer", z < ERF_NAAM_ZOOM);
+    m.style.setProperty("--erf-schaal", sc); m.style.setProperty("--erf-schaal-actief", Math.max(sc, 0.6));
+  };
   map.on("zoomend", erfNaamZicht); erfNaamZicht();
   const erfRoute = e => "https://www.google.com/maps/dir/?api=1&destination=" + e.lat.toFixed(6) + "," + e.lon.toFixed(6);
   const erfTxt = e => e.adres || (e.lat.toFixed(5).replace(".", ",") + " / " + e.lon.toFixed(5).replace(".", ","));

@@ -559,6 +559,12 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div class="lbl2">Experimenteel</div>
       <div class="meta">Bochten voor de trekker (Trimble FmX): een lijn die de rand van een perceel volgt. Nog niet op de trekker getest.</div>
       <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bExpBocht">Bochten maken</button><button type="button" class="btn" id="bExpUit" hidden>Bochten verbergen</button></div>
+      <div class="lbl2" style="margin-top:14px">Tekening over de kaart</div>
+      <div class="meta" id="tekInfo">Een tekening (bijv. een groenplan) als kaartlaag over de luchtfoto. Laad een .kaartlaag-bestand; het blijft alleen op dit apparaat en werkt ook zonder internet.</div>
+      <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bTekLaad">Tekening laden</button><button type="button" class="btn" id="bTekAan" aria-pressed="true" hidden>Tekening: aan</button><button type="button" class="btn" id="bTekWeg" hidden>Weghalen</button></div>
+      <div class="vk" id="tekDoorRij" hidden><label for="tekDoor">Zichtbaarheid</label><input type="range" id="tekDoor" min="15" max="100" step="5" value="75"></div>
+      <input type="file" id="tekBestand" accept=".kaartlaag,application/json" hidden>
+      <div class="hint" id="tekHint"></div>
     </div>
   </div>
   <div id="locHulp" role="dialog" aria-labelledby="locHulpKop" hidden>
@@ -570,7 +576,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 170</div>
+  <div class="voet" id="voetVersie">versie 171</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -584,7 +590,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
 // dan blijft alles in localStorage zoals vroeger. Staat er na het overzetten tóch weer iets in localStorage (een oude
 // versie van de app die leeg begon), dan wint IndexedDB en gaat het andere apart als reserve ("reserve:<sleutel>:<tijd>").
 window.Opslag = (function () {
-  const GROOT = ["kaartNamen", "kaartTestSelectie", "kaartKavels", "perceelCache", "perceelCacheRef"];
+  const GROOT = ["kaartNamen", "kaartTestSelectie", "kaartKavels", "perceelCache", "perceelCacheRef", "kaartTekening"];
   const groot = k => GROOT.indexOf(k) >= 0;
   const mem = new Map(), bezig = new Set(), wacht = new Set(), klaarFns = [];
   let db = null, foutFn = null, bevroren = false;
@@ -1043,6 +1049,8 @@ function start() {
   const zetWaterKnop = () => { const b = $("bWaterZicht"); b.setAttribute("aria-pressed", waterZicht); b.textContent = "Water tonen: " + (waterZicht ? "aan" : "uit"); };
   // Spuitsporen onder de perceelranden tekenen
   const spoorLaag = L.layerGroup().addTo(map);
+  // Tekening over de kaart (kaartlaag-bestand): eigen laag tussen de luchtfoto en de percelen
+  map.createPane("tekening"); map.getPane("tekening").style.zIndex = 350; map.getPane("tekening").style.pointerEvents = "none";
   const laag = L.layerGroup().addTo(map);
   // ---------- Boerderij per bedrijf (n.erf = { lat, lon, adres }): huisje op de kaart, route, gaat mee in de groep ----------
   const erfLaag = L.layerGroup().addTo(map);
@@ -4232,6 +4240,40 @@ function start() {
     if (vbPunten.length < 3) return;
     trekSay(vbOpslaan() + " Tik punten voor de volgende bocht, of Klaar met tikken. Met ✎ pas je hem later aan.");
   });
+  // ---------- Tekening over de kaart ----------
+  // .kaartlaag = JSON { app: "perceelkaart", soort: "kaartlaag", v: 1, naam, bron, grenzen: [[zuid, west], [noord, oost]], png: base64 }
+  // (de PNG is al rechtgezet op de kaart, wit doorzichtig). Bewaard in de database (kaartTekening), aan/uit en zichtbaarheid apart.
+  let tekLaag = null;
+  const tekStand = () => Object.assign({ aan: true, door: 75 }, store.get("kaartTekeningStand", {}));
+  function tekToon(inzoomen) {
+    if (tekLaag) { map.removeLayer(tekLaag); tekLaag = null; }
+    let t = null; try { t = JSON.parse(Opslag.getItem("kaartTekening") || "null"); } catch (e) {}
+    const st = tekStand();
+    $("bTekAan").hidden = $("bTekWeg").hidden = $("tekDoorRij").hidden = !t;
+    $("bTekLaad").textContent = t ? "Andere tekening laden" : "Tekening laden";
+    $("tekInfo").textContent = t ? "Geladen: " + t.naam + (t.bron ? " (" + t.bron + ")" : "") + "." : "Een tekening (bijv. een groenplan) als kaartlaag over de luchtfoto. Laad een .kaartlaag-bestand; het blijft alleen op dit apparaat en werkt ook zonder internet.";
+    $("bTekAan").setAttribute("aria-pressed", st.aan); $("bTekAan").textContent = "Tekening: " + (st.aan ? "aan" : "uit"); $("tekDoor").value = st.door;
+    if (!t) return;
+    tekLaag = L.imageOverlay("data:image/png;base64," + t.png, t.grenzen, { pane: "tekening", opacity: st.door / 100, interactive: false });
+    if (st.aan) tekLaag.addTo(map);
+    if (inzoomen) map.fitBounds(t.grenzen);
+  }
+  $("bTekLaad").addEventListener("click", () => { $("tekBestand").value = ""; $("tekBestand").click(); });
+  $("tekBestand").addEventListener("change", async e => {
+    const f = e.target.files && e.target.files[0], hint = $("tekHint"); if (!f) return;
+    try {
+      const t = JSON.parse(await f.text());
+      const g = t && t.grenzen;
+      if (!t || t.soort !== "kaartlaag" || typeof t.png !== "string" || !Array.isArray(g) || g.length !== 2 || ![g[0][0], g[0][1], g[1][0], g[1][1]].every(Number.isFinite)) throw new Error("dit is geen kaartlaag-bestand");
+      Opslag.setItem("kaartTekening", JSON.stringify({ naam: String(t.naam || f.name).slice(0, 80), bron: String(t.bron || "").slice(0, 200), grenzen: g, png: t.png }));
+      store.set("kaartTekeningStand", Object.assign(tekStand(), { aan: true }));
+      tekToon(true); hint.textContent = "Tekening geladen: " + (t.naam || f.name) + ". De kaart staat erop ingezoomd."; hint.className = "hint";
+    } catch (er) { hint.textContent = "Laden lukte niet: " + ((er && er.message) || er) + "."; hint.className = "hint warn"; }
+  });
+  $("bTekAan").addEventListener("click", () => { const st = tekStand(); st.aan = !st.aan; store.set("kaartTekeningStand", st); tekToon(false); });
+  $("tekDoor").addEventListener("input", e => { const st = tekStand(); st.door = +e.target.value; store.set("kaartTekeningStand", st); if (tekLaag) tekLaag.setOpacity(st.door / 100); });
+  $("bTekWeg").addEventListener("click", e => { if (!armed(e.currentTarget, "Tik nog eens")) return; Opslag.removeItem("kaartTekening"); tekToon(false); $("tekHint").textContent = "Tekening weggehaald."; });
+  tekToon(false);
   const zetExp = aan => { expBochten = aan; store.set("kaartExpBochten", aan); $("bExpUit").hidden = !aan; };
   $("bExpUit").hidden = !expBochten;
   $("bExpBocht").addEventListener("click", () => { zetExp(true); toonTab("trek"); window.scrollTo(0, 0); if (trekModus !== "bocht") zetTrekModus("bocht"); trekSay("Experimenteel: tik een beginpunt op de rand van een perceel, dan het eindpunt. De bocht komt in de lijst bij de AB-lijnen."); });

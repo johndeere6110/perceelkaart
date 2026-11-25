@@ -134,6 +134,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 #trekLijst input { width: 100%; min-width: 0; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px; padding: 0 8px; }
 #trekLijst .x { flex: none; min-width: 40px; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 18px; margin-left: 8px; }
 .leaflet-tooltip.trekl { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+.stukk { font: 600 12px/20px "Barlow", system-ui, sans-serif; text-align: center; border-radius: 10px; background: #fff; color: #e8590c; border: 1.5px solid #e8590c; box-shadow: 0 1px 3px rgba(0,0,0,.35); cursor: pointer; }
+.stukk.recht { background: #e8590c; color: #fff; }
 .leaflet-tooltip.trekl.bocht { background: #e8590c; border-color: #e8590c; }
 .vrij .kort { display: grid; gap: 4px; margin: 10px 0 6px; font-size: 18px; }
 .vrij .kort div { display: grid; grid-template-columns: 8em 1fr; gap: 8px; align-items: baseline; }
@@ -564,7 +566,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 165</div>
+  <div class="voet" id="voetVersie">versie 166</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3868,6 +3870,18 @@ function start() {
     return kavels.map(kv => ({ obj: kv, geom: kavelVorm(kv), naam: kv.naam }))
       .concat(sel.filter(q => !kavelVan(q)).map(q => ({ obj: q, geom: q.geometry, naam: "perceel " + (sel.indexOf(q) + 1) }))).filter(o => o.geom);
   }
+  function stukKnoppen(punten, recht, glad, wissel) {
+    const lat = punten[0][1], kxx = Math.cos(lat * Math.PI / 180);
+    for (let i = 0; i < punten.length - 1; i++) {
+      const mid = [(punten[i][0] + punten[i + 1][0]) / 2, (punten[i][1] + punten[i + 1][1]) / 2];
+      let best = mid, bd = Infinity; // dichtstbijzijnde punt op de lijn zelf (bij een bocht ligt het midden van de koorde ernaast)
+      glad.forEach(q => { const d = Math.hypot((q[0] - mid[0]) * kxx, q[1] - mid[1]); if (d < bd) { bd = d; best = q; } });
+      const r = !!recht[i];
+      const m = L.marker([best[1], best[0]], { zIndexOffset: 900, icon: L.divIcon({ className: "", html: '<div class="stukk' + (r ? " recht" : "") + '">' + (r ? "recht" : "bocht") + "</div>", iconSize: [48, 22], iconAnchor: [24, 11] }) });
+      m.on("click", ev => { L.DomEvent.stop(ev); wissel(i); });
+      trekLaag.addLayer(m);
+    }
+  }
   function trekTeken() {
     trekLaag.clearLayers(); trekPoly = {};
     trek.lijnen.forEach(l => {
@@ -3897,6 +3911,12 @@ function start() {
         m.on("dragend", () => { bewaarTrek(); trekPaneel(); trekTeken(); });
         trekLaag.addLayer(m);
       });
+      if (lE.knopen) stukKnoppen(lE.knopen, lE.recht || [], lE.pts, i => {
+        lE.recht = (lE.recht || []).slice(); while (lE.recht.length < lE.knopen.length - 1) lE.recht.push(false);
+        lE.recht[i] = !lE.recht[i]; if (!lE.recht.some(Boolean)) delete lE.recht;
+        lE.pts = gladdeBocht(lE.knopen, lE.recht); lE.a = lE.pts[0].slice(); lE.b = lE.pts[lE.pts.length - 1].slice();
+        bewaarTrek(); trekPaneel(); trekTeken(); trekSay("Stuk " + (i + 1) + "–" + (i + 2) + " is nu " + (lE.recht && lE.recht[i] ? "recht" : "een bocht") + ".");
+      });
     }
     if (trekA) trekLaag.addLayer(L.marker([trekA[1], trekA[0]], { icon: L.divIcon({ className: "", html: '<div class="abl vrijp">A</div>', iconSize: [26, 26] }), interactive: false }));
     if (vbPunten.length) {
@@ -3904,6 +3924,7 @@ function start() {
       if (glad.length >= 2) trekLaag.addLayer(L.polyline(glad.map(p => [p[1], p[0]]), { color: "#e8590c", weight: 3, dashArray: "6 5", interactive: false }));
       vbPunten.forEach((c, i) => trekLaag.addLayer(L.circleMarker([c[1], c[0]], { radius: 6, color: "#fff", weight: 2, fillColor: "#e8590c", fillOpacity: 1, interactive: false })
         .bindTooltip(String(i + 1), { permanent: true, direction: "top", offset: [0, -6], className: "pnr trekl bocht" })));
+      if (vbPunten.length >= 2) stukKnoppen(vbPunten, vbRecht, glad, i => { vbRecht[i] = !vbRecht[i]; trekTeken(); trekSay("Stuk " + (i + 1) + "–" + (i + 2) + " is nu " + (vbRecht[i] ? "recht" : "een bocht") + ". Tik verder, of Bocht klaar."); });
     }
     if (bochtStart) trekLaag.addLayer(L.marker([bochtStart.pt[1], bochtStart.pt[0]], { icon: L.divIcon({ className: "", html: '<div class="abl vrijp">1</div>', iconSize: [26, 26] }), interactive: false }));
   }
@@ -3924,7 +3945,7 @@ function start() {
     const lE = trekEdit && trek.lijnen.find(x => x.id === trekEdit);
     if (trekEdit && !lE) trekEdit = null;
     $("trekEditBox").hidden = !lE;
-    if (lE) $("trekEditTxt").textContent = "Aanpassen: " + lE.veld + " · " + lE.naam + ". Sleep de " + (lE.knopen ? "punten" : "punten A en B") + " op de kaart.";
+    if (lE) $("trekEditTxt").textContent = "Aanpassen: " + lE.veld + " · " + lE.naam + ". Sleep de " + (lE.knopen ? "punten op de kaart; tik op bocht/recht op een stuk om dat stuk te wisselen." : "punten A en B op de kaart.");
     $("trekBocht").hidden = !(expBochten && n); $("trekBocht").setAttribute("aria-pressed", trekModus === "bocht"); $("trekBocht").textContent = trekModus === "bocht" ? "Klaar met bochten" : "Rand volgen (bocht)";
     $("trekBochtOm").hidden = !(bochtAlt && trek.lijnen.some(l => l.id === bochtAlt.id));
     $("trekVbBox").hidden = trekModus !== "vrijbocht";
@@ -4041,7 +4062,7 @@ function start() {
   function vbTik(ll) {
     if (vbPunten.length) vbRecht[vbPunten.length - 1] = vbVolgRecht;
     vbPunten.push([ll.lng, ll.lat]); vbRecht.length = vbPunten.length - 1; trekPaneel(); trekTeken();
-    trekSay(vbPunten.length < 3 ? "Punt " + vbPunten.length + " staat. Tik nog " + (3 - vbPunten.length) + (vbPunten.length === 2 ? " punt" : " punten") + " (minstens 3)." : vbPunten.length + " punten: tik verder, of Bocht klaar.");
+    trekSay((vbPunten.length < 3 ? "Punt " + vbPunten.length + " staat. Tik nog " + (3 - vbPunten.length) + (vbPunten.length === 2 ? " punt" : " punten") + " (minstens 3)." : vbPunten.length + " punten: tik verder, of Bocht klaar.") + (vbPunten.length >= 2 ? " Tik op het knopje bocht/recht op een stuk om dat stuk recht of bocht te maken." : ""));
   }
   function bochtTik(ll) {
     const rp = randPunt(ll);

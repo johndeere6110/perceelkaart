@@ -119,9 +119,15 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .vrij .vrow input { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 16px; padding: 0 8px; outline: none; }
 .vrij .vrow input.num { text-align: right; font-size: 20px; }
 .vrij .vrow input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-.vrij .trimble { border-top: 1px solid var(--line); margin-top: 10px; }
-.vrij .trimble .vrow { grid-template-columns: 6.5em 1fr 0; }
-.vrij .trimble .row .btn { flex: 1; }
+#paneelTrek .vrow { grid-template-columns: 6.5em 1fr 0; }
+#paneelTrek .knoppen { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+#paneelTrek .knoppen .btn { flex: 1 1 auto; }
+#trekLijst li { grid-template-columns: 1fr auto; }
+#trekLijst li > div:first-child { flex: 1; min-width: 0; }
+#trekLijst .trekrij { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#trekLijst input { width: 100%; min-width: 0; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px; padding: 0 8px; }
+#trekLijst .x { flex: none; min-width: 40px; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 18px; margin-left: 8px; }
+.leaflet-tooltip.trekl { background: #1f6feb; color: #fff; border-color: #1f6feb; }
 .vrij .kort { display: grid; gap: 4px; margin: 10px 0 6px; font-size: 18px; }
 .vrij .kort div { display: grid; grid-template-columns: 8em 1fr; gap: 8px; align-items: baseline; }
 .vrij .kort span { color: var(--muted); font-size: 14px; }
@@ -355,6 +361,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <button type="button" role="tab" id="tabNamen" aria-selected="false">Bedrijven</button>
     <button type="button" role="tab" id="tabKm" aria-selected="false">Bemesten</button>
     <button type="button" role="tab" id="tabMet" aria-selected="false">Meten</button>
+    <button type="button" role="tab" id="tabTrek" aria-selected="false">Trekker</button>
   </div>
   <div id="paneelPerc">
   <div class="row mijnrij">
@@ -442,6 +449,22 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div id="kmOverzicht"></div>
     <div class="vk tankrij"><label for="kmTank" id="kmTankLbl">Tank (l)</label><input id="kmTank" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 3000"></div>
   </div>
+  <div id="paneelTrek" hidden>
+    <div class="hint" id="trekHint">AB-lijnen voor de trekker (Trimble FmX). Zet een bedrijf op de kaart, en zet de lijnen hieronder in de lijst.</div>
+    <div class="advice vrij trek">
+      <div class="vrow"><label for="trek_klant">Klant</label><input id="trek_klant" type="text" autocomplete="off"><span></span></div>
+      <div class="vrow"><label for="trek_bedrijf">Bedrijf</label><input id="trek_bedrijf" type="text" autocomplete="off"><span></span></div>
+      <div class="knoppen"><button type="button" class="btn" id="trekAlle" hidden>AB-kant van alle percelen</button><button type="button" class="btn" id="trekTik" aria-pressed="false">AB-lijn tikken</button><button type="button" class="btn" id="trekVrij" hidden>Lijn van AB-lijn meten</button></div>
+      <div class="meta" id="trekLeeg">Nog geen lijnen. Op de FmX heet het straks Klant → Bedrijf → Veld; het veld is het perceelnummer (pas het gerust aan). Kies veldnamen die nog niet op de FmX staan: een veld met precies dezelfde namen kan bij het kopiëren overschreven worden.</div>
+      <ul class="log" id="trekLijst"></ul>
+      <div id="trekUitBox" hidden>
+        <div class="meta" id="trekTel"></div>
+        <div class="vrow"><label for="trek_breedte">Breedte (m)</label><input id="trek_breedte" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="leeg = 3"><span></span></div>
+        <div class="knoppen"><button type="button" class="btn" id="trekDeel">Delen (WhatsApp, mail)</button><button type="button" class="btn" id="trekDown">Downloaden</button></div>
+        <div class="knoppen"><button type="button" class="btn klein" id="trekWis">Lijst wissen</button></div>
+      </div>
+    </div>
+  </div>
   <div id="paneelMet" hidden>
     <div class="hint" id="metHint">Tik de hoeken van het stuk op de kaart (tuin, weide, erf). Sleep een punt om het te verplaatsen; het bolletje tussen twee punten zet er een punt bij.</div>
     <div class="advice">
@@ -525,7 +548,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 155</div>
+  <div class="voet" id="voetVersie">versie 156</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -2926,10 +2949,13 @@ function start() {
   function toonTab(t) {
     const was = tabNu; tabNu = t;
     if (t === "inst" && was !== "inst") tabVoorInst = was;
-    [["perc", "tabPerc", "paneelPerc"], ["namen", "tabNamen", "paneelNamen"], ["km", "tabKm", "paneelKm"], ["met", "tabMet", "paneelMet"]].forEach(([k, tab, pan]) => { $(tab).setAttribute("aria-selected", k === t); $(pan).hidden = k !== t; });
+    [["perc", "tabPerc", "paneelPerc"], ["namen", "tabNamen", "paneelNamen"], ["km", "tabKm", "paneelKm"], ["met", "tabMet", "paneelMet"], ["trek", "tabTrek", "paneelTrek"]].forEach(([k, tab, pan]) => { $(tab).setAttribute("aria-selected", k === t); $(pan).hidden = k !== t; });
     $("paneelInst").hidden = t !== "inst"; $("bInst").setAttribute("aria-expanded", t === "inst");
     // Bemesten en Meten hebben een eigen kaartlaag: de gewone lagen (percelen op de kaart, sporen) dan even weg
     if (was === t) return;
+    // Trekker: lijnen op de kaart; tikken op de kaart zet A en B (de gewone lagen blijven)
+    if (t === "trek") { if (vrijModus) setVrij(false); if (abModus) setAB(false); if (oeverModus) setOever(false); if (koppelModus) setKoppel(false); trekLaag.addTo(map); trekPaneel(); trekTeken(); }
+    if (was === "trek") { map.removeLayer(trekLaag); trekModus = false; trekA = null; $("map").classList.remove("oever"); }
     const eigen = x => x === "km" || x === "met";
     if (was === "km") map.removeLayer(kmLaag);
     if (was === "met") map.removeLayer(metLaag);
@@ -2942,6 +2968,7 @@ function start() {
   $("tabNamen").addEventListener("click", () => toonTab("namen"));
   $("tabKm").addEventListener("click", () => toonTab("km"));
   $("tabMet").addEventListener("click", () => toonTab("met"));
+  $("tabTrek").addEventListener("click", () => toonTab("trek"));
   // Tandwiel rechtsboven: instellingen open/dicht (dicht = terug naar het tabblad van daarvoor)
   $("bInst").addEventListener("click", () => { if (tabNu === "inst") toonTab(tabVoorInst); else { toonTab("inst"); renderGroep(); } });
   $("instTerug").addEventListener("click", () => toonTab(tabVoorInst));
@@ -3408,7 +3435,7 @@ function start() {
     });
   }
   renderTypes();
-  map.on("click", ev => erfModus ? (() => { const naam = erfModus; erfModus = null; erfOpen = false; $("map").classList.remove("oever"); erfOpPunt(naam, ev.latlng.lat, ev.latlng.lng); })() : tabNu === "met" ? metTik(ev.latlng) : tabNu === "km" ? kmTik(ev.latlng.lat, ev.latlng.lng) : vrijModus ? vrijTik(ev.latlng) : abModus ? abTik(ev.latlng) : koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
+  map.on("click", ev => erfModus ? (() => { const naam = erfModus; erfModus = null; erfOpen = false; $("map").classList.remove("oever"); erfOpPunt(naam, ev.latlng.lat, ev.latlng.lng); })() : tabNu === "trek" ? trekTik(ev.latlng) : tabNu === "met" ? metTik(ev.latlng) : tabNu === "km" ? kmTik(ev.latlng.lat, ev.latlng.lng) : vrijModus ? vrijTik(ev.latlng) : abModus ? abTik(ev.latlng) : koppelModus ? koppelTik(ev.latlng.lat, ev.latlng.lng) : oeverModus ? oeverTik(ev.latlng) : zoek(ev.latlng.lat, ev.latlng.lng));
   teken();
   // Paneel eronder groeit/krimpt: kaart laten meeschalen
   if (window.ResizeObserver) new ResizeObserver(() => map.invalidateSize()).observe($("map"));
@@ -3705,7 +3732,7 @@ function start() {
       });
       uit.appendChild(bt);
     }
-    trimbleBlok(uit, ob);
+    trimbleBlok(uit);
   }
   // ---------- Naar de trekker: Trimble FmX ----------
   // Een zip met AgGPS/Data/<klant>/<bedrijf>/<veld>/ zoals de FmX hem zelf op de stick zet: Swaths.shp/.shx/.dbf (de AB-lijnen),
@@ -3777,77 +3804,151 @@ function start() {
     dbf[dbf.length - 1] = 0x1A;
     return { shp: new Uint8Array(shp.buffer), shx: new Uint8Array(shx.buffer), dbf };
   }
-  function trimbleZip(klant, bedrijf, veld, lijnen) {
-    const enc = new TextEncoder(), map_ = "AgGPS/Data/" + klant + "/" + bedrijf + "/" + veld + "/", A = lijnen[0].pts[0];
-    const sw = swathsBestanden(lijnen);
-    return maakZip([
-      { naam: map_ + "Swaths.shp", data: sw.shp }, { naam: map_ + "Swaths.shx", data: sw.shx }, { naam: map_ + "Swaths.dbf", data: sw.dbf },
-      { naam: map_ + "field.xml", data: enc.encode("<field>\n    <access_paths>\n        <width>0.000000</width>\n        <offset>0</offset>\n        <period>0</period>\n        <ABOrdinal>0</ABOrdinal>\n        <GuideTo>0</GuideTo>\n    </access_paths>\n</field>\n") },
-      { naam: map_ + "origin.kml", data: enc.encode("<kml>\n    <Placemark>\n        <name>" + veld.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</name>\n        <description>Field Origin</description>\n        <Point>\n            <coordinates>" + A[0].toFixed(9) + "," + A[1].toFixed(9) + ",0.000</coordinates>\n        </Point>\n    </Placemark>\n</kml>\n") },
-      { naam: map_ + A[0].toFixed(5) + "E" + A[1].toFixed(5) + "N.pos", data: new Uint8Array(0) }
-    ]);
+  // Eén zip met per veld een map: AgGPS/Data/<klant>/<bedrijf>/<veld>/ (velden: [{veld, lijnen: [{naam, pts, breedte}]}])
+  function trimbleZip(klant, bedrijf, velden) {
+    const enc = new TextEncoder(), bestanden = [];
+    velden.forEach(v => {
+      const map_ = "AgGPS/Data/" + klant + "/" + bedrijf + "/" + v.veld + "/", A = v.lijnen[0].pts[0], sw = swathsBestanden(v.lijnen);
+      bestanden.push({ naam: map_ + "Swaths.shp", data: sw.shp }, { naam: map_ + "Swaths.shx", data: sw.shx }, { naam: map_ + "Swaths.dbf", data: sw.dbf },
+        { naam: map_ + "field.xml", data: enc.encode("<field>\n    <access_paths>\n        <width>0.000000</width>\n        <offset>0</offset>\n        <period>0</period>\n        <ABOrdinal>0</ABOrdinal>\n        <GuideTo>0</GuideTo>\n    </access_paths>\n</field>\n") },
+        { naam: map_ + "origin.kml", data: enc.encode("<kml>\n    <Placemark>\n        <name>" + v.veld.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</name>\n        <description>Field Origin</description>\n        <Point>\n            <coordinates>" + A[0].toFixed(9) + "," + A[1].toFixed(9) + ",0.000</coordinates>\n        </Point>\n    </Placemark>\n</kml>\n") },
+        { naam: map_ + A[0].toFixed(5) + "E" + A[1].toFixed(5) + "N.pos", data: new Uint8Array(0) });
+    });
+    return maakZip(bestanden);
   }
-  // Paneel in AB-lijn meten (blijft open tot je hem dichtdoet; ingevulde namen blijven staan, klant/bedrijf/breedte onthouden)
-  const trim = Object.assign({ open: false, klant: "", bedrijf: "perceelkaart", veld: "", lijn: "", breedte: "" }, store.get("kaartTrimble", {}), { open: false, veld: "", lijn: "" });
-  function trimbleBlok(uit, ob) {
-    const box = document.createElement("div"); box.className = "trimble";
-    const knop = document.createElement("button"); knop.type = "button"; knop.className = "btn"; knop.id = "trimKnop"; knop.style.width = "100%"; knop.style.marginTop = "10px";
-    knop.textContent = "Naar de trekker (Trimble FmX)"; knop.setAttribute("aria-pressed", trim.open);
-    knop.addEventListener("click", () => { trim.open = !trim.open; tekenVrij(); });
-    box.appendChild(knop);
-    if (trim.open) {
-      if (!trim.klant) trim.klant = naamActief || "perceelkaart";
-      if (!trim.veld) trim.veld = "PK " + (ob ? ob.naam : "AB-lijn");
-      if (!trim.lijn) trim.lijn = "PK AB-lijn";
-      const rij = (lbl, k, extra) => {
-        const r = document.createElement("div"); r.className = "vrow";
-        const l = document.createElement("label"); l.textContent = lbl; l.htmlFor = "trim_" + k;
-        const i = document.createElement("input"); i.id = "trim_" + k; i.type = "text"; i.autocomplete = "off"; i.value = trim[k]; Object.assign(i, extra || {});
-        i.addEventListener("input", () => { trim[k] = i.value; store.set("kaartTrimble", { klant: trim.klant, bedrijf: trim.bedrijf, breedte: trim.breedte }); });
-        r.append(l, i, document.createElement("span")); return r;
-      };
-      box.append(rij("Klant", "klant"), rij("Bedrijf", "bedrijf"), rij("Veld", "veld"), rij("Lijnnaam", "lijn"), rij("Breedte (m)", "breedte", { inputMode: "decimal", className: "num", placeholder: "leeg = 3" }));
-      const uitleg = document.createElement("div"); uitleg.className = "meta"; uitleg.style.marginTop = "6px";
-      uitleg.textContent = "Op de FmX heet het straks Klant → Bedrijf → Veld. Kies een veldnaam die nog niet op de FmX staat: een veld met precies dezelfde namen kan bij het kopiëren overschreven worden." + (parse(vrij.s) ? " De verschoven lijn (opzij) gaat als tweede lijn mee." : "");
-      const r = document.createElement("div"); r.className = "row"; r.style.marginTop = "8px";
-      const deel = document.createElement("button"); deel.type = "button"; deel.className = "btn"; deel.id = "trimDeel"; deel.textContent = "Delen (WhatsApp, mail)";
-      const down = document.createElement("button"); down.type = "button"; down.className = "btn"; down.id = "trimDown"; down.textContent = "Downloaden";
-      const hint = document.createElement("div"); hint.className = "hint"; hint.id = "trimHint";
-      const maak = () => {
-        const klant = trimbleTxt(trim.klant, 40), bedrijf = trimbleTxt(trim.bedrijf, 40), veld = trimbleTxt(trim.veld, 40);
-        const br = parse(trim.breedte) || 3; // niet nodig: de FmX rekent met het werktuig dat je kiest; leeg = 3 m (universeel)
-        if (!klant || !bedrijf || !veld) { hint.textContent = "Vul klant, bedrijf en veld in."; hint.className = "hint warn"; return null; }
-        if (!(br > 0 && br <= 99)) { hint.textContent = "Werkbreedte klopt niet (meter, bijv. 9,35), of laat hem leeg."; hint.className = "hint warn"; return null; }
-        const naam = trimbleTxt(trim.lijn, 40) || "PK AB-lijn", lijnen = [{ naam, pts: [vrij.a, vrij.b], breedte: br }];
-        const sm = parse(vrij.s) || 0;
-        if (sm) { const [a2, b2] = Perceel.verschuifLijn(vrij.a, vrij.b, vrij.links ? -sm : sm); lijnen.push({ naam: naam + ", " + String(sm).replace(".", ",") + " m " + (vrij.links ? "L" : "R"), pts: [a2, b2], breedte: br }); }
-        const bestand = "trimble-" + veld.replace(/\s+/g, "-") + ".zip";
-        return { blob: trimbleZip(klant, bedrijf, veld, lijnen), bestand, klant, bedrijf, veld, aantal: lijnen.length };
-      };
-      const klaarTxt = z => " Op de pc: pak de zip uit en zet de map AgGPS op de USB-stick (staat er al een AgGPS-map op: zet alleen de map Data/" + z.klant + " erbij). Op de FmX: Data Files → aan de USB-kant " + z.klant + " kiezen → Copy. Daarna veld " + z.klant + " → " + z.bedrijf + " → " + z.veld + " kiezen.";
-      deel.addEventListener("click", async () => {
-        const z = maak(); if (!z) return;
-        let file = null; try { file = new File([z.blob], z.bestand, { type: "application/zip" }); } catch (e) {}
-        try {
-          if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: z.bestand });
-            hint.textContent = "Gedeeld: " + z.bestand + " (" + z.aantal + (z.aantal === 1 ? " lijn" : " lijnen") + ")." + klaarTxt(z); hint.className = "hint";
-          } else { hint.textContent = "Delen kan hier niet: gebruik Downloaden."; hint.className = "hint warn"; }
-        } catch (e) { if (!e || e.name !== "AbortError") { hint.textContent = "Delen lukte niet: gebruik Downloaden."; hint.className = "hint warn"; } }
-      });
-      down.addEventListener("click", () => {
-        const z = maak(); if (!z) return;
-        const a = document.createElement("a"); a.href = URL.createObjectURL(z.blob); a.download = z.bestand; document.body.appendChild(a); a.click();
-        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 10000);
-        hint.textContent = "Bewaard als " + z.bestand + " (" + z.aantal + (z.aantal === 1 ? " lijn" : " lijnen") + "), in Downloads." + klaarTxt(z); hint.className = "hint";
-      });
-      // Delen alleen tonen waar de telefoon bestanden kan delen
-      let kanDelen = false; try { kanDelen = !!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], "x.zip", { type: "application/zip" })] })); } catch (e) {}
-      if (kanDelen) r.appendChild(deel);
-      r.appendChild(down);
-      box.append(uitleg, r, hint);
+  // ---------- Tabblad Trekker: lijst met AB-lijnen, samen naar de Trimble FmX ----------
+  // trek.lijnen = [{ id, veld, naam, a, b }] (kaartTrekLijnen); klant/bedrijf/breedte in kaartTrimble. Klant = het bedrijf op de
+  // kaart zolang de lijst leeg is; veld = perceelnummer (of kavelnaam) waar de lijn ligt; lijnnaam AB 1, AB 2 … per veld.
+  var trek = Object.assign({ klant: "", bedrijf: "perceelkaart", breedte: "" }, store.get("kaartTrimble", {}));
+  trek.lijnen = store.get("kaartTrekLijnen", []);
+  if (!Array.isArray(trek.lijnen)) trek.lijnen = [];
+  let trekModus = false, trekA = null;
+  const trekLaag = L.layerGroup();
+  const bewaarTrek = () => { store.set("kaartTrekLijnen", trek.lijnen); store.set("kaartTrimble", { klant: trek.klant, bedrijf: trek.bedrijf, breedte: trek.breedte }); };
+  const trekSay = (t, warn) => { const h = $("trekHint"); h.textContent = t; h.className = "hint" + (warn ? " warn" : ""); };
+  const veldBij = c => { const o = objBijPunt(c); return o ? o.naam : "AB-lijn"; };
+  function trekErbij(a, b, veld, naam) {
+    veld = veld || veldBij([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
+    const al = trek.lijnen.filter(l => l.veld === veld);
+    if (al.some(l => Math.abs(l.a[0] - a[0]) + Math.abs(l.a[1] - a[1]) + Math.abs(l.b[0] - b[0]) + Math.abs(l.b[1] - b[1]) < 2e-7)) return false; // staat er al
+    if (!trek.lijnen.length && naamActief) trek.klant = naamActief;
+    if (!naam) { let n = 1; while (al.some(l => l.naam === "AB " + n)) n++; naam = "AB " + n; } // eerste vrije nummer in dit veld
+    trek.lijnen.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), veld, naam, a: a.slice(), b: b.slice() });
+    return true;
+  }
+  // AB-kant van een perceel of kavel: je eigen getikte AB-lijn, anders de rand die de spuitsporen gebruiken (langste rechte kant of de gekozen kant)
+  function abKantVan(o) {
+    if (o.obj.abLijn) return [o.obj.abLijn[0], o.obj.abLijn[1]];
+    try { const sp = Perceel.sporen(o.geom, 3, { abPunt: o.obj.abPunt || null }); return sp && sp.rand ? sp.rand : null; } catch (e) { return null; }
+  }
+  function trekObjs() {
+    return kavels.map(kv => ({ obj: kv, geom: kavelVorm(kv), naam: kv.naam }))
+      .concat(sel.filter(q => !kavelVan(q)).map(q => ({ obj: q, geom: q.geometry, naam: "perceel " + (sel.indexOf(q) + 1) }))).filter(o => o.geom);
+  }
+  function trekTeken() {
+    trekLaag.clearLayers();
+    trek.lijnen.forEach(l => {
+      const k = Perceel.koers(l.a, l.b), v1 = Perceel.puntOpKoers(l.a, k.koers, 300), v2 = Perceel.puntOpKoers(l.a, (k.koers + 180) % 360, 300);
+      trekLaag.addLayer(L.polyline([[v2[1], v2[0]], [v1[1], v1[0]]], { color: "#1f6feb", weight: 1.5, opacity: .7, dashArray: "8 6", interactive: false }));
+      trekLaag.addLayer(L.polyline([[l.a[1], l.a[0]], [l.b[1], l.b[0]]], { color: "#1f6feb", weight: 4, interactive: false })
+        .bindTooltip(l.veld + " · " + l.naam, { permanent: true, direction: "center", className: "pnr trekl" }));
+    });
+    if (trekA) trekLaag.addLayer(L.marker([trekA[1], trekA[0]], { icon: L.divIcon({ className: "", html: '<div class="abl vrijp">A</div>', iconSize: [26, 26] }), interactive: false }));
+  }
+  function trekPaneel() {
+    if (!trek.lijnen.length && naamActief) trek.klant = naamActief;
+    if (!trek.klant) trek.klant = "perceelkaart";
+    ["klant", "bedrijf", "breedte"].forEach(k => { const i = $("trek_" + k); if (document.activeElement !== i) i.value = trek[k]; });
+    const n = trekObjs().length;
+    $("trekAlle").hidden = !n; $("trekAlle").textContent = "AB-kant van alle " + n + (n === 1 ? " perceel" : " percelen") + (naamActief ? " van " + naamActief : "");
+    $("trekTik").setAttribute("aria-pressed", trekModus); $("trekTik").textContent = trekModus ? "Klaar met tikken" : "AB-lijn tikken";
+    $("trekVrij").hidden = !(vrij.a && vrij.b);
+    const ul = $("trekLijst"); ul.innerHTML = "";
+    trek.lijnen.forEach(l => {
+      const li = document.createElement("li"), k = Perceel.koers(l.a, l.b);
+      const vk = document.createElement("div"); vk.className = "trekrij";
+      const inp = (waarde, lbl, f) => { const i = document.createElement("input"); i.type = "text"; i.value = waarde; i.setAttribute("aria-label", lbl); i.autocomplete = "off"; i.addEventListener("input", () => { f(i.value); bewaarTrek(); trekTeken(); }); return i; };
+      vk.append(inp(l.veld, "Veld", v => { l.veld = v; }), inp(l.naam, "Lijnnaam", v => { l.naam = v; }));
+      const m = el("div", "meta", "koers " + k.koers.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "° · " + Math.round(k.afstand).toLocaleString("nl-NL") + " m");
+      const go = el("div"); go.append(vk, m);
+      const x = el("button", "x", "×"); x.type = "button"; x.setAttribute("aria-label", "Lijn weghalen");
+      x.addEventListener("click", () => { trek.lijnen = trek.lijnen.filter(y => y !== l); bewaarTrek(); trekPaneel(); trekTeken(); });
+      li.append(go, x); ul.appendChild(li);
+    });
+    $("trekLeeg").hidden = trek.lijnen.length > 0;
+    $("trekUitBox").hidden = !trek.lijnen.length;
+    const velden = new Set(trek.lijnen.map(l => trimbleTxt(l.veld, 40))).size;
+    $("trekTel").textContent = trek.lijnen.length ? trek.lijnen.length + (trek.lijnen.length === 1 ? " lijn" : " lijnen") + " in " + velden + (velden === 1 ? " veld" : " velden") : "";
+    let kanDelen = false; try { kanDelen = !!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], "x.zip", { type: "application/zip" })] })); } catch (e) {}
+    $("trekDeel").hidden = !kanDelen;
+  }
+  function trekTik(ll) {
+    if (!trekModus) { trekSay("Tik eerst op AB-lijn tikken, of kies AB-kant van alle percelen."); return; }
+    const c = [ll.lng, ll.lat];
+    if (!trekA) { trekA = c; trekSay("A staat. Tik nu B."); trekTeken(); return; }
+    const a = trekA; trekA = null;
+    if (Perceel.koers(a, c).afstand < 5) { trekSay("A en B liggen te dicht bij elkaar (minder dan 5 m). Tik A opnieuw.", true); trekTeken(); return; }
+    trekErbij(a, c); bewaarTrek(); trekPaneel(); trekTeken();
+    trekSay("Lijn erbij (" + trek.lijnen[trek.lijnen.length - 1].veld + "). Tik A voor de volgende, of Klaar met tikken.");
+  }
+  function trekMaak() {
+    const klant = trimbleTxt(trek.klant, 40), bedrijf = trimbleTxt(trek.bedrijf, 40), br = parse(trek.breedte) || 3;
+    if (!klant || !bedrijf) { trekSay("Vul klant en bedrijf in.", true); return null; }
+    if (!(br > 0 && br <= 99)) { trekSay("Werkbreedte klopt niet (meter), of laat hem leeg.", true); return null; }
+    const per = new Map();
+    for (const l of trek.lijnen) {
+      const veld = trimbleTxt(l.veld, 40);
+      if (!veld) { trekSay("Elke lijn heeft een veldnaam nodig.", true); return null; }
+      if (!per.has(veld)) per.set(veld, []);
+      // Zelfde naam twee keer in één veld: nummer erachter, zodat je ze op de FmX uit elkaar houdt
+      const lijst = per.get(veld), basis = trimbleTxt(l.naam, 40) || "AB"; let naam = basis, n = 2;
+      while (lijst.some(x => x.naam === naam)) naam = basis + " (" + n++ + ")";
+      lijst.push({ naam, pts: [l.a, l.b], breedte: br });
     }
-    uit.appendChild(box);
+    if (!per.size) { trekSay("Nog geen lijnen in de lijst.", true); return null; }
+    const velden = [...per].map(([veld, lijnen]) => ({ veld, lijnen }));
+    return { blob: trimbleZip(klant, bedrijf, velden), bestand: "trimble-" + klant.replace(/\s+/g, "-") + ".zip", klant, aantal: trek.lijnen.length, velden: velden.length };
+  }
+  const trekKlaarTxt = z => z.aantal + (z.aantal === 1 ? " lijn" : " lijnen") + " in " + z.velden + (z.velden === 1 ? " veld" : " velden") + ". Op de pc: zip uitpakken en de map AgGPS op de USB-stick zetten (staat er al een AgGPS-map op: alleen de map Data/" + z.klant + " erbij). Op de FmX: Data Files → aan de USB-kant " + z.klant + " kiezen → Copy.";
+  $("trekDeel").addEventListener("click", async () => {
+    const z = trekMaak(); if (!z) return;
+    let file = null; try { file = new File([z.blob], z.bestand, { type: "application/zip" }); } catch (e) {}
+    try {
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: z.bestand }); trekSay("Gedeeld: " + z.bestand + ", " + trekKlaarTxt(z)); }
+      else trekSay("Delen kan hier niet: gebruik Downloaden.", true);
+    } catch (e) { if (!e || e.name !== "AbortError") trekSay("Delen lukte niet: gebruik Downloaden.", true); }
+  });
+  $("trekDown").addEventListener("click", () => {
+    const z = trekMaak(); if (!z) return;
+    const a = document.createElement("a"); a.href = URL.createObjectURL(z.blob); a.download = z.bestand; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 10000);
+    trekSay("Bewaard als " + z.bestand + " in Downloads: " + trekKlaarTxt(z));
+  });
+  ["klant", "bedrijf", "breedte"].forEach(k => $("trek_" + k).addEventListener("input", e => { trek[k] = e.target.value; bewaarTrek(); }));
+  $("trekAlle").addEventListener("click", () => {
+    let erbij = 0, geen = 0;
+    trekObjs().forEach(o => { const ab = abKantVan(o); if (!ab) { geen++; return; } if (trekErbij(ab[0], ab[1], o.naam, "AB-kant")) erbij++; });
+    bewaarTrek(); trekPaneel(); trekTeken();
+    trekSay(erbij ? erbij + (erbij === 1 ? " lijn" : " lijnen") + " erbij, op de AB-kant van elk perceel." + (geen ? " Bij " + geen + " lukte het niet." : "") : "Die staan er al in.");
+  });
+  $("trekTik").addEventListener("click", () => { trekModus = !trekModus; trekA = null; $("map").classList.toggle("oever", trekModus); trekPaneel(); trekTeken(); trekSay(trekModus ? "Tik A op de kaart, dan B. Zo vaak als je wilt." : "Klaar met tikken."); if (trekModus) window.scrollTo(0, 0); });
+  $("trekVrij").addEventListener("click", () => {
+    const sm = parse(vrij.s) || 0, ok = trekErbij(vrij.a, vrij.b);
+    if (sm) { const [a2, b2] = Perceel.verschuifLijn(vrij.a, vrij.b, vrij.links ? -sm : sm); trekErbij(a2, b2, null, "AB, " + String(sm).replace(".", ",") + " m " + (vrij.links ? "L" : "R")); }
+    bewaarTrek(); trekPaneel(); trekTeken(); trekSay(ok ? "Lijn van AB-lijn meten erbij." : "Die staat er al in.");
+  });
+  $("trekWis").addEventListener("click", e => { if (!armed(e.currentTarget, "Tik nog eens")) return; trek.lijnen = []; bewaarTrek(); trekPaneel(); trekTeken(); trekSay("Lijst leeg."); });
+  // In AB-lijn meten: knop om de lijn in de lijst te zetten
+  function trimbleBlok(uit) {
+    const knop = document.createElement("button"); knop.type = "button"; knop.className = "btn"; knop.id = "trimKnop"; knop.style.width = "100%"; knop.style.marginTop = "10px";
+    knop.textContent = "In de lijst voor de trekker";
+    knop.addEventListener("click", () => {
+      const sm = parse(vrij.s) || 0, ok = trekErbij(vrij.a, vrij.b);
+      if (sm) { const [a2, b2] = Perceel.verschuifLijn(vrij.a, vrij.b, vrij.links ? -sm : sm); trekErbij(a2, b2, null, "AB, " + String(sm).replace(".", ",") + " m " + (vrij.links ? "L" : "R")); }
+      bewaarTrek();
+      say((ok ? "In de lijst gezet" : "Staat al in de lijst") + " (" + trek.lijnen.length + (trek.lijnen.length === 1 ? " lijn" : " lijnen") + "). Exporteren doe je in het tabblad Trekker.");
+    });
+    uit.appendChild(knop);
   }
   // Gekozen punt (a of b) na een tik op het blokje A of B; de volgende tik op de kaart zet het daar
   let vrijKies = null;

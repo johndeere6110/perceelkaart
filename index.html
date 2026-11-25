@@ -564,7 +564,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 164</div>
+  <div class="voet" id="voetVersie">versie 165</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -2973,7 +2973,7 @@ function start() {
     if (was === t) return;
     // Trekker: lijnen op de kaart; tikken op de kaart zet A en B (de gewone lagen blijven)
     if (t === "trek") { if (vrijModus) setVrij(false); if (abModus) setAB(false); if (oeverModus) setOever(false); if (koppelModus) setKoppel(false); trekLaag.addTo(map); trekPaneel(); trekTeken(); }
-    if (was === "trek") { map.removeLayer(trekLaag); trekModus = ""; trekA = null; bochtStart = null; vbPunten = []; trekEdit = null; $("map").classList.remove("oever"); }
+    if (was === "trek") { if (trekModus === "vrijbocht") { const m = vbOpslaan(); if (m) say(m + " Hij staat bij AB-lijnen exporteren."); } map.removeLayer(trekLaag); trekModus = ""; trekA = null; bochtStart = null; vbPunten = []; trekEdit = null; $("map").classList.remove("oever"); }
     const eigen = x => x === "km" || x === "met";
     if (was === "km") map.removeLayer(kmLaag);
     if (was === "met") map.removeLayer(metLaag);
@@ -4028,6 +4028,16 @@ function start() {
     }
     return uit.map(terug);
   }
+  // Getikte bocht in de lijst zetten (Bocht klaar, maar ook bij Klaar met tikken, een andere knop of Terug); geeft de melding terug
+  function vbOpslaan() {
+    if (!vbPunten.length) return "";
+    if (vbPunten.length < 3) { const n = vbPunten.length; vbPunten = []; vbRecht = []; trekPaneel(); trekTeken(); return "Bocht niet opgeslagen: een bocht heeft minstens 3 punten (" + n + " getikt)."; }
+    const glad = gladdeBocht(vbPunten, vbRecht), mid = glad[Math.floor(glad.length / 2)];
+    trekErbij(glad[0], glad[glad.length - 1], veldBij(mid), null, glad);
+    const l = trek.lijnen[trek.lijnen.length - 1]; l.knopen = vbPunten.map(p => [Math.round(p[0] * 1e8) / 1e8, Math.round(p[1] * 1e8) / 1e8]); if (vbRecht.some(Boolean)) l.recht = vbRecht.map(Boolean); vbPunten = []; vbRecht = []; bochtAlt = null;
+    bewaarTrek(); trekPaneel(); trekTeken();
+    return l.naam + " in " + l.veld + " opgeslagen: " + Math.round(padLengte(l.pts)).toLocaleString("nl-NL") + " m.";
+  }
   function vbTik(ll) {
     if (vbPunten.length) vbRecht[vbPunten.length - 1] = vbVolgRecht;
     vbPunten.push([ll.lng, ll.lat]); vbRecht.length = vbPunten.length - 1; trekPaneel(); trekTeken();
@@ -4119,7 +4129,7 @@ function start() {
     bewaarTrek(); trekPaneel(); trekTeken();
     trekSay(erbij ? erbij + (erbij === 1 ? " lijn" : " lijnen") + " erbij, op de rand van " + (erbij === 1 ? "het perceel." : "elk perceel.") + (geen ? " Bij " + geen + " lukte het niet." : "") : "De randlijnen staan al in de lijst (onderaan).");
   });
-  const zetTrekModus = m => { trekModus = !m || trekModus === m ? "" : m; trekA = null; bochtStart = null; vbPunten = []; vbRecht = []; if (trekModus) trekEdit = null; $("map").classList.toggle("oever", !!trekModus); trekPaneel(); trekTeken(); if (trekModus) window.scrollTo(0, 0); };
+  const zetTrekModus = m => { const opgeslagen = trekModus === "vrijbocht" ? vbOpslaan() : ""; trekModus = !m || trekModus === m ? "" : m; trekA = null; bochtStart = null; vbPunten = []; vbRecht = []; if (trekModus) trekEdit = null; $("map").classList.toggle("oever", !!trekModus); trekPaneel(); trekTeken(); if (trekModus) window.scrollTo(0, 0); if (opgeslagen) setTimeout(() => trekSay(opgeslagen + " " + $("trekHint").textContent), 0); };
   $("trekKant").addEventListener("click", () => { zetTrekModus("kant"); trekSay(trekModus ? "Tik bij een kant van een perceel: daar komt een lijn op. Nog eens tikken haalt hem weg." : "Klaar met kanten."); });
   $("trekBocht").addEventListener("click", () => { zetTrekModus("bocht"); trekSay(trekModus ? "Tik een beginpunt op de rand van een perceel, dan het eindpunt." : "Klaar met bochten."); });
   $("trekBochtOm").addEventListener("click", () => {
@@ -4130,7 +4140,7 @@ function start() {
   // Zelf tikken: Recht (A en B) of Bocht (punten); de laatste keuze blijft
   let trekSoort = "ab";
   const tikHint = () => trekSay(trekModus === "vrijbocht" ? "Bocht: tik punten op de kaart waar hij langs moet (minstens 3), dan Bocht klaar. Een recht stuk ertussen? Tik eerst Volgende stuk: recht." : "Recht: tik A op de kaart, dan B. Zo vaak als je wilt.");
-  const kiesSoort = m => { trekSoort = m; if (trekModus !== m) { trekModus = m; trekA = null; vbPunten = []; vbRecht = []; trekEdit = null; $("map").classList.add("oever"); } trekPaneel(); trekTeken(); tikHint(); };
+  const kiesSoort = m => { trekSoort = m; const opgeslagen = trekModus === "vrijbocht" && m !== "vrijbocht" ? vbOpslaan() : ""; if (opgeslagen) setTimeout(() => trekSay(opgeslagen + " " + $("trekHint").textContent), 0); if (trekModus !== m) { trekModus = m; trekA = null; vbPunten = []; vbRecht = []; trekEdit = null; $("map").classList.add("oever"); } trekPaneel(); trekTeken(); tikHint(); };
   $("trekSoortRecht").addEventListener("click", () => kiesSoort("ab"));
   $("trekSoortBocht").addEventListener("click", () => kiesSoort("vrijbocht"));
   $("trekEditKlaar").addEventListener("click", () => { trekEdit = null; trekPaneel(); trekTeken(); trekSay("Klaar met aanpassen."); });
@@ -4139,18 +4149,14 @@ function start() {
   $("trekVbWis").addEventListener("click", () => { vbPunten = []; vbRecht = []; trekPaneel(); trekTeken(); trekSay("Punten gewist. Tik opnieuw."); });
   $("trekVbKlaar").addEventListener("click", () => {
     if (vbPunten.length < 3) return;
-    const glad = gladdeBocht(vbPunten, vbRecht), mid = glad[Math.floor(glad.length / 2)];
-    trekErbij(glad[0], glad[glad.length - 1], veldBij(mid), null, glad);
-    const l = trek.lijnen[trek.lijnen.length - 1]; l.knopen = vbPunten.map(p => [Math.round(p[0] * 1e8) / 1e8, Math.round(p[1] * 1e8) / 1e8]); if (vbRecht.some(Boolean)) l.recht = vbRecht.map(Boolean); vbPunten = []; vbRecht = []; bochtAlt = null;
-    bewaarTrek(); trekPaneel(); trekTeken();
-    trekSay(l.naam + " in " + l.veld + ": " + Math.round(padLengte(l.pts)).toLocaleString("nl-NL") + " m. Tik punten voor de volgende bocht, of Klaar met tikken. Met ✎ pas je hem later aan.");
+    trekSay(vbOpslaan() + " Tik punten voor de volgende bocht, of Klaar met tikken. Met ✎ pas je hem later aan.");
   });
   const zetExp = aan => { expBochten = aan; store.set("kaartExpBochten", aan); $("bExpUit").hidden = !aan; };
   $("bExpUit").hidden = !expBochten;
   $("bExpBocht").addEventListener("click", () => { zetExp(true); toonTab("trek"); window.scrollTo(0, 0); if (trekModus !== "bocht") zetTrekModus("bocht"); trekSay("Experimenteel: tik een beginpunt op de rand van een perceel, dan het eindpunt. De bocht komt in de lijst bij de AB-lijnen."); });
   $("bExpUit").addEventListener("click", () => { zetExp(false); say("Bochten verborgen. Bochten die al in de lijst staan blijven staan."); });
   $("trekTik").addEventListener("click", () => {
-    if (trekModus === "ab" || trekModus === "vrijbocht") { zetTrekModus(""); trekSay("Klaar met tikken."); return; }
+    if (trekModus === "ab" || trekModus === "vrijbocht") { const m = trekModus === "vrijbocht" ? vbOpslaan() : ""; zetTrekModus(""); trekSay(m || "Klaar met tikken."); return; }
     zetTrekModus(expBochten ? trekSoort : "ab"); tikHint();
   });
   $("trekWis").addEventListener("click", e => { if (!armed(e.currentTarget, "Tik nog eens")) return; trek.lijnen = []; trek.klantZelf = trek.bedrijfZelf = false; bewaarTrek(); trekPaneel(); trekTeken(); trekSay("Lijst leeg."); });

@@ -455,6 +455,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div class="vrow"><label for="trek_klant">Klant</label><input id="trek_klant" type="text" autocomplete="off"><span></span></div>
       <div class="vrow"><label for="trek_bedrijf">Bedrijf</label><input id="trek_bedrijf" type="text" autocomplete="off"><span></span></div>
       <div class="knoppen"><button type="button" class="btn" id="trekAlle" hidden>AB-kant van alle percelen</button><button type="button" class="btn" id="trekTik" aria-pressed="false">AB-lijn tikken</button><button type="button" class="btn" id="trekVrij" hidden>Lijn van AB-lijn meten</button></div>
+      <div class="meta" id="trekUitleg" style="margin-top:6px"></div>
       <div class="meta" id="trekLeeg">Nog geen lijnen. Op de FmX heet het straks Klant → Bedrijf → Veld; het veld is het perceelnummer (pas het gerust aan). Kies veldnamen die nog niet op de FmX staan: een veld met precies dezelfde namen kan bij het kopiëren overschreven worden.</div>
       <ul class="log" id="trekLijst"></ul>
       <div id="trekUitBox" hidden>
@@ -548,7 +549,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 156</div>
+  <div class="voet" id="voetVersie">versie 157</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3860,9 +3861,14 @@ function start() {
     if (!trek.klant) trek.klant = "perceelkaart";
     ["klant", "bedrijf", "breedte"].forEach(k => { const i = $("trek_" + k); if (document.activeElement !== i) i.value = trek[k]; });
     const n = trekObjs().length;
-    $("trekAlle").hidden = !n; $("trekAlle").textContent = "AB-kant van alle " + n + (n === 1 ? " perceel" : " percelen") + (naamActief ? " van " + naamActief : "");
-    $("trekTik").setAttribute("aria-pressed", trekModus); $("trekTik").textContent = trekModus ? "Klaar met tikken" : "AB-lijn tikken";
+    $("trekAlle").hidden = !n; $("trekAlle").textContent = n === 1 ? "Lijn op de rand van het perceel" : "Lijn op de rand van alle " + n + " percelen" + (naamActief ? " van " + naamActief : "");
+    $("trekTik").setAttribute("aria-pressed", trekModus); $("trekTik").textContent = trekModus ? "Klaar met tikken" : "Zelf A en B tikken";
     $("trekVrij").hidden = !(vrij.a && vrij.b);
+    if (vrij.a && vrij.b) $("trekVrij").textContent = "Lijn uit AB-lijn meten (" + veldBij([(vrij.a[0] + vrij.b[0]) / 2, (vrij.a[1] + vrij.b[1]) / 2]) + ")";
+    // Uitleg bij de knoppen, en waarom de klant "perceelkaart" heet als er geen bedrijf op de kaart staat
+    $("trekUitleg").innerHTML = (n ? "<b>Rand</b>: per perceel een lijn op de langste rechte kant (of de kant / AB-lijn die je bij Percelen koos). " : "") +
+      "<b>Zelf tikken</b>: tik A en B op de kaart, zo vaak als je wilt." + ($("trekVrij").hidden ? "" : " <b>AB-lijn meten</b>: neemt de lijn over die je bij Percelen → AB-lijn meten hebt staan.") +
+      (!naamActief && !trek.lijnen.length ? "<br>Tip: zet eerst een bedrijf op de kaart (tabblad Bedrijven), dan wordt de klant de naam van dat bedrijf." : "");
     const ul = $("trekLijst"); ul.innerHTML = "";
     trek.lijnen.forEach(l => {
       const li = document.createElement("li"), k = Perceel.koers(l.a, l.b);
@@ -3929,13 +3935,13 @@ function start() {
     let erbij = 0, geen = 0;
     trekObjs().forEach(o => { const ab = abKantVan(o); if (!ab) { geen++; return; } if (trekErbij(ab[0], ab[1], o.naam, "AB-kant")) erbij++; });
     bewaarTrek(); trekPaneel(); trekTeken();
-    trekSay(erbij ? erbij + (erbij === 1 ? " lijn" : " lijnen") + " erbij, op de AB-kant van elk perceel." + (geen ? " Bij " + geen + " lukte het niet." : "") : "Die staan er al in.");
+    trekSay(erbij ? erbij + (erbij === 1 ? " lijn" : " lijnen") + " erbij, op de rand van " + (erbij === 1 ? "het perceel." : "elk perceel.") + (geen ? " Bij " + geen + " lukte het niet." : "") : "De randlijnen staan al in de lijst (onderaan).");
   });
   $("trekTik").addEventListener("click", () => { trekModus = !trekModus; trekA = null; $("map").classList.toggle("oever", trekModus); trekPaneel(); trekTeken(); trekSay(trekModus ? "Tik A op de kaart, dan B. Zo vaak als je wilt." : "Klaar met tikken."); if (trekModus) window.scrollTo(0, 0); });
   $("trekVrij").addEventListener("click", () => {
     const sm = parse(vrij.s) || 0, ok = trekErbij(vrij.a, vrij.b);
     if (sm) { const [a2, b2] = Perceel.verschuifLijn(vrij.a, vrij.b, vrij.links ? -sm : sm); trekErbij(a2, b2, null, "AB, " + String(sm).replace(".", ",") + " m " + (vrij.links ? "L" : "R")); }
-    bewaarTrek(); trekPaneel(); trekTeken(); trekSay(ok ? "Lijn van AB-lijn meten erbij." : "Die staat er al in.");
+    bewaarTrek(); trekPaneel(); trekTeken(); trekSay(ok ? "Lijn uit AB-lijn meten erbij (onderaan in de lijst)." : "Die lijn staat al in de lijst.");
   });
   $("trekWis").addEventListener("click", e => { if (!armed(e.currentTarget, "Tik nog eens")) return; trek.lijnen = []; bewaarTrek(); trekPaneel(); trekTeken(); trekSay("Lijst leeg."); });
   // In AB-lijn meten: knop om de lijn in de lijst te zetten

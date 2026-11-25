@@ -570,7 +570,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 169</div>
+  <div class="voet" id="voetVersie">versie 170</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3936,6 +3936,13 @@ function start() {
     }
     if (bochtStart) trekLaag.addLayer(L.marker([bochtStart.pt[1], bochtStart.pt[0]], { icon: L.divIcon({ className: "", html: '<div class="abl vrijp">1</div>', iconSize: [26, 26] }), interactive: false }));
   }
+  // Telling "n lijnen in m velden" en de keuzelijst met veldnamen
+  function trekTelBij() {
+    const velden = new Set(trek.lijnen.map(l => trimbleTxt(l.veld, TRIM_NAAM))).size;
+    $("trekTel").textContent = trek.lijnen.length ? trek.lijnen.length + (trek.lijnen.length === 1 ? " lijn" : " lijnen") + " in " + velden + (velden === 1 ? " veld" : " velden") : "";
+    const dl = $("trekVelden"); dl.innerHTML = "";
+    [...new Set(trek.lijnen.map(l => String(l.veld || "").trim()).filter(Boolean))].forEach(v => { const o = document.createElement("option"); o.value = v; dl.appendChild(o); });
+  }
   function trekPaneel() {
     // Klant = het bedrijf op de kaart, bedrijf = de plaats van de boerderij; tenzij je ze zelf hebt aangepast
     if (naamActief && !trek.klantZelf) trek.klant = naamActief;
@@ -3972,14 +3979,13 @@ function start() {
     const ul = $("trekLijst"); ul.innerHTML = "";
     // Kopjes, en de velden die al in de lijst staan als keuze (zelfde veldnaam = samen in één veld op de FmX)
     $("trekKop").hidden = !trek.lijnen.length;
-    const dl = $("trekVelden"); dl.innerHTML = "";
-    [...new Set(trek.lijnen.map(l => String(l.veld || "").trim()).filter(Boolean))].forEach(v => { const o = document.createElement("option"); o.value = v; dl.appendChild(o); });
+
     trek.lijnen.forEach(l => {
       const li = document.createElement("li"), k = Perceel.koers(l.a, l.b);
       const vk = document.createElement("div"); vk.className = "trekrij";
       const inp = (waarde, lbl, f, max) => { const i = document.createElement("input"); i.type = "text"; i.maxLength = max; i.value = waarde; i.setAttribute("aria-label", lbl); i.autocomplete = "off"; i.addEventListener("input", () => { f(i.value); bewaarTrek(); trekTeken(); }); return i; };
       const iv = inp(l.veld, "Veld", v => { l.veld = v; }, TRIM_NAAM); iv.setAttribute("list", "trekVelden");
-      iv.addEventListener("change", () => trekPaneel()); // na kiezen of typen: telling en keuzelijst bijwerken
+      iv.addEventListener("input", () => trekTelBij()); // telling en keuzelijst bijwerken (niet de hele lijst: dan valt een tik op × of ✎ weg)
       vk.append(iv, inp(l.naam, "Lijnnaam", v => { l.naam = v; }, TRIM_LIJN));
       const m = el("div", "meta", l.pts ? "bocht · " + Math.round(padLengte(l.pts)).toLocaleString("nl-NL") + " m (" + l.pts.length + " punten)"
         : "koers " + k.koers.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "° · " + Math.round(k.afstand).toLocaleString("nl-NL") + " m");
@@ -3995,8 +4001,7 @@ function start() {
     });
     $("trekLeeg").hidden = trek.lijnen.length > 0;
     $("trekUitBox").hidden = !trek.lijnen.length;
-    const velden = new Set(trek.lijnen.map(l => trimbleTxt(l.veld, TRIM_NAAM))).size;
-    $("trekTel").textContent = trek.lijnen.length ? trek.lijnen.length + (trek.lijnen.length === 1 ? " lijn" : " lijnen") + " in " + velden + (velden === 1 ? " veld" : " velden") : "";
+    trekTelBij();
     let kanDelen = false; try { kanDelen = !!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], "x.zip", { type: "application/zip" })] })); } catch (e) {}
     $("trekDeel").hidden = !kanDelen;
   }

@@ -58,8 +58,9 @@ header { display: flex; justify-content: center; align-items: center; gap: 10px;
 header .kopwiel { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 42px; height: 42px; border: 0; border-radius: 10px; background: none; color: inherit; display: inline-flex; align-items: center; justify-content: center; padding: 0; opacity: .85; }
 header .kopwiel[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); opacity: 1; }
 #paneelInst h2 { margin: 0 0 4px; font: 700 20px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; }
-#paneelInst .instkop { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-#paneelInst .instkop .btn { flex: none; }
+#paneelInst .instkop, #paneelTrek .instkop { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#paneelInst .instkop .btn, #paneelTrek .instkop .btn { flex: none; }
+#paneelTrek .instkop h2 { margin: 0; font-size: 22px; }
 #paneelInst .blok { margin-top: 18px; padding-top: 10px; border-top: 1px solid var(--line); }
 header h1 { margin: 0; font: 700 22px "Barlow Semi Condensed", "Barlow", system-ui, sans-serif; }
 .voet { text-align: center; margin: 22px 0 4px; font-size: 13px; color: var(--muted); }
@@ -361,7 +362,6 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <button type="button" role="tab" id="tabNamen" aria-selected="false">Bedrijven</button>
     <button type="button" role="tab" id="tabKm" aria-selected="false">Bemesten</button>
     <button type="button" role="tab" id="tabMet" aria-selected="false">Meten</button>
-    <button type="button" role="tab" id="tabTrek" aria-selected="false">Trekker</button>
   </div>
   <div id="paneelPerc">
   <div class="row mijnrij">
@@ -450,7 +450,8 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div class="vk tankrij"><label for="kmTank" id="kmTankLbl">Tank (l)</label><input id="kmTank" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="bijv. 3000"></div>
   </div>
   <div id="paneelTrek" hidden>
-    <div class="hint" id="trekHint">AB-lijnen voor de trekker (Trimble FmX). Zet een bedrijf op de kaart, en zet de lijnen hieronder in de lijst.</div>
+    <div class="instkop"><h2>AB-lijnen exporteren</h2><button type="button" class="btn" id="trekTerug">Terug</button></div>
+    <div class="hint" id="trekHint">Voor de trekker (Trimble FmX). Zet de lijnen hieronder in de lijst en exporteer ze in één keer.</div>
     <div class="advice vrij trek">
       <div class="vrow"><label for="trek_klant">Klant</label><input id="trek_klant" type="text" autocomplete="off"><span></span></div>
       <div class="vrow"><label for="trek_bedrijf">Bedrijf</label><input id="trek_bedrijf" type="text" autocomplete="off"><span></span></div>
@@ -549,7 +550,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 159</div>
+  <div class="voet" id="voetVersie">versie 160</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -1750,7 +1751,7 @@ function start() {
   // Tabblad Kunstmest: alle percelen van alle namen op de kaart. Tik een perceel: je ziet van wie het is, vult de l/ha,
   // een notitie en gedaan in, en ziet het totaal voor die naam. Per perceel in q[KV] {lha, noti, gedaan} (lha "0" = niet);
   // bij de naam in n[KV] {wat, noti}. Gerekend met de netto ha per perceel (bufferstrook eraf, langs water erbij).
-  let tabNu = "perc", tabVoorInst = "perc", kmKeus = null, kmT = 0; // kmKeus: { naam, key } (key null = alleen de naam)
+  let tabNu = "perc", tabVoorInst = "perc", tabVoorTrek = "perc", kmKeus = null, kmT = 0; // kmKeus: { naam, key } (key null = alleen de naam)
   const tankEl = $("kmTank");
   tankEl.value = store.get("kaartTankL", "");
   const kmLaag = L.layerGroup();
@@ -2950,7 +2951,9 @@ function start() {
   function toonTab(t) {
     const was = tabNu; tabNu = t;
     if (t === "inst" && was !== "inst") tabVoorInst = was;
-    [["perc", "tabPerc", "paneelPerc"], ["namen", "tabNamen", "paneelNamen"], ["km", "tabKm", "paneelKm"], ["met", "tabMet", "paneelMet"], ["trek", "tabTrek", "paneelTrek"]].forEach(([k, tab, pan]) => { $(tab).setAttribute("aria-selected", k === t); $(pan).hidden = k !== t; });
+    if (t === "trek" && was !== "trek" && was !== "inst") tabVoorTrek = was;
+    [["perc", "tabPerc", "paneelPerc"], ["namen", "tabNamen", "paneelNamen"], ["km", "tabKm", "paneelKm"], ["met", "tabMet", "paneelMet"]].forEach(([k, tab, pan]) => { $(tab).setAttribute("aria-selected", k === t); $(pan).hidden = k !== t; });
+    $("paneelTrek").hidden = t !== "trek"; // AB-lijnen exporteren: geen eigen tabblad, open via het bedrijf of AB-lijn meten
     $("paneelInst").hidden = t !== "inst"; $("bInst").setAttribute("aria-expanded", t === "inst");
     // Bemesten en Meten hebben een eigen kaartlaag: de gewone lagen (percelen op de kaart, sporen) dan even weg
     if (was === t) return;
@@ -2969,7 +2972,7 @@ function start() {
   $("tabNamen").addEventListener("click", () => toonTab("namen"));
   $("tabKm").addEventListener("click", () => toonTab("km"));
   $("tabMet").addEventListener("click", () => toonTab("met"));
-  $("tabTrek").addEventListener("click", () => toonTab("trek"));
+  $("trekTerug").addEventListener("click", () => toonTab(tabVoorTrek));
   // Tandwiel rechtsboven: instellingen open/dicht (dicht = terug naar het tabblad van daarvoor)
   $("bInst").addEventListener("click", () => { if (tabNu === "inst") toonTab(tabVoorInst); else { toonTab("inst"); renderGroep(); } });
   $("instTerug").addEventListener("click", () => toonTab(tabVoorInst));
@@ -3115,6 +3118,7 @@ function start() {
       }, wijzigen));
       r.appendChild(kn("Naam wijzigen", () => { hernoemOpen = !hernoemOpen; teken(); if (hernoemOpen) setTimeout(() => { const i = $("hernoemNaam"); if (i) { i.focus(); i.select(); } }, 0); }, hernoemOpen));
       r.appendChild(kn("Boerderij", () => { erfOpen = !erfOpen; erfModus = null; teken(); }, erfOpen));
+      r.appendChild(kn("AB-lijnen exporteren", () => { toonTab("trek"); window.scrollTo(0, 0); }));
       r.appendChild(kn("Delen", e => deel(e.currentTarget)));
       { const b = kn(offlineLabel(naamActief), () => bewaarOffline(naamActief)); b.id = "bOffline"; r.appendChild(b); }
       r.appendChild(kn("Bedrijf weghalen", e => {
@@ -3973,9 +3977,13 @@ function start() {
       const sm = parse(vrij.s) || 0, ok = trekErbij(vrij.a, vrij.b);
       if (sm) { const [a2, b2] = Perceel.verschuifLijn(vrij.a, vrij.b, vrij.links ? -sm : sm); trekErbij(a2, b2, null, "AB, " + String(sm).replace(".", ",") + " m " + (vrij.links ? "L" : "R")); }
       bewaarTrek();
-      say((ok ? "In de lijst gezet" : "Staat al in de lijst") + " (" + trek.lijnen.length + (trek.lijnen.length === 1 ? " lijn" : " lijnen") + "). Exporteren doe je in het tabblad Trekker.");
+      say((ok ? "In de lijst gezet" : "Staat al in de lijst") + " (" + trek.lijnen.length + (trek.lijnen.length === 1 ? " lijn" : " lijnen") + "). Exporteren: knop AB-lijnen exporteren hieronder.");
+      tekenVrij();
     });
-    uit.appendChild(knop);
+    const naar = document.createElement("button"); naar.type = "button"; naar.className = "btn"; naar.id = "trimNaar"; naar.style.width = "100%"; naar.style.marginTop = "8px";
+    naar.textContent = "AB-lijnen exporteren" + (trek.lijnen.length ? " (" + trek.lijnen.length + ")" : "");
+    naar.addEventListener("click", () => { setVrij(false); toonTab("trek"); window.scrollTo(0, 0); });
+    uit.append(knop, naar);
   }
   // Gekozen punt (a of b) na een tik op het blokje A of B; de volgende tik op de kaart zet het daar
   let vrijKies = null;

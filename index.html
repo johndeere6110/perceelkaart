@@ -454,7 +454,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div class="advice vrij trek">
       <div class="vrow"><label for="trek_klant">Klant</label><input id="trek_klant" type="text" autocomplete="off"><span></span></div>
       <div class="vrow"><label for="trek_bedrijf">Bedrijf</label><input id="trek_bedrijf" type="text" autocomplete="off"><span></span></div>
-      <div class="knoppen"><button type="button" class="btn" id="trekAlle" hidden>AB-kant van alle percelen</button><button type="button" class="btn" id="trekTik" aria-pressed="false">AB-lijn tikken</button><button type="button" class="btn" id="trekVrij" hidden>Lijn van AB-lijn meten</button></div>
+      <div class="knoppen"><button type="button" class="btn" id="trekAlle" hidden>AB-kant van alle percelen</button><button type="button" class="btn" id="trekKant" aria-pressed="false">Kanten aantikken</button><button type="button" class="btn" id="trekTik" aria-pressed="false">Zelf A en B tikken</button></div>
       <div class="meta" id="trekUitleg" style="margin-top:6px"></div>
       <div class="meta" id="trekLeeg">Nog geen lijnen. Op de FmX heet het straks Klant → Bedrijf → Veld; het veld is het perceelnummer (pas het gerust aan). Kies veldnamen die nog niet op de FmX staan: een veld met precies dezelfde namen kan bij het kopiëren overschreven worden.</div>
       <ul class="log" id="trekLijst"></ul>
@@ -549,7 +549,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 157</div>
+  <div class="voet" id="voetVersie">versie 158</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -2956,7 +2956,7 @@ function start() {
     if (was === t) return;
     // Trekker: lijnen op de kaart; tikken op de kaart zet A en B (de gewone lagen blijven)
     if (t === "trek") { if (vrijModus) setVrij(false); if (abModus) setAB(false); if (oeverModus) setOever(false); if (koppelModus) setKoppel(false); trekLaag.addTo(map); trekPaneel(); trekTeken(); }
-    if (was === "trek") { map.removeLayer(trekLaag); trekModus = false; trekA = null; $("map").classList.remove("oever"); }
+    if (was === "trek") { map.removeLayer(trekLaag); trekModus = ""; trekA = null; $("map").classList.remove("oever"); }
     const eigen = x => x === "km" || x === "met";
     if (was === "km") map.removeLayer(kmLaag);
     if (was === "met") map.removeLayer(metLaag);
@@ -3823,7 +3823,7 @@ function start() {
   var trek = Object.assign({ klant: "", bedrijf: "perceelkaart", breedte: "" }, store.get("kaartTrimble", {}));
   trek.lijnen = store.get("kaartTrekLijnen", []);
   if (!Array.isArray(trek.lijnen)) trek.lijnen = [];
-  let trekModus = false, trekA = null;
+  let trekModus = "", trekA = null; // "kant": tik bij een kant van een perceel; "ab": A en B zelf tikken
   const trekLaag = L.layerGroup();
   const bewaarTrek = () => { store.set("kaartTrekLijnen", trek.lijnen); store.set("kaartTrimble", { klant: trek.klant, bedrijf: trek.bedrijf, breedte: trek.breedte }); };
   const trekSay = (t, warn) => { const h = $("trekHint"); h.textContent = t; h.className = "hint" + (warn ? " warn" : ""); };
@@ -3862,12 +3862,12 @@ function start() {
     ["klant", "bedrijf", "breedte"].forEach(k => { const i = $("trek_" + k); if (document.activeElement !== i) i.value = trek[k]; });
     const n = trekObjs().length;
     $("trekAlle").hidden = !n; $("trekAlle").textContent = n === 1 ? "Lijn op de rand van het perceel" : "Lijn op de rand van alle " + n + " percelen" + (naamActief ? " van " + naamActief : "");
-    $("trekTik").setAttribute("aria-pressed", trekModus); $("trekTik").textContent = trekModus ? "Klaar met tikken" : "Zelf A en B tikken";
-    $("trekVrij").hidden = !(vrij.a && vrij.b);
-    if (vrij.a && vrij.b) $("trekVrij").textContent = "Lijn uit AB-lijn meten (" + veldBij([(vrij.a[0] + vrij.b[0]) / 2, (vrij.a[1] + vrij.b[1]) / 2]) + ")";
+    $("trekKant").hidden = !n; $("trekKant").setAttribute("aria-pressed", trekModus === "kant"); $("trekKant").textContent = trekModus === "kant" ? "Klaar met kanten" : "Kanten aantikken";
+    $("trekTik").setAttribute("aria-pressed", trekModus === "ab"); $("trekTik").textContent = trekModus === "ab" ? "Klaar met tikken" : "Zelf A en B tikken";
     // Uitleg bij de knoppen, en waarom de klant "perceelkaart" heet als er geen bedrijf op de kaart staat
     $("trekUitleg").innerHTML = (n ? "<b>Rand</b>: per perceel een lijn op de langste rechte kant (of de kant / AB-lijn die je bij Percelen koos). " : "") +
-      "<b>Zelf tikken</b>: tik A en B op de kaart, zo vaak als je wilt." + ($("trekVrij").hidden ? "" : " <b>AB-lijn meten</b>: neemt de lijn over die je bij Percelen → AB-lijn meten hebt staan.") +
+      (n ? "<b>Kanten aantikken</b>: tik bij een kant van een perceel, dan komt er een lijn op die kant (nog eens tikken haalt hem weg); zoveel kanten als je wilt. " : "") +
+      "<b>Zelf tikken</b>: tik A en B op de kaart." +
       (!naamActief && !trek.lijnen.length ? "<br>Tip: zet eerst een bedrijf op de kaart (tabblad Bedrijven), dan wordt de klant de naam van dat bedrijf." : "");
     const ul = $("trekLijst"); ul.innerHTML = "";
     trek.lijnen.forEach(l => {
@@ -3889,8 +3889,28 @@ function start() {
     $("trekDeel").hidden = !kanDelen;
   }
   function trekTik(ll) {
-    if (!trekModus) { trekSay("Tik eerst op AB-lijn tikken, of kies AB-kant van alle percelen."); return; }
+    if (!trekModus) { trekSay("Kies eerst Kanten aantikken of Zelf A en B tikken."); return; }
     const c = [ll.lng, ll.lat];
+    if (trekModus === "kant") {
+      // Zoals AB-kant kiezen bij Percelen: de dichtstbijzijnde rand (binnen 30 px), dan de rechte kant daar
+      const p = map.latLngToContainerPoint(ll); let best = null;
+      trekObjs().forEach(o => Perceel.zijden(o.geom).forEach(z => {
+        const d = L.LineUtil.pointToSegmentDistance(p, map.latLngToContainerPoint([z.a[1], z.a[0]]), map.latLngToContainerPoint([z.b[1], z.b[0]]));
+        if (!best || d < best.d) best = { d, o };
+      }));
+      if (!best || best.d > 30) { trekSay("Tik dichter bij de rand van een perceel.", true); return; }
+      let rand = null; try { const sp = Perceel.sporen(best.o.geom, 3, { abPunt: c }); rand = sp && sp.rand; } catch (e) {}
+      if (!rand) { trekSay("Hier vond ik geen rechte kant.", true); return; }
+      const nieuw = trekErbij(rand[0], rand[1], best.o.naam);
+      if (!nieuw) { // al in de lijst: nog eens tikken = eruit
+        const zelfde = l => l.veld === best.o.naam && Math.abs(l.a[0] - rand[0][0]) + Math.abs(l.a[1] - rand[0][1]) + Math.abs(l.b[0] - rand[1][0]) + Math.abs(l.b[1] - rand[1][1]) < 2e-7;
+        trek.lijnen = trek.lijnen.filter(l => !zelfde(l));
+      }
+      bewaarTrek(); trekPaneel(); trekTeken();
+      const k = Perceel.koers(rand[0], rand[1]).koers;
+      trekSay((nieuw ? "Lijn op deze kant van " : "Eruit gehaald: deze kant van ") + best.o.naam + " (koers " + k.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "°). Tik een volgende kant, of Klaar met kanten.");
+      return;
+    }
     if (!trekA) { trekA = c; trekSay("A staat. Tik nu B."); trekTeken(); return; }
     const a = trekA; trekA = null;
     if (Perceel.koers(a, c).afstand < 5) { trekSay("A en B liggen te dicht bij elkaar (minder dan 5 m). Tik A opnieuw.", true); trekTeken(); return; }
@@ -3937,12 +3957,9 @@ function start() {
     bewaarTrek(); trekPaneel(); trekTeken();
     trekSay(erbij ? erbij + (erbij === 1 ? " lijn" : " lijnen") + " erbij, op de rand van " + (erbij === 1 ? "het perceel." : "elk perceel.") + (geen ? " Bij " + geen + " lukte het niet." : "") : "De randlijnen staan al in de lijst (onderaan).");
   });
-  $("trekTik").addEventListener("click", () => { trekModus = !trekModus; trekA = null; $("map").classList.toggle("oever", trekModus); trekPaneel(); trekTeken(); trekSay(trekModus ? "Tik A op de kaart, dan B. Zo vaak als je wilt." : "Klaar met tikken."); if (trekModus) window.scrollTo(0, 0); });
-  $("trekVrij").addEventListener("click", () => {
-    const sm = parse(vrij.s) || 0, ok = trekErbij(vrij.a, vrij.b);
-    if (sm) { const [a2, b2] = Perceel.verschuifLijn(vrij.a, vrij.b, vrij.links ? -sm : sm); trekErbij(a2, b2, null, "AB, " + String(sm).replace(".", ",") + " m " + (vrij.links ? "L" : "R")); }
-    bewaarTrek(); trekPaneel(); trekTeken(); trekSay(ok ? "Lijn uit AB-lijn meten erbij (onderaan in de lijst)." : "Die lijn staat al in de lijst.");
-  });
+  const zetTrekModus = m => { trekModus = trekModus === m ? "" : m; trekA = null; $("map").classList.toggle("oever", !!trekModus); trekPaneel(); trekTeken(); if (trekModus) window.scrollTo(0, 0); };
+  $("trekKant").addEventListener("click", () => { zetTrekModus("kant"); trekSay(trekModus ? "Tik bij een kant van een perceel: daar komt een lijn op. Nog eens tikken haalt hem weg." : "Klaar met kanten."); });
+  $("trekTik").addEventListener("click", () => { zetTrekModus("ab"); trekSay(trekModus ? "Tik A op de kaart, dan B. Zo vaak als je wilt." : "Klaar met tikken."); });
   $("trekWis").addEventListener("click", e => { if (!armed(e.currentTarget, "Tik nog eens")) return; trek.lijnen = []; bewaarTrek(); trekPaneel(); trekTeken(); trekSay("Lijst leeg."); });
   // In AB-lijn meten: knop om de lijn in de lijst te zetten
   function trimbleBlok(uit) {

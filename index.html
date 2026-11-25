@@ -119,6 +119,9 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .vrij .vrow input { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font-size: 16px; padding: 0 8px; outline: none; }
 .vrij .vrow input.num { text-align: right; font-size: 20px; }
 .vrij .vrow input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.vrij .trimble { border-top: 1px solid var(--line); margin-top: 10px; }
+.vrij .trimble .vrow { grid-template-columns: 6.5em 1fr 0; }
+.vrij .trimble .row .btn { flex: 1; }
 .vrij .kort { display: grid; gap: 4px; margin: 10px 0 6px; font-size: 18px; }
 .vrij .kort div { display: grid; grid-template-columns: 8em 1fr; gap: 8px; align-items: baseline; }
 .vrij .kort span { color: var(--muted); font-size: 14px; }
@@ -522,7 +525,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 154</div>
+  <div class="voet" id="voetVersie">versie 155</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3702,6 +3705,149 @@ function start() {
       });
       uit.appendChild(bt);
     }
+    trimbleBlok(uit, ob);
+  }
+  // ---------- Naar de trekker: Trimble FmX ----------
+  // Een zip met AgGPS/Data/<klant>/<bedrijf>/<veld>/ zoals de FmX hem zelf op de stick zet: Swaths.shp/.shx/.dbf (de AB-lijnen),
+  // field.xml, origin.kml en <lon>E<lat>N.pos. Getest op een FmX (Data Files → Copy): veld en lijn kwamen erin en hij stuurde erop.
+  // Let op: hetzelfde klant/bedrijf/veld als op de FmX kan dat veld overschrijven, daarom standaard een eigen veldnaam.
+  const crcTabel = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = crcTabel[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  // Zip zonder compressie (de bestanden zijn klein); namen in UTF-8
+  function maakZip(bestanden) {
+    const enc = new TextEncoder(), delen = [], centraal = [], nu = new Date();
+    const tijd = (nu.getHours() << 11) | (nu.getMinutes() << 5) | (nu.getSeconds() >> 1), datum = ((nu.getFullYear() - 1980) << 9) | ((nu.getMonth() + 1) << 5) | nu.getDate();
+    let pos = 0;
+    bestanden.forEach(f => {
+      const nm = enc.encode(f.naam), data = f.data, crc = crc32(data), n = data.length;
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(10, tijd, true); lh.setUint16(12, datum, true);
+      lh.setUint32(14, crc, true); lh.setUint32(18, n, true); lh.setUint32(22, n, true); lh.setUint16(26, nm.length, true);
+      delen.push(new Uint8Array(lh.buffer), nm, data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(12, tijd, true); ch.setUint16(14, datum, true);
+      ch.setUint32(16, crc, true); ch.setUint32(20, n, true); ch.setUint32(24, n, true); ch.setUint16(28, nm.length, true); ch.setUint32(42, pos, true);
+      centraal.push(new Uint8Array(ch.buffer), nm);
+      pos += 30 + nm.length + n;
+    });
+    const cd = centraal.reduce((t, x) => t + x.length, 0), eind = new DataView(new ArrayBuffer(22));
+    eind.setUint32(0, 0x06054b50, true); eind.setUint16(8, bestanden.length, true); eind.setUint16(10, bestanden.length, true); eind.setUint32(12, cd, true); eind.setUint32(16, pos, true);
+    return new Blob([...delen, ...centraal, new Uint8Array(eind.buffer)], { type: "application/zip" });
+  }
+  // Tekst voor Trimble: alleen gewone letters (accenten eraf), geen tekens die in een mapnaam niet mogen
+  const trimbleTxt = (t, max) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\x20-\x7e]/g, "").replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().replace(/\.+$/, "").slice(0, max);
+  // Swaths.shp/.shx/.dbf: per lijn een polyline (2 punten = AB-lijn), kolommen zoals de FmX ze schrijft (versie 10.18)
+  function swathsBestanden(lijnen) {
+    const n = lijnen.length, inh = lijnen.map(l => 48 + 16 * l.pts.length);
+    const shpLen = 100 + inh.reduce((t, c) => t + 8 + c, 0), shxLen = 100 + 8 * n;
+    const shp = new DataView(new ArrayBuffer(shpLen)), shx = new DataView(new ArrayBuffer(shxLen));
+    const doos = pts => [Math.min(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[0])), Math.max(...pts.map(p => p[1]))];
+    const bx = doos(lijnen.flatMap(l => l.pts));
+    [[shp, shpLen], [shx, shxLen]].forEach(([v, len]) => { v.setInt32(0, 9994); v.setInt32(24, len / 2); v.setInt32(28, 1000, true); v.setInt32(32, 3, true); bx.forEach((x, j) => v.setFloat64(36 + 8 * j, x, true)); });
+    let o = 100;
+    lijnen.forEach((l, i) => {
+      shx.setInt32(100 + 8 * i, o / 2); shx.setInt32(104 + 8 * i, inh[i] / 2);
+      shp.setInt32(o, i + 1); shp.setInt32(o + 4, inh[i] / 2); o += 8;
+      shp.setInt32(o, 3, true); doos(l.pts).forEach((x, j) => shp.setFloat64(o + 4 + 8 * j, x, true));
+      shp.setInt32(o + 36, 1, true); shp.setInt32(o + 40, l.pts.length, true); shp.setInt32(o + 44, 0, true);
+      l.pts.forEach((p, j) => { shp.setFloat64(o + 48 + 16 * j, p[0], true); shp.setFloat64(o + 56 + 16 * j, p[1], true); });
+      o += inh[i];
+    });
+    const velden = [["Date", "D", 8, 0], ["Time", "C", 10, 0], ["Version", "C", 8, 0], ["Id", "N", 4, 0], ["Name", "C", 48, 0], ["Length", "N", 9, 3], ["Dist1", "N", 9, 3],
+      ["Dist2", "N", 9, 3], ["UniqueID", "C", 16, 0], ["Operation", "N", 1, 0], ["SwathWidth", "N", 6, 2], ["numRows", "N", 1, 0]];
+    const recLen = 1 + velden.reduce((t, f) => t + f[2], 0), kopLen = 32 + 32 * velden.length + 1, nu = new Date();
+    const dbf = new Uint8Array(kopLen + recLen * n + 1), dv = new DataView(dbf.buffer);
+    dbf[0] = 3; dbf[1] = nu.getFullYear() - 1900; dbf[2] = nu.getMonth() + 1; dbf[3] = nu.getDate();
+    dv.setUint32(4, n, true); dv.setUint16(8, kopLen, true); dv.setUint16(10, recLen, true);
+    velden.forEach((f, i) => { const b = 32 + 32 * i; for (let j = 0; j < f[0].length; j++) dbf[b + j] = f[0].charCodeAt(j); dbf[b + 11] = f[1].charCodeAt(0); dbf[b + 16] = f[2]; dbf[b + 17] = f[3]; });
+    dbf[kopLen - 1] = 0x0D;
+    const twee = x => String(x).padStart(2, "0"), uur = nu.getHours() % 12 || 12;
+    const tijd = twee(uur) + ":" + twee(nu.getMinutes()) + ":" + twee(nu.getSeconds()) + (nu.getHours() < 12 ? "am" : "pm");
+    const dag = nu.getFullYear() + twee(nu.getMonth() + 1) + twee(nu.getDate());
+    lijnen.forEach((l, i) => {
+      const uid = "11110" + Array.from({ length: 11 }, () => "0123456789ABCDEF"[Math.floor(Math.random() * 16)]).join("");
+      const lengte = l.pts.slice(1).reduce((t, p, j) => t + Perceel.koers(l.pts[j], p).afstand, 0);
+      const w = [dag, tijd, "10.18", 0, trimbleTxt(l.naam, 48), lengte, 0, 0, uid, 6, l.breedte, 3];
+      let p = kopLen + recLen * i; dbf[p++] = 0x20;
+      velden.forEach((f, k) => {
+        let t = f[1] === "N" ? Number(w[k]).toFixed(f[3]).padStart(f[2]).slice(-f[2]) : String(w[k]).padEnd(f[2]).slice(0, f[2]);
+        for (let j = 0; j < f[2]; j++) dbf[p++] = t.charCodeAt(j);
+      });
+    });
+    dbf[dbf.length - 1] = 0x1A;
+    return { shp: new Uint8Array(shp.buffer), shx: new Uint8Array(shx.buffer), dbf };
+  }
+  function trimbleZip(klant, bedrijf, veld, lijnen) {
+    const enc = new TextEncoder(), map_ = "AgGPS/Data/" + klant + "/" + bedrijf + "/" + veld + "/", A = lijnen[0].pts[0];
+    const sw = swathsBestanden(lijnen);
+    return maakZip([
+      { naam: map_ + "Swaths.shp", data: sw.shp }, { naam: map_ + "Swaths.shx", data: sw.shx }, { naam: map_ + "Swaths.dbf", data: sw.dbf },
+      { naam: map_ + "field.xml", data: enc.encode("<field>\n    <access_paths>\n        <width>0.000000</width>\n        <offset>0</offset>\n        <period>0</period>\n        <ABOrdinal>0</ABOrdinal>\n        <GuideTo>0</GuideTo>\n    </access_paths>\n</field>\n") },
+      { naam: map_ + "origin.kml", data: enc.encode("<kml>\n    <Placemark>\n        <name>" + veld.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</name>\n        <description>Field Origin</description>\n        <Point>\n            <coordinates>" + A[0].toFixed(9) + "," + A[1].toFixed(9) + ",0.000</coordinates>\n        </Point>\n    </Placemark>\n</kml>\n") },
+      { naam: map_ + A[0].toFixed(5) + "E" + A[1].toFixed(5) + "N.pos", data: new Uint8Array(0) }
+    ]);
+  }
+  // Paneel in AB-lijn meten (blijft open tot je hem dichtdoet; ingevulde namen blijven staan, klant/bedrijf/breedte onthouden)
+  const trim = Object.assign({ open: false, klant: "", bedrijf: "perceelkaart", veld: "", lijn: "", breedte: "" }, store.get("kaartTrimble", {}), { open: false, veld: "", lijn: "" });
+  function trimbleBlok(uit, ob) {
+    const box = document.createElement("div"); box.className = "trimble";
+    const knop = document.createElement("button"); knop.type = "button"; knop.className = "btn"; knop.id = "trimKnop"; knop.style.width = "100%"; knop.style.marginTop = "10px";
+    knop.textContent = "Naar de trekker (Trimble FmX)"; knop.setAttribute("aria-pressed", trim.open);
+    knop.addEventListener("click", () => { trim.open = !trim.open; tekenVrij(); });
+    box.appendChild(knop);
+    if (trim.open) {
+      if (!trim.klant) trim.klant = naamActief || "perceelkaart";
+      if (!trim.veld) trim.veld = "PK " + (ob ? ob.naam : "AB-lijn");
+      if (!trim.lijn) trim.lijn = "PK AB-lijn";
+      const rij = (lbl, k, extra) => {
+        const r = document.createElement("div"); r.className = "vrow";
+        const l = document.createElement("label"); l.textContent = lbl; l.htmlFor = "trim_" + k;
+        const i = document.createElement("input"); i.id = "trim_" + k; i.type = "text"; i.autocomplete = "off"; i.value = trim[k]; Object.assign(i, extra || {});
+        i.addEventListener("input", () => { trim[k] = i.value; store.set("kaartTrimble", { klant: trim.klant, bedrijf: trim.bedrijf, breedte: trim.breedte }); });
+        r.append(l, i, document.createElement("span")); return r;
+      };
+      box.append(rij("Klant", "klant"), rij("Bedrijf", "bedrijf"), rij("Veld", "veld"), rij("Lijnnaam", "lijn"), rij("Breedte (m)", "breedte", { inputMode: "decimal", className: "num", placeholder: "leeg = 3" }));
+      const uitleg = document.createElement("div"); uitleg.className = "meta"; uitleg.style.marginTop = "6px";
+      uitleg.textContent = "Op de FmX heet het straks Klant → Bedrijf → Veld. Kies een veldnaam die nog niet op de FmX staat: een veld met precies dezelfde namen kan bij het kopiëren overschreven worden." + (parse(vrij.s) ? " De verschoven lijn (opzij) gaat als tweede lijn mee." : "");
+      const r = document.createElement("div"); r.className = "row"; r.style.marginTop = "8px";
+      const deel = document.createElement("button"); deel.type = "button"; deel.className = "btn"; deel.id = "trimDeel"; deel.textContent = "Delen (WhatsApp, mail)";
+      const down = document.createElement("button"); down.type = "button"; down.className = "btn"; down.id = "trimDown"; down.textContent = "Downloaden";
+      const hint = document.createElement("div"); hint.className = "hint"; hint.id = "trimHint";
+      const maak = () => {
+        const klant = trimbleTxt(trim.klant, 40), bedrijf = trimbleTxt(trim.bedrijf, 40), veld = trimbleTxt(trim.veld, 40);
+        const br = parse(trim.breedte) || 3; // niet nodig: de FmX rekent met het werktuig dat je kiest; leeg = 3 m (universeel)
+        if (!klant || !bedrijf || !veld) { hint.textContent = "Vul klant, bedrijf en veld in."; hint.className = "hint warn"; return null; }
+        if (!(br > 0 && br <= 99)) { hint.textContent = "Werkbreedte klopt niet (meter, bijv. 9,35), of laat hem leeg."; hint.className = "hint warn"; return null; }
+        const naam = trimbleTxt(trim.lijn, 40) || "PK AB-lijn", lijnen = [{ naam, pts: [vrij.a, vrij.b], breedte: br }];
+        const sm = parse(vrij.s) || 0;
+        if (sm) { const [a2, b2] = Perceel.verschuifLijn(vrij.a, vrij.b, vrij.links ? -sm : sm); lijnen.push({ naam: naam + ", " + String(sm).replace(".", ",") + " m " + (vrij.links ? "L" : "R"), pts: [a2, b2], breedte: br }); }
+        const bestand = "trimble-" + veld.replace(/\s+/g, "-") + ".zip";
+        return { blob: trimbleZip(klant, bedrijf, veld, lijnen), bestand, klant, bedrijf, veld, aantal: lijnen.length };
+      };
+      const klaarTxt = z => " Op de pc: pak de zip uit en zet de map AgGPS op de USB-stick (staat er al een AgGPS-map op: zet alleen de map Data/" + z.klant + " erbij). Op de FmX: Data Files → aan de USB-kant " + z.klant + " kiezen → Copy. Daarna veld " + z.klant + " → " + z.bedrijf + " → " + z.veld + " kiezen.";
+      deel.addEventListener("click", async () => {
+        const z = maak(); if (!z) return;
+        let file = null; try { file = new File([z.blob], z.bestand, { type: "application/zip" }); } catch (e) {}
+        try {
+          if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: z.bestand });
+            hint.textContent = "Gedeeld: " + z.bestand + " (" + z.aantal + (z.aantal === 1 ? " lijn" : " lijnen") + ")." + klaarTxt(z); hint.className = "hint";
+          } else { hint.textContent = "Delen kan hier niet: gebruik Downloaden."; hint.className = "hint warn"; }
+        } catch (e) { if (!e || e.name !== "AbortError") { hint.textContent = "Delen lukte niet: gebruik Downloaden."; hint.className = "hint warn"; } }
+      });
+      down.addEventListener("click", () => {
+        const z = maak(); if (!z) return;
+        const a = document.createElement("a"); a.href = URL.createObjectURL(z.blob); a.download = z.bestand; document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 10000);
+        hint.textContent = "Bewaard als " + z.bestand + " (" + z.aantal + (z.aantal === 1 ? " lijn" : " lijnen") + "), in Downloads." + klaarTxt(z); hint.className = "hint";
+      });
+      // Delen alleen tonen waar de telefoon bestanden kan delen
+      let kanDelen = false; try { kanDelen = !!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], "x.zip", { type: "application/zip" })] })); } catch (e) {}
+      if (kanDelen) r.appendChild(deel);
+      r.appendChild(down);
+      box.append(uitleg, r, hint);
+    }
+    uit.appendChild(box);
   }
   // Gekozen punt (a of b) na een tik op het blokje A of B; de volgende tik op de kaart zet het daar
   let vrijKies = null;

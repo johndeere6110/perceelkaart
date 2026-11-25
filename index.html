@@ -549,7 +549,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 158</div>
+  <div class="voet" id="voetVersie">versie 159</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3825,14 +3825,15 @@ function start() {
   if (!Array.isArray(trek.lijnen)) trek.lijnen = [];
   let trekModus = "", trekA = null; // "kant": tik bij een kant van een perceel; "ab": A en B zelf tikken
   const trekLaag = L.layerGroup();
-  const bewaarTrek = () => { store.set("kaartTrekLijnen", trek.lijnen); store.set("kaartTrimble", { klant: trek.klant, bedrijf: trek.bedrijf, breedte: trek.breedte }); };
+  const bewaarTrek = () => { store.set("kaartTrekLijnen", trek.lijnen); store.set("kaartTrimble", { klant: trek.klant, bedrijf: trek.bedrijf, breedte: trek.breedte, klantZelf: !!trek.klantZelf, bedrijfZelf: !!trek.bedrijfZelf }); };
+  // Plaats uit het adres van de boerderij ("Wijmers 22, 1608HK Wijdenes" → "Wijdenes"): op de FmX het "bedrijf" (zoals oostwoud, beemster)
+  const plaatsVan = naam => { const n = namen.find(x => x.naam === naam), a = n && n.erf && n.erf.adres; if (!a) return ""; const m = /\d{4}\s?[A-Za-z]{2}\s+(.+)$/.exec(a); return (m ? m[1] : a.split(",").pop()).trim(); };
   const trekSay = (t, warn) => { const h = $("trekHint"); h.textContent = t; h.className = "hint" + (warn ? " warn" : ""); };
   const veldBij = c => { const o = objBijPunt(c); return o ? o.naam : "AB-lijn"; };
   function trekErbij(a, b, veld, naam) {
     veld = veld || veldBij([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
     const al = trek.lijnen.filter(l => l.veld === veld);
     if (al.some(l => Math.abs(l.a[0] - a[0]) + Math.abs(l.a[1] - a[1]) + Math.abs(l.b[0] - b[0]) + Math.abs(l.b[1] - b[1]) < 2e-7)) return false; // staat er al
-    if (!trek.lijnen.length && naamActief) trek.klant = naamActief;
     if (!naam) { let n = 1; while (al.some(l => l.naam === "AB " + n)) n++; naam = "AB " + n; } // eerste vrije nummer in dit veld
     trek.lijnen.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), veld, naam, a: a.slice(), b: b.slice() });
     return true;
@@ -3857,8 +3858,11 @@ function start() {
     if (trekA) trekLaag.addLayer(L.marker([trekA[1], trekA[0]], { icon: L.divIcon({ className: "", html: '<div class="abl vrijp">A</div>', iconSize: [26, 26] }), interactive: false }));
   }
   function trekPaneel() {
-    if (!trek.lijnen.length && naamActief) trek.klant = naamActief;
+    // Klant = het bedrijf op de kaart, bedrijf = de plaats van de boerderij; tenzij je ze zelf hebt aangepast
+    if (naamActief && !trek.klantZelf) trek.klant = naamActief;
+    if (naamActief && !trek.bedrijfZelf) trek.bedrijf = plaatsVan(naamActief) || naamActief;
     if (!trek.klant) trek.klant = "perceelkaart";
+    if (!trek.bedrijf) trek.bedrijf = "perceelkaart";
     ["klant", "bedrijf", "breedte"].forEach(k => { const i = $("trek_" + k); if (document.activeElement !== i) i.value = trek[k]; });
     const n = trekObjs().length;
     $("trekAlle").hidden = !n; $("trekAlle").textContent = n === 1 ? "Lijn op de rand van het perceel" : "Lijn op de rand van alle " + n + " percelen" + (naamActief ? " van " + naamActief : "");
@@ -3868,7 +3872,7 @@ function start() {
     $("trekUitleg").innerHTML = (n ? "<b>Rand</b>: per perceel een lijn op de langste rechte kant (of de kant / AB-lijn die je bij Percelen koos). " : "") +
       (n ? "<b>Kanten aantikken</b>: tik bij een kant van een perceel, dan komt er een lijn op die kant (nog eens tikken haalt hem weg); zoveel kanten als je wilt. " : "") +
       "<b>Zelf tikken</b>: tik A en B op de kaart." +
-      (!naamActief && !trek.lijnen.length ? "<br>Tip: zet eerst een bedrijf op de kaart (tabblad Bedrijven), dan wordt de klant de naam van dat bedrijf." : "");
+      (!naamActief ? "<br>Tip: zet eerst een bedrijf op de kaart (tabblad Bedrijven): dan wordt de klant de naam van het bedrijf en het bedrijf de plaats van de boerderij." : "");
     const ul = $("trekLijst"); ul.innerHTML = "";
     trek.lijnen.forEach(l => {
       const li = document.createElement("li"), k = Perceel.koers(l.a, l.b);
@@ -3950,7 +3954,7 @@ function start() {
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 10000);
     trekSay("Bewaard als " + z.bestand + " in Downloads: " + trekKlaarTxt(z));
   });
-  ["klant", "bedrijf", "breedte"].forEach(k => $("trek_" + k).addEventListener("input", e => { trek[k] = e.target.value; bewaarTrek(); }));
+  ["klant", "bedrijf", "breedte"].forEach(k => $("trek_" + k).addEventListener("input", e => { trek[k] = e.target.value; if (k !== "breedte") trek[k + "Zelf"] = !!e.target.value.trim(); bewaarTrek(); }));
   $("trekAlle").addEventListener("click", () => {
     let erbij = 0, geen = 0;
     trekObjs().forEach(o => { const ab = abKantVan(o); if (!ab) { geen++; return; } if (trekErbij(ab[0], ab[1], o.naam, "AB-kant")) erbij++; });
@@ -3960,7 +3964,7 @@ function start() {
   const zetTrekModus = m => { trekModus = trekModus === m ? "" : m; trekA = null; $("map").classList.toggle("oever", !!trekModus); trekPaneel(); trekTeken(); if (trekModus) window.scrollTo(0, 0); };
   $("trekKant").addEventListener("click", () => { zetTrekModus("kant"); trekSay(trekModus ? "Tik bij een kant van een perceel: daar komt een lijn op. Nog eens tikken haalt hem weg." : "Klaar met kanten."); });
   $("trekTik").addEventListener("click", () => { zetTrekModus("ab"); trekSay(trekModus ? "Tik A op de kaart, dan B. Zo vaak als je wilt." : "Klaar met tikken."); });
-  $("trekWis").addEventListener("click", e => { if (!armed(e.currentTarget, "Tik nog eens")) return; trek.lijnen = []; bewaarTrek(); trekPaneel(); trekTeken(); trekSay("Lijst leeg."); });
+  $("trekWis").addEventListener("click", e => { if (!armed(e.currentTarget, "Tik nog eens")) return; trek.lijnen = []; trek.klantZelf = trek.bedrijfZelf = false; bewaarTrek(); trekPaneel(); trekTeken(); trekSay("Lijst leeg."); });
   // In AB-lijn meten: knop om de lijn in de lijst te zetten
   function trimbleBlok(uit) {
     const knop = document.createElement("button"); knop.type = "button"; knop.className = "btn"; knop.id = "trimKnop"; knop.style.width = "100%"; knop.style.marginTop = "10px";

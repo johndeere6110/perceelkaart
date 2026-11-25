@@ -129,6 +129,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 #trekLijst input { width: 100%; min-width: 0; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px; padding: 0 8px; }
 #trekLijst .x { flex: none; min-width: 40px; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 18px; margin-left: 8px; }
 .leaflet-tooltip.trekl { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+.leaflet-tooltip.trekl.bocht { background: #e8590c; border-color: #e8590c; }
 .vrij .kort { display: grid; gap: 4px; margin: 10px 0 6px; font-size: 18px; }
 .vrij .kort div { display: grid; grid-template-columns: 8em 1fr; gap: 8px; align-items: baseline; }
 .vrij .kort span { color: var(--muted); font-size: 14px; }
@@ -455,7 +456,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <div class="advice vrij trek">
       <div class="vrow"><label for="trek_klant">Klant</label><input id="trek_klant" type="text" autocomplete="off"><span></span></div>
       <div class="vrow"><label for="trek_bedrijf">Bedrijf</label><input id="trek_bedrijf" type="text" autocomplete="off"><span></span></div>
-      <div class="knoppen"><button type="button" class="btn" id="trekAlle" hidden>AB-kant van alle percelen</button><button type="button" class="btn" id="trekKant" aria-pressed="false">Kanten aantikken</button><button type="button" class="btn" id="trekTik" aria-pressed="false">Zelf A en B tikken</button></div>
+      <div class="knoppen"><button type="button" class="btn" id="trekAlle" hidden>AB-kant van alle percelen</button><button type="button" class="btn" id="trekKant" aria-pressed="false">Kanten aantikken</button><button type="button" class="btn" id="trekTik" aria-pressed="false">Zelf A en B tikken</button><button type="button" class="btn" id="trekBocht" aria-pressed="false" hidden>Rand volgen (bocht)</button><button type="button" class="btn" id="trekBochtOm" hidden>Andere kant om</button></div>
       <div class="meta" id="trekUitleg" style="margin-top:6px"></div>
       <div class="meta" id="trekLeeg">Nog geen lijnen. Op de FmX heet het straks Klant → Bedrijf → Veld; het veld is het perceelnummer (pas het gerust aan). Kies veldnamen die nog niet op de FmX staan: een veld met precies dezelfde namen kan bij het kopiëren overschreven worden.</div>
       <ul class="log" id="trekLijst"></ul>
@@ -540,6 +541,11 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
         <pre id="ruw">Nog niks opgehaald.</pre>
       </details>
     </div>
+    <div class="blok">
+      <div class="lbl2">Experimenteel</div>
+      <div class="meta">Bochten voor de trekker (Trimble FmX): een lijn die de rand van een perceel volgt. Nog niet op de trekker getest.</div>
+      <div class="row" style="margin-top:8px"><button type="button" class="btn" id="bExpBocht">Bochten maken</button><button type="button" class="btn" id="bExpUit" hidden>Bochten verbergen</button></div>
+    </div>
   </div>
   <div id="locHulp" role="dialog" aria-labelledby="locHulpKop" hidden>
     <h3 id="locHulpKop">Locatie staat uit</h3>
@@ -550,7 +556,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 160</div>
+  <div class="voet" id="voetVersie">versie 161</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -2959,7 +2965,7 @@ function start() {
     if (was === t) return;
     // Trekker: lijnen op de kaart; tikken op de kaart zet A en B (de gewone lagen blijven)
     if (t === "trek") { if (vrijModus) setVrij(false); if (abModus) setAB(false); if (oeverModus) setOever(false); if (koppelModus) setKoppel(false); trekLaag.addTo(map); trekPaneel(); trekTeken(); }
-    if (was === "trek") { map.removeLayer(trekLaag); trekModus = ""; trekA = null; $("map").classList.remove("oever"); }
+    if (was === "trek") { map.removeLayer(trekLaag); trekModus = ""; trekA = null; bochtStart = null; $("map").classList.remove("oever"); }
     const eigen = x => x === "km" || x === "met";
     if (was === "km") map.removeLayer(kmLaag);
     if (was === "met") map.removeLayer(metLaag);
@@ -3798,7 +3804,7 @@ function start() {
     const dag = nu.getFullYear() + twee(nu.getMonth() + 1) + twee(nu.getDate());
     lijnen.forEach((l, i) => {
       const uid = "11110" + Array.from({ length: 11 }, () => "0123456789ABCDEF"[Math.floor(Math.random() * 16)]).join("");
-      const lengte = l.pts.slice(1).reduce((t, p, j) => t + Perceel.koers(l.pts[j], p).afstand, 0);
+      const lengte = Perceel.koers(l.pts[0], l.pts[l.pts.length - 1]).afstand; // Trimble: afstand begin → eind (ook bij een bocht)
       const w = [dag, tijd, "10.18", 0, trimbleTxt(l.naam, 48), lengte, 0, 0, uid, 6, l.breedte, 3];
       let p = kopLen + recLen * i; dbf[p++] = 0x20;
       velden.forEach((f, k) => {
@@ -3834,12 +3840,15 @@ function start() {
   const plaatsVan = naam => { const n = namen.find(x => x.naam === naam), a = n && n.erf && n.erf.adres; if (!a) return ""; const m = /\d{4}\s?[A-Za-z]{2}\s+(.+)$/.exec(a); return (m ? m[1] : a.split(",").pop()).trim(); };
   const trekSay = (t, warn) => { const h = $("trekHint"); h.textContent = t; h.className = "hint" + (warn ? " warn" : ""); };
   const veldBij = c => { const o = objBijPunt(c); return o ? o.naam : "AB-lijn"; };
-  function trekErbij(a, b, veld, naam) {
+  function trekErbij(a, b, veld, naam, pts) {
     veld = veld || veldBij([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
     const al = trek.lijnen.filter(l => l.veld === veld);
     if (al.some(l => Math.abs(l.a[0] - a[0]) + Math.abs(l.a[1] - a[1]) + Math.abs(l.b[0] - b[0]) + Math.abs(l.b[1] - b[1]) < 2e-7)) return false; // staat er al
-    if (!naam) { let n = 1; while (al.some(l => l.naam === "AB " + n)) n++; naam = "AB " + n; } // eerste vrije nummer in dit veld
-    trek.lijnen.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), veld, naam, a: a.slice(), b: b.slice() });
+    const soort = pts ? "Bocht " : "AB ";
+    if (!naam) { let n = 1; while (al.some(l => l.naam === soort + n)) n++; naam = soort + n; } // eerste vrije nummer in dit veld
+    const l = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), veld, naam, a: a.slice(), b: b.slice() };
+    if (pts) l.pts = pts.map(p => [Math.round(p[0] * 1e8) / 1e8, Math.round(p[1] * 1e8) / 1e8]);
+    trek.lijnen.push(l);
     return true;
   }
   // AB-kant van een perceel of kavel: je eigen getikte AB-lijn, anders de rand die de spuitsporen gebruiken (langste rechte kant of de gekozen kant)
@@ -3854,12 +3863,18 @@ function start() {
   function trekTeken() {
     trekLaag.clearLayers();
     trek.lijnen.forEach(l => {
+      if (l.pts) { // bocht: precies de punten, geen doorgetrokken stuk
+        trekLaag.addLayer(L.polyline(l.pts.map(p => [p[1], p[0]]), { color: "#e8590c", weight: 4, interactive: false })
+          .bindTooltip(l.veld + " · " + l.naam, { permanent: true, direction: "center", className: "pnr trekl bocht" }));
+        return;
+      }
       const k = Perceel.koers(l.a, l.b), v1 = Perceel.puntOpKoers(l.a, k.koers, 300), v2 = Perceel.puntOpKoers(l.a, (k.koers + 180) % 360, 300);
       trekLaag.addLayer(L.polyline([[v2[1], v2[0]], [v1[1], v1[0]]], { color: "#1f6feb", weight: 1.5, opacity: .7, dashArray: "8 6", interactive: false }));
       trekLaag.addLayer(L.polyline([[l.a[1], l.a[0]], [l.b[1], l.b[0]]], { color: "#1f6feb", weight: 4, interactive: false })
         .bindTooltip(l.veld + " · " + l.naam, { permanent: true, direction: "center", className: "pnr trekl" }));
     });
     if (trekA) trekLaag.addLayer(L.marker([trekA[1], trekA[0]], { icon: L.divIcon({ className: "", html: '<div class="abl vrijp">A</div>', iconSize: [26, 26] }), interactive: false }));
+    if (bochtStart) trekLaag.addLayer(L.marker([bochtStart.pt[1], bochtStart.pt[0]], { icon: L.divIcon({ className: "", html: '<div class="abl vrijp">1</div>', iconSize: [26, 26] }), interactive: false }));
   }
   function trekPaneel() {
     // Klant = het bedrijf op de kaart, bedrijf = de plaats van de boerderij; tenzij je ze zelf hebt aangepast
@@ -3872,10 +3887,13 @@ function start() {
     $("trekAlle").hidden = !n; $("trekAlle").textContent = n === 1 ? "Lijn op de rand van het perceel" : "Lijn op de rand van alle " + n + " percelen" + (naamActief ? " van " + naamActief : "");
     $("trekKant").hidden = !n; $("trekKant").setAttribute("aria-pressed", trekModus === "kant"); $("trekKant").textContent = trekModus === "kant" ? "Klaar met kanten" : "Kanten aantikken";
     $("trekTik").setAttribute("aria-pressed", trekModus === "ab"); $("trekTik").textContent = trekModus === "ab" ? "Klaar met tikken" : "Zelf A en B tikken";
+    $("trekBocht").hidden = !(expBochten && n); $("trekBocht").setAttribute("aria-pressed", trekModus === "bocht"); $("trekBocht").textContent = trekModus === "bocht" ? "Klaar met bochten" : "Rand volgen (bocht)";
+    $("trekBochtOm").hidden = !(bochtAlt && trek.lijnen.some(l => l.id === bochtAlt.id));
     // Uitleg bij de knoppen, en waarom de klant "perceelkaart" heet als er geen bedrijf op de kaart staat
     $("trekUitleg").innerHTML = (n ? "<b>Rand</b>: per perceel een lijn op de langste rechte kant (of de kant / AB-lijn die je bij Percelen koos). " : "") +
       (n ? "<b>Kanten aantikken</b>: tik bij een kant van een perceel, dan komt er een lijn op die kant (nog eens tikken haalt hem weg); zoveel kanten als je wilt. " : "") +
       "<b>Zelf tikken</b>: tik A en B op de kaart." +
+      (expBochten && n ? " <b>Rand volgen</b> (experimenteel): tik een beginpunt en een eindpunt op de rand van een perceel; de bocht volgt de rand daartussen, de korte kant om." : "") +
       (!naamActief ? "<br>Tip: zet eerst een bedrijf op de kaart (tabblad Bedrijven): dan wordt de klant de naam van het bedrijf en het bedrijf de plaats van de boerderij." : "");
     const ul = $("trekLijst"); ul.innerHTML = "";
     trek.lijnen.forEach(l => {
@@ -3883,7 +3901,8 @@ function start() {
       const vk = document.createElement("div"); vk.className = "trekrij";
       const inp = (waarde, lbl, f) => { const i = document.createElement("input"); i.type = "text"; i.value = waarde; i.setAttribute("aria-label", lbl); i.autocomplete = "off"; i.addEventListener("input", () => { f(i.value); bewaarTrek(); trekTeken(); }); return i; };
       vk.append(inp(l.veld, "Veld", v => { l.veld = v; }), inp(l.naam, "Lijnnaam", v => { l.naam = v; }));
-      const m = el("div", "meta", "koers " + k.koers.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "° · " + Math.round(k.afstand).toLocaleString("nl-NL") + " m");
+      const m = el("div", "meta", l.pts ? "bocht langs de rand · " + Math.round(padLengte(l.pts)).toLocaleString("nl-NL") + " m (" + l.pts.length + " punten)"
+        : "koers " + k.koers.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "° · " + Math.round(k.afstand).toLocaleString("nl-NL") + " m");
       const go = el("div"); go.append(vk, m);
       const x = el("button", "x", "×"); x.type = "button"; x.setAttribute("aria-label", "Lijn weghalen");
       x.addEventListener("click", () => { trek.lijnen = trek.lijnen.filter(y => y !== l); bewaarTrek(); trekPaneel(); trekTeken(); });
@@ -3896,8 +3915,57 @@ function start() {
     let kanDelen = false; try { kanDelen = !!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], "x.zip", { type: "application/zip" })] })); } catch (e) {}
     $("trekDeel").hidden = !kanDelen;
   }
+  // ---------- Experimenteel: bocht langs de perceelrand ----------
+  var expBochten = !!store.get("kaartExpBochten", false), bochtStart = null, bochtAlt = null;
+  const padLengte = pts => pts.slice(1).reduce((t, p, j) => t + Perceel.koers(pts[j], p).afstand, 0);
+  // Buitenrand (van het grootste deel) zonder dubbel eindpunt
+  function randRing(geom) {
+    const polys = geom.type === "MultiPolygon" ? geom.coordinates : [geom.coordinates];
+    let best = null, bestOpp = -1;
+    polys.forEach(pl => { const o = Perceel.oppervlakteM2({ type: "Polygon", coordinates: [pl[0]] }); if (o > bestOpp) { bestOpp = o; best = pl[0]; } });
+    if (!best) return null;
+    const r = best.slice(); const a = r[0], z = r[r.length - 1];
+    if (a[0] === z[0] && a[1] === z[1]) r.pop();
+    return r.length >= 3 ? r : null;
+  }
+  // Dichtstbijzijnde punt op een perceelrand (binnen 30 px): { o, ring, s (positie langs de rand: segment + fractie), pt }
+  function randPunt(ll) {
+    const p = map.latLngToContainerPoint(ll); let best = null;
+    trekObjs().forEach(o => {
+      const ring = randRing(o.geom); if (!ring) return;
+      ring.forEach((c, i) => {
+        const c2 = ring[(i + 1) % ring.length], A = map.latLngToContainerPoint([c[1], c[0]]), B = map.latLngToContainerPoint([c2[1], c2[0]]);
+        const q = L.LineUtil.closestPointOnSegment(p, A, B), d = p.distanceTo(q), lab = A.distanceTo(B), t = lab ? A.distanceTo(q) / lab : 0;
+        if (!best || d < best.d) best = { d, o, ring, s: i + t, pt: [c[0] + (c2[0] - c[0]) * t, c[1] + (c2[1] - c[1]) * t] };
+      });
+    });
+    return best && best.d <= 30 ? best : null;
+  }
+  // Langs de rand van positie s1 naar s2 (vooruit, met de hoekpunten ertussen)
+  function randPad(ring, s1, s2) {
+    const n = ring.length, op = s => { const i = Math.floor(s) % n, t = s - Math.floor(s), c = ring[i], c2 = ring[(i + 1) % n]; return [c[0] + (c2[0] - c[0]) * t, c[1] + (c2[1] - c[1]) * t]; };
+    const d = ((s2 - s1) % n + n) % n, pts = [op(s1)];
+    for (let v = Math.floor(s1) + 1; ((v - s1) % n + n) % n < d; v++) pts.push(ring[v % n]);
+    pts.push(op(s2));
+    return pts.filter((p, i) => !i || Perceel.koers(pts[i - 1], p).afstand > 0.05);
+  }
+  function bochtTik(ll) {
+    const rp = randPunt(ll);
+    if (!rp) { trekSay("Tik dichter bij de rand van een perceel.", true); return; }
+    if (!bochtStart) { bochtStart = rp; trekTeken(); trekSay("Beginpunt staat op de rand van " + rp.o.naam + ". Tik nu het eindpunt op dezelfde rand."); return; }
+    const st = bochtStart; bochtStart = null;
+    if (rp.o.obj !== st.o.obj) { trekTeken(); trekSay("Het eindpunt moet op de rand van hetzelfde perceel liggen. Tik het beginpunt opnieuw.", true); return; }
+    const vooruit = randPad(st.ring, st.s, rp.s), terug = randPad(st.ring, rp.s, st.s).reverse();
+    const [kort, lang] = padLengte(vooruit) <= padLengte(terug) ? [vooruit, terug] : [terug, vooruit];
+    if (padLengte(kort) < 5) { trekTeken(); trekSay("Begin en eind liggen te dicht bij elkaar (minder dan 5 m). Tik het beginpunt opnieuw.", true); return; }
+    trekErbij(kort[0], kort[kort.length - 1], st.o.naam, null, kort);
+    const l = trek.lijnen[trek.lijnen.length - 1]; bochtAlt = { id: l.id, pts: lang };
+    bewaarTrek(); trekPaneel(); trekTeken();
+    trekSay(l.naam + " in " + l.veld + ": " + Math.round(padLengte(kort)).toLocaleString("nl-NL") + " m langs de rand. Verkeerde kant? Tik Andere kant om. Of tik een volgend beginpunt.");
+  }
   function trekTik(ll) {
-    if (!trekModus) { trekSay("Kies eerst Kanten aantikken of Zelf A en B tikken."); return; }
+    if (trekModus === "bocht") { bochtTik(ll); return; }
+    if (!trekModus) { trekSay("Kies eerst wat je wilt doen (kanten aantikken, zelf tikken" + (expBochten ? " of rand volgen" : "") + ")."); return; }
     const c = [ll.lng, ll.lat];
     if (trekModus === "kant") {
       // Zoals AB-kant kiezen bij Percelen: de dichtstbijzijnde rand (binnen 30 px), dan de rechte kant daar
@@ -3937,7 +4005,7 @@ function start() {
       // Zelfde naam twee keer in één veld: nummer erachter, zodat je ze op de FmX uit elkaar houdt
       const lijst = per.get(veld), basis = trimbleTxt(l.naam, 40) || "AB"; let naam = basis, n = 2;
       while (lijst.some(x => x.naam === naam)) naam = basis + " (" + n++ + ")";
-      lijst.push({ naam, pts: [l.a, l.b], breedte: br });
+      lijst.push({ naam, pts: l.pts || [l.a, l.b], breedte: br });
     }
     if (!per.size) { trekSay("Nog geen lijnen in de lijst.", true); return null; }
     const velden = [...per].map(([veld, lijnen]) => ({ veld, lijnen }));
@@ -3965,8 +4033,18 @@ function start() {
     bewaarTrek(); trekPaneel(); trekTeken();
     trekSay(erbij ? erbij + (erbij === 1 ? " lijn" : " lijnen") + " erbij, op de rand van " + (erbij === 1 ? "het perceel." : "elk perceel.") + (geen ? " Bij " + geen + " lukte het niet." : "") : "De randlijnen staan al in de lijst (onderaan).");
   });
-  const zetTrekModus = m => { trekModus = trekModus === m ? "" : m; trekA = null; $("map").classList.toggle("oever", !!trekModus); trekPaneel(); trekTeken(); if (trekModus) window.scrollTo(0, 0); };
+  const zetTrekModus = m => { trekModus = trekModus === m ? "" : m; trekA = null; bochtStart = null; $("map").classList.toggle("oever", !!trekModus); trekPaneel(); trekTeken(); if (trekModus) window.scrollTo(0, 0); };
   $("trekKant").addEventListener("click", () => { zetTrekModus("kant"); trekSay(trekModus ? "Tik bij een kant van een perceel: daar komt een lijn op. Nog eens tikken haalt hem weg." : "Klaar met kanten."); });
+  $("trekBocht").addEventListener("click", () => { zetTrekModus("bocht"); trekSay(trekModus ? "Tik een beginpunt op de rand van een perceel, dan het eindpunt." : "Klaar met bochten."); });
+  $("trekBochtOm").addEventListener("click", () => {
+    const l = bochtAlt && trek.lijnen.find(x => x.id === bochtAlt.id); if (!l) return;
+    const oud = l.pts; l.pts = bochtAlt.pts; l.a = l.pts[0].slice(); l.b = l.pts[l.pts.length - 1].slice(); bochtAlt.pts = oud;
+    bewaarTrek(); trekPaneel(); trekTeken(); trekSay(l.naam + " gaat nu de andere kant om: " + Math.round(padLengte(l.pts)).toLocaleString("nl-NL") + " m.");
+  });
+  const zetExp = aan => { expBochten = aan; store.set("kaartExpBochten", aan); $("bExpUit").hidden = !aan; };
+  $("bExpUit").hidden = !expBochten;
+  $("bExpBocht").addEventListener("click", () => { zetExp(true); toonTab("trek"); window.scrollTo(0, 0); if (trekModus !== "bocht") zetTrekModus("bocht"); trekSay("Experimenteel: tik een beginpunt op de rand van een perceel, dan het eindpunt. De bocht komt in de lijst bij de AB-lijnen."); });
+  $("bExpUit").addEventListener("click", () => { zetExp(false); say("Bochten verborgen. Bochten die al in de lijst staan blijven staan."); });
   $("trekTik").addEventListener("click", () => { zetTrekModus("ab"); trekSay(trekModus ? "Tik A op de kaart, dan B. Zo vaak als je wilt." : "Klaar met tikken."); });
   $("trekWis").addEventListener("click", e => { if (!armed(e.currentTarget, "Tik nog eens")) return; trek.lijnen = []; trek.klantZelf = trek.bedrijfZelf = false; bewaarTrek(); trekPaneel(); trekTeken(); trekSay("Lijst leeg."); });
   // In AB-lijn meten: knop om de lijn in de lijst te zetten

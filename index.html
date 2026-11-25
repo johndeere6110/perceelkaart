@@ -463,7 +463,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div class="vrow"><label for="trek_bedrijf">Bedrijf</label><input id="trek_bedrijf" type="text" autocomplete="off"><span></span></div>
       <div class="knoppen"><button type="button" class="btn" id="trekAlle" hidden>AB-kant van alle percelen</button><button type="button" class="btn" id="trekKant" aria-pressed="false">Kanten aantikken</button><button type="button" class="btn" id="trekTik" aria-pressed="false">Zelf tikken</button><button type="button" class="btn" id="trekBocht" aria-pressed="false" hidden>Rand volgen (bocht)</button><button type="button" class="btn" id="trekBochtOm" hidden>Andere kant om</button></div>
       <div class="knoppen keus" id="trekSoortBox" hidden><button type="button" class="btn" id="trekSoortRecht" aria-pressed="true">Recht (A en B)</button><button type="button" class="btn" id="trekSoortBocht" aria-pressed="false">Bocht (punten)</button></div>
-      <div class="knoppen" id="trekVbBox" hidden><button type="button" class="btn" id="trekVbKlaar">Bocht klaar</button><button type="button" class="btn" id="trekVbTerug">Laatste punt weg</button><button type="button" class="btn" id="trekVbWis">Opnieuw</button></div>
+      <div class="knoppen" id="trekVbBox" hidden><button type="button" class="btn" id="trekStuk" aria-pressed="false">Volgende stuk: bocht</button><button type="button" class="btn" id="trekVbKlaar">Bocht klaar</button><button type="button" class="btn" id="trekVbTerug">Laatste punt weg</button><button type="button" class="btn" id="trekVbWis">Opnieuw</button></div>
       <div class="knoppen" id="trekEditBox" hidden><div class="meta" id="trekEditTxt" style="flex-basis:100%"></div><button type="button" class="btn" id="trekEditKlaar">Klaar met aanpassen</button></div>
       <div class="meta" id="trekUitleg" style="margin-top:6px"></div>
       <div class="meta" id="trekLeeg">Nog geen lijnen. Op de FmX heet het straks Klant → Bedrijf → Veld; het veld is het perceelnummer (pas het gerust aan). Kies veldnamen die nog niet op de FmX staan: een veld met precies dezelfde namen kan bij het kopiëren overschreven worden.</div>
@@ -564,7 +564,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 163</div>
+  <div class="voet" id="voetVersie">versie 164</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3891,7 +3891,7 @@ function start() {
         const m = L.marker([c[1], c[0]], { draggable: true, zIndexOffset: 1000, icon: L.divIcon({ className: "", html: '<div class="abl vrijp">' + (lE.knopen ? i + 1 : i ? "B" : "A") + "</div>", iconSize: [26, 26] }) });
         m.on("drag", () => {
           const q = m.getLatLng(), c2 = [q.lng, q.lat];
-          if (lE.knopen) { lE.knopen[i] = c2; lE.pts = gladdeBocht(lE.knopen); lE.a = lE.pts[0].slice(); lE.b = lE.pts[lE.pts.length - 1].slice(); if (trekPoly[lE.id]) trekPoly[lE.id].setLatLngs(lE.pts.map(p => [p[1], p[0]])); }
+          if (lE.knopen) { lE.knopen[i] = c2; lE.pts = gladdeBocht(lE.knopen, lE.recht); lE.a = lE.pts[0].slice(); lE.b = lE.pts[lE.pts.length - 1].slice(); if (trekPoly[lE.id]) trekPoly[lE.id].setLatLngs(lE.pts.map(p => [p[1], p[0]])); }
           else { if (i) lE.b = c2; else lE.a = c2; if (trekPoly[lE.id]) trekPoly[lE.id].setLatLngs([[lE.a[1], lE.a[0]], [lE.b[1], lE.b[0]]]); }
         });
         m.on("dragend", () => { bewaarTrek(); trekPaneel(); trekTeken(); });
@@ -3900,7 +3900,7 @@ function start() {
     }
     if (trekA) trekLaag.addLayer(L.marker([trekA[1], trekA[0]], { icon: L.divIcon({ className: "", html: '<div class="abl vrijp">A</div>', iconSize: [26, 26] }), interactive: false }));
     if (vbPunten.length) {
-      const glad = vbPunten.length >= 2 ? gladdeBocht(vbPunten) : vbPunten;
+      const glad = vbPunten.length >= 2 ? gladdeBocht(vbPunten, vbRecht) : vbPunten;
       if (glad.length >= 2) trekLaag.addLayer(L.polyline(glad.map(p => [p[1], p[0]]), { color: "#e8590c", weight: 3, dashArray: "6 5", interactive: false }));
       vbPunten.forEach((c, i) => trekLaag.addLayer(L.circleMarker([c[1], c[0]], { radius: 6, color: "#fff", weight: 2, fillColor: "#e8590c", fillOpacity: 1, interactive: false })
         .bindTooltip(String(i + 1), { permanent: true, direction: "top", offset: [0, -6], className: "pnr trekl bocht" })));
@@ -3928,12 +3928,13 @@ function start() {
     $("trekBocht").hidden = !(expBochten && n); $("trekBocht").setAttribute("aria-pressed", trekModus === "bocht"); $("trekBocht").textContent = trekModus === "bocht" ? "Klaar met bochten" : "Rand volgen (bocht)";
     $("trekBochtOm").hidden = !(bochtAlt && trek.lijnen.some(l => l.id === bochtAlt.id));
     $("trekVbBox").hidden = trekModus !== "vrijbocht";
+    $("trekStuk").setAttribute("aria-pressed", vbVolgRecht); $("trekStuk").textContent = "Volgende stuk: " + (vbVolgRecht ? "recht" : "bocht");
     $("trekVbKlaar").disabled = vbPunten.length < 3; $("trekVbKlaar").textContent = "Bocht klaar" + (vbPunten.length ? " (" + vbPunten.length + " punten)" : "");
     $("trekVbTerug").disabled = $("trekVbWis").disabled = !vbPunten.length;
     // Uitleg bij de knoppen, en waarom de klant "perceelkaart" heet als er geen bedrijf op de kaart staat
     $("trekUitleg").innerHTML = (n ? "<b>Rand</b>: per perceel een lijn op de langste rechte kant (of de kant / AB-lijn die je bij Percelen koos). " : "") +
       (n ? "<b>Kanten aantikken</b>: tik bij een kant van een perceel, dan komt er een lijn op die kant (nog eens tikken haalt hem weg); zoveel kanten als je wilt. " : "") +
-      (expBochten ? "<b>Zelf tikken</b>: kies Recht (tik A en B) of Bocht (tik punten waar hij langs moet; de app maakt er een vloeiende lijn van)." : "<b>Zelf tikken</b>: tik A en B op de kaart.") +
+      (expBochten ? "<b>Zelf tikken</b>: kies Recht (tik A en B) of Bocht (tik punten waar hij langs moet; de app maakt er een vloeiende lijn van; met Volgende stuk: recht zit er een recht stuk in, en de bocht gaat daarna in dezelfde richting verder)." : "<b>Zelf tikken</b>: tik A en B op de kaart.") +
       (expBochten && n ? " <b>Rand volgen</b> (experimenteel): tik een beginpunt en een eindpunt op de rand van een perceel; de bocht volgt de rand daartussen, de korte kant om." : "") +
       " Met <b>✎</b> bij een lijn pas je hem later nog aan: sleep de punten." +
       (!naamActief ? "<br>Tip: zet eerst een bedrijf op de kaart (tabblad Bedrijven): dan wordt de klant de naam van het bedrijf en het bedrijf de plaats van de boerderij." : "");
@@ -3997,28 +3998,39 @@ function start() {
     return pts.filter((p, i) => !i || Perceel.koers(pts[i - 1], p).afstand > 0.05);
   }
   // ---------- Experimenteel: zelf een bocht tikken (vloeiend door de punten) ----------
-  var vbPunten = [];
+  var vbPunten = [], vbRecht = [], vbVolgRecht = false; // vbRecht[i]: stuk i → i+1 is recht; vbVolgRecht: het volgende stuk wordt recht
   // Centripetale Catmull-Rom door de punten (geen lussen of uitschieters), om de ~2 m een punt, zoals de bochten van de FmX
-  function gladdeBocht(pts) {
+  // Lijn door de punten. recht[i] = het stuk van punt i naar i+1 is recht; de andere stukken zijn bochten (Hermite, glad door
+  // de punten). Waar een bocht aan een recht stuk vastzit gaat hij in de richting van dat rechte stuk verder (geen knik).
+  // Om de ~2 m een punt, zoals de bochten van de FmX.
+  function gladdeBocht(pts, recht) {
+    recht = recht || [];
     if (pts.length < 2) return pts.slice();
     const lat = pts[0][1], f = lat * Math.PI / 180, ky = 111132.92 - 559.82 * Math.cos(2 * f), kx = 111412.84 * Math.cos(f) - 93.5 * Math.cos(3 * f);
-    const M = pts.map(p => [(p[0] - pts[0][0]) * kx, (p[1] - pts[0][1]) * ky]), terug = q => [pts[0][0] + q[0] / kx, pts[0][1] + q[1] / ky];
-    const ext = [[2 * M[0][0] - M[1][0], 2 * M[0][1] - M[1][1]], ...M, [2 * M[M.length - 1][0] - M[M.length - 2][0], 2 * M[M.length - 1][1] - M[M.length - 2][1]]];
-    const tj = (a, b) => Math.pow(Math.hypot(b[0] - a[0], b[1] - a[1]), 0.5) || 1e-6, uit = [M[0]];
-    for (let i = 1; i < ext.length - 2; i++) {
-      const [p0, p1, p2, p3] = [ext[i - 1], ext[i], ext[i + 1], ext[i + 2]];
-      const t1 = tj(p0, p1), t2 = t1 + tj(p1, p2), t3 = t2 + tj(p2, p3);
-      const stappen = Math.max(1, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 2));
-      for (let k = 1; k <= stappen; k++) {
-        const t = t1 + (t2 - t1) * k / stappen, mix = (a, b, ta, tb) => [((tb - t) * a[0] + (t - ta) * b[0]) / (tb - ta), ((tb - t) * a[1] + (t - ta) * b[1]) / (tb - ta)];
-        const A1 = mix(p0, p1, 0, t1), A2 = mix(p1, p2, t1, t2), A3 = mix(p2, p3, t2, t3), B1 = mix(A1, A2, 0, t2), B2 = mix(A2, A3, t1, t3);
-        uit.push(mix(B1, B2, t1, t2));
+    const M = pts.map(p => [(p[0] - pts[0][0]) * kx, (p[1] - pts[0][1]) * ky]), terug = q => [pts[0][0] + q[0] / kx, pts[0][1] + q[1] / ky], n = M.length;
+    const seg = i => [M[i + 1][0] - M[i][0], M[i + 1][1] - M[i][1]], len = v => Math.hypot(v[0], v[1]) || 1e-9, eenh = v => { const l = len(v); return [v[0] / l, v[1] / l]; };
+    const T = M.map((p, i) => {
+      const vin = i > 0 ? eenh(seg(i - 1)) : null, vuit = i < n - 1 ? eenh(seg(i)) : null;
+      if (i > 0 && recht[i - 1]) return vin;     // na een recht stuk: zelfde richting verder
+      if (i < n - 1 && recht[i]) return vuit;    // voor een recht stuk: in die richting aankomen
+      if (!vin) return vuit; if (!vuit) return vin;
+      return eenh([vin[0] + vuit[0], vin[1] + vuit[1]]); // midden tussen in- en uitgaande richting
+    });
+    const uit = [M[0]];
+    for (let i = 0; i < n - 1; i++) {
+      const P0 = M[i], P1 = M[i + 1], L = len(seg(i)), k = Math.max(1, Math.ceil(L / 2));
+      for (let j = 1; j <= k; j++) {
+        const t = j / k;
+        if (recht[i]) { uit.push([P0[0] + (P1[0] - P0[0]) * t, P0[1] + (P1[1] - P0[1]) * t]); continue; }
+        const t2 = t * t, t3 = t2 * t, h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2, m0 = T[i], m1 = T[i + 1];
+        uit.push([h00 * P0[0] + h10 * L * m0[0] + h01 * P1[0] + h11 * L * m1[0], h00 * P0[1] + h10 * L * m0[1] + h01 * P1[1] + h11 * L * m1[1]]);
       }
     }
     return uit.map(terug);
   }
   function vbTik(ll) {
-    vbPunten.push([ll.lng, ll.lat]); trekPaneel(); trekTeken();
+    if (vbPunten.length) vbRecht[vbPunten.length - 1] = vbVolgRecht;
+    vbPunten.push([ll.lng, ll.lat]); vbRecht.length = vbPunten.length - 1; trekPaneel(); trekTeken();
     trekSay(vbPunten.length < 3 ? "Punt " + vbPunten.length + " staat. Tik nog " + (3 - vbPunten.length) + (vbPunten.length === 2 ? " punt" : " punten") + " (minstens 3)." : vbPunten.length + " punten: tik verder, of Bocht klaar.");
   }
   function bochtTik(ll) {
@@ -4107,7 +4119,7 @@ function start() {
     bewaarTrek(); trekPaneel(); trekTeken();
     trekSay(erbij ? erbij + (erbij === 1 ? " lijn" : " lijnen") + " erbij, op de rand van " + (erbij === 1 ? "het perceel." : "elk perceel.") + (geen ? " Bij " + geen + " lukte het niet." : "") : "De randlijnen staan al in de lijst (onderaan).");
   });
-  const zetTrekModus = m => { trekModus = !m || trekModus === m ? "" : m; trekA = null; bochtStart = null; vbPunten = []; if (trekModus) trekEdit = null; $("map").classList.toggle("oever", !!trekModus); trekPaneel(); trekTeken(); if (trekModus) window.scrollTo(0, 0); };
+  const zetTrekModus = m => { trekModus = !m || trekModus === m ? "" : m; trekA = null; bochtStart = null; vbPunten = []; vbRecht = []; if (trekModus) trekEdit = null; $("map").classList.toggle("oever", !!trekModus); trekPaneel(); trekTeken(); if (trekModus) window.scrollTo(0, 0); };
   $("trekKant").addEventListener("click", () => { zetTrekModus("kant"); trekSay(trekModus ? "Tik bij een kant van een perceel: daar komt een lijn op. Nog eens tikken haalt hem weg." : "Klaar met kanten."); });
   $("trekBocht").addEventListener("click", () => { zetTrekModus("bocht"); trekSay(trekModus ? "Tik een beginpunt op de rand van een perceel, dan het eindpunt." : "Klaar met bochten."); });
   $("trekBochtOm").addEventListener("click", () => {
@@ -4117,18 +4129,19 @@ function start() {
   });
   // Zelf tikken: Recht (A en B) of Bocht (punten); de laatste keuze blijft
   let trekSoort = "ab";
-  const tikHint = () => trekSay(trekModus === "vrijbocht" ? "Bocht: tik punten op de kaart waar hij langs moet (minstens 3), dan Bocht klaar." : "Recht: tik A op de kaart, dan B. Zo vaak als je wilt.");
-  const kiesSoort = m => { trekSoort = m; if (trekModus !== m) { trekModus = m; trekA = null; vbPunten = []; trekEdit = null; $("map").classList.add("oever"); } trekPaneel(); trekTeken(); tikHint(); };
+  const tikHint = () => trekSay(trekModus === "vrijbocht" ? "Bocht: tik punten op de kaart waar hij langs moet (minstens 3), dan Bocht klaar. Een recht stuk ertussen? Tik eerst Volgende stuk: recht." : "Recht: tik A op de kaart, dan B. Zo vaak als je wilt.");
+  const kiesSoort = m => { trekSoort = m; if (trekModus !== m) { trekModus = m; trekA = null; vbPunten = []; vbRecht = []; trekEdit = null; $("map").classList.add("oever"); } trekPaneel(); trekTeken(); tikHint(); };
   $("trekSoortRecht").addEventListener("click", () => kiesSoort("ab"));
   $("trekSoortBocht").addEventListener("click", () => kiesSoort("vrijbocht"));
   $("trekEditKlaar").addEventListener("click", () => { trekEdit = null; trekPaneel(); trekTeken(); trekSay("Klaar met aanpassen."); });
-  $("trekVbTerug").addEventListener("click", () => { vbPunten.pop(); trekPaneel(); trekTeken(); trekSay(vbPunten.length + (vbPunten.length === 1 ? " punt" : " punten") + " over."); });
-  $("trekVbWis").addEventListener("click", () => { vbPunten = []; trekPaneel(); trekTeken(); trekSay("Punten gewist. Tik opnieuw."); });
+  $("trekStuk").addEventListener("click", () => { vbVolgRecht = !vbVolgRecht; trekPaneel(); trekSay(vbVolgRecht ? "Het volgende stuk wordt recht: tik waar het rechte stuk ophoudt." : "Het volgende stuk wordt een bocht" + (vbRecht[vbPunten.length - 2] ? ", die in de richting van het rechte stuk verder gaat." : ".")); });
+  $("trekVbTerug").addEventListener("click", () => { vbPunten.pop(); vbRecht.length = Math.max(0, vbPunten.length - 1); trekPaneel(); trekTeken(); trekSay(vbPunten.length + (vbPunten.length === 1 ? " punt" : " punten") + " over."); });
+  $("trekVbWis").addEventListener("click", () => { vbPunten = []; vbRecht = []; trekPaneel(); trekTeken(); trekSay("Punten gewist. Tik opnieuw."); });
   $("trekVbKlaar").addEventListener("click", () => {
     if (vbPunten.length < 3) return;
-    const glad = gladdeBocht(vbPunten), mid = glad[Math.floor(glad.length / 2)];
+    const glad = gladdeBocht(vbPunten, vbRecht), mid = glad[Math.floor(glad.length / 2)];
     trekErbij(glad[0], glad[glad.length - 1], veldBij(mid), null, glad);
-    const l = trek.lijnen[trek.lijnen.length - 1]; l.knopen = vbPunten.map(p => [Math.round(p[0] * 1e8) / 1e8, Math.round(p[1] * 1e8) / 1e8]); vbPunten = []; bochtAlt = null;
+    const l = trek.lijnen[trek.lijnen.length - 1]; l.knopen = vbPunten.map(p => [Math.round(p[0] * 1e8) / 1e8, Math.round(p[1] * 1e8) / 1e8]); if (vbRecht.some(Boolean)) l.recht = vbRecht.map(Boolean); vbPunten = []; vbRecht = []; bochtAlt = null;
     bewaarTrek(); trekPaneel(); trekTeken();
     trekSay(l.naam + " in " + l.veld + ": " + Math.round(padLengte(l.pts)).toLocaleString("nl-NL") + " m. Tik punten voor de volgende bocht, of Klaar met tikken. Met ✎ pas je hem later aan.");
   });

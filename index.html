@@ -473,7 +473,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
       <div id="trekUitBox" hidden>
         <div class="meta" id="trekTel"></div>
         <div class="vrow"><label for="trek_breedte">Breedte (m)</label><input id="trek_breedte" class="num" type="text" inputmode="decimal" autocomplete="off" placeholder="leeg = 3"><span></span></div>
-        <div class="knoppen"><button type="button" class="btn" id="trekDeel">Delen (WhatsApp, mail)</button><button type="button" class="btn" id="trekDown">Downloaden</button></div>
+        <div class="knoppen"><button type="button" class="btn" id="trekDeel">Delen (WhatsApp, mail)</button><button type="button" class="btn" id="trekDown">Downloaden</button><button type="button" class="btn" id="trekUsb" hidden>Op de USB-stick zetten</button></div>
         <div class="knoppen"><button type="button" class="btn klein" id="trekWis">Lijst wissen</button></div>
       </div>
     </div>
@@ -566,7 +566,7 @@ a.btn.klein { min-height: 44px; font-size: 15px; margin-top: 6px; width: auto; p
     <a class="btn" id="locHulpOpen" href="#" hidden>Open locatie-instellingen</a>
     <div class="row"><button type="button" class="btn" id="locHulpOpnieuw">Opnieuw proberen</button><button type="button" class="btn" id="locHulpDicht">Sluiten</button></div>
   </div>
-  <div class="voet" id="voetVersie">versie 167</div>
+  <div class="voet" id="voetVersie">versie 168</div>
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
@@ -3829,7 +3829,7 @@ function start() {
     return { shp: new Uint8Array(shp.buffer), shx: new Uint8Array(shx.buffer), dbf };
   }
   // Eén zip met per veld een map: AgGPS/Data/<klant>/<bedrijf>/<veld>/ (velden: [{veld, lijnen: [{naam, pts, breedte}]}])
-  function trimbleZip(klant, bedrijf, velden) {
+  function trimbleBestanden(klant, bedrijf, velden) {
     const enc = new TextEncoder(), bestanden = [];
     velden.forEach(v => {
       const map_ = "AgGPS/Data/" + klant + "/" + bedrijf + "/" + v.veld + "/", A = v.lijnen[0].pts[0], sw = swathsBestanden(v.lijnen);
@@ -3838,8 +3838,9 @@ function start() {
         { naam: map_ + "origin.kml", data: enc.encode("<kml>\n    <Placemark>\n        <name>" + v.veld.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</name>\n        <description>Field Origin</description>\n        <Point>\n            <coordinates>" + A[0].toFixed(9) + "," + A[1].toFixed(9) + ",0.000</coordinates>\n        </Point>\n    </Placemark>\n</kml>\n") },
         { naam: map_ + A[0].toFixed(5) + "E" + A[1].toFixed(5) + "N.pos", data: new Uint8Array(0) });
     });
-    return maakZip(bestanden);
+    return bestanden;
   }
+  const trimbleZip = (klant, bedrijf, velden) => maakZip(trimbleBestanden(klant, bedrijf, velden));
   // ---------- Tabblad Trekker: lijst met AB-lijnen, samen naar de Trimble FmX ----------
   // trek.lijnen = [{ id, veld, naam, a, b }] (kaartTrekLijnen); klant/bedrijf/breedte in kaartTrimble. Klant = het bedrijf op de
   // kaart zolang de lijst leeg is; veld = perceelnummer (of kavelnaam) waar de lijn ligt; lijnnaam AB 1, AB 2 … per veld.
@@ -4133,7 +4134,8 @@ function start() {
     }
     if (!per.size) { trekSay("Nog geen lijnen in de lijst.", true); return null; }
     const velden = [...per].map(([veld, lijnen]) => ({ veld, lijnen }));
-    return { blob: trimbleZip(klant, bedrijf, velden), bestand: "trimble-" + klant.replace(/\s+/g, "-") + ".zip", klant, aantal: trek.lijnen.length, velden: velden.length, ingekort };
+    const bestanden = trimbleBestanden(klant, bedrijf, velden);
+    return { bestanden, bedrijf, veldNamen: velden.map(v => v.veld), blob: maakZip(bestanden), bestand: "trimble-" + klant.replace(/\s+/g, "-") + ".zip", klant, aantal: trek.lijnen.length, velden: velden.length, ingekort };
   }
   const trekKlaarTxt = z => z.aantal + (z.aantal === 1 ? " lijn" : " lijnen") + " in " + z.velden + (z.velden === 1 ? " veld" : " velden") + "." + (z.ingekort ? " Let op: " + z.ingekort + (z.ingekort === 1 ? " naam is" : " namen zijn") + " ingekort (klant, bedrijf en veld max 30 tekens, lijn max 25)." : "") + " Op de pc: zip uitpakken en de map AgGPS op de USB-stick zetten (staat er al een AgGPS-map op: alleen de map Data/" + z.klant + " erbij). Op de FmX: Data Files → aan de USB-kant " + z.klant + " kiezen → Copy.";
   $("trekDeel").addEventListener("click", async () => {
@@ -4143,6 +4145,41 @@ function start() {
       if (file && navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: z.bestand }); trekSay("Gedeeld: " + z.bestand + ", " + trekKlaarTxt(z)); }
       else trekSay("Delen kan hier niet: gebruik Downloaden.", true);
     } catch (e) { if (!e || e.name !== "AbortError") trekSay("Delen lukte niet: gebruik Downloaden.", true); }
+  });
+  // ---------- Rechtstreeks op de USB-stick (pc: Chrome of Edge, File System Access API) ----------
+  // Je kiest de stick (of de map AgGPS of Data erop); de app schrijft AgGPS/Data/<klant>/<bedrijf>/<veld>/ erbij, de rest blijft.
+  // Bestaat een veld al: eerst melden, nog eens tikken = overschrijven (oude .pos-bestandjes in dat veld gaan weg).
+  let usbWacht = null;
+  $("trekUsb").hidden = typeof window.showDirectoryPicker !== "function";
+  async function usbMapIn(dir, delen, maak) { let d = dir; for (const p of delen) d = await d.getDirectoryHandle(p, { create: !!maak }); return d; }
+  async function usbSchrijf(w) {
+    const { dir, z, skip } = w;
+    for (const f of z.bestanden) {
+      const delen = f.naam.split("/").slice(skip), naam = delen.pop(), d = await usbMapIn(dir, delen, true);
+      if (/\.pos$/i.test(naam)) { const weg = []; for await (const [n] of d.entries()) if (/\.pos$/i.test(n) && n !== naam) weg.push(n); for (const n of weg) await d.removeEntry(n); }
+      const fh = await d.getFileHandle(naam, { create: true }), wr = await fh.createWritable();
+      await wr.write(f.data); await wr.close();
+    }
+    const waar = ["AgGPS", "Data"].slice(skip).concat(z.klant).join("/");
+    trekSay("Op de USB-stick gezet (" + dir.name + "/" + waar + "): " + trekKlaarTxt(z).replace(/ Op de pc: .*?Op de FmX:/, " Stick veilig verwijderen. Op de FmX:"));
+  }
+  $("trekUsb").addEventListener("click", async e => {
+    const knop = e.currentTarget;
+    try {
+      if (knop.dataset.armed === "1" && usbWacht) { armed(knop); const w = usbWacht; usbWacht = null; await usbSchrijf(w); return; }
+      const z = trekMaak(); if (!z) return;
+      let dir; try { dir = await window.showDirectoryPicker({ id: "usbstick", mode: "readwrite" }); } catch (er) { if (er && er.name === "AbortError") return; throw er; }
+      // Koos je de map AgGPS of Data op de stick, dan daarin verder
+      const skip = dir.name === "AgGPS" ? 1 : dir.name === "Data" ? 2 : 0;
+      const bestaand = [];
+      for (const v of z.veldNamen) { try { await usbMapIn(dir, ["AgGPS", "Data", z.klant, z.bedrijf, v].slice(skip), false); bestaand.push(v); } catch (er) { /* bestaat nog niet: goed */ } }
+      if (bestaand.length) {
+        usbWacht = { dir, z, skip }; armed(knop, "Tik nog eens: overschrijven");
+        trekSay("Op de stick staat al " + (bestaand.length === 1 ? "het veld " : bestaand.length + " velden: ") + bestaand.join(", ") + " (bij " + z.klant + " → " + z.bedrijf + "). Tik binnen 3 seconden nog eens om de lijnen daarvan te vervangen, of geef het veld een andere naam.", true);
+        return;
+      }
+      await usbSchrijf({ dir, z, skip });
+    } catch (er) { trekSay("Op de stick zetten lukte niet: " + ((er && er.message) || er) + ". Gebruik Downloaden.", true); }
   });
   $("trekDown").addEventListener("click", () => {
     const z = trekMaak(); if (!z) return;

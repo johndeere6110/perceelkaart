@@ -74,9 +74,12 @@ details h2 { margin-top: 16px; }
 #qr img, #qr canvas { display: block; }
 .link { word-break: break-all; font-size: 16px; text-align: center; margin-top: 10px; }
 body.metpijl main { padding-bottom: 90px; }
+.arrow.rechts { left: auto; right: 26px; transform: none; }
 .arrow { position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); font-size: 40px; color: var(--accent); pointer-events: none; }
 @media (prefers-reduced-motion: no-preference) {
   .arrow { animation: hop 1.2s ease-in-out infinite; }
+  .arrow.rechts { animation: hopR 1.2s ease-in-out infinite; }
+  @keyframes hopR { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(0, 8px); } }
   @keyframes hop { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, 8px); } }
 }
 [hidden] { display: none !important; }
@@ -242,8 +245,12 @@ body.metpijl main { padding-bottom: 90px; }
       $("iosStap1").textContent = "Tik rechtsboven in de adresbalk op het deel-knopje";
       show("tipIosChrome"); $("tipIosApp").hidden = true;
     } else if (!iosSafari) show("tipIosBrowser");
-    // Pijl naar het deel-knopje onderin (iPhone, in Safari zit die onderaan)
-    if (iosSafari && /iPhone|iPod/.test(ua)) { show("pijl"); document.body.classList.add("metpijl"); }
+    // Safari vanaf iOS 26: het deel-knopje zit achter de drie puntjes rechtsonder (compacte balk)
+    const safariVersie = parseInt((ua.match(/Version\/(\d+)/) || [])[1], 10) || 0;
+    const ios26 = iosSafari && safariVersie >= 26;
+    if (ios26) $("iosStap1").textContent = "Tik rechtsonder op de drie puntjes ••• en dan op Deel (zie je onderin wel het deel-knopje, tik daar dan op)";
+    // Pijl naar het deel-knopje onderin (iPhone, in Safari zit die onderaan; vanaf iOS 26 rechtsonder bij de puntjes)
+    if (iosSafari && /iPhone|iPod/.test(ua)) { show("pijl"); document.body.classList.add("metpijl"); if (ios26) $("pijl").classList.add("rechts"); }
   } else if (android) {
     // Chrome kan zelf een installeerknop aanbieden; zo niet, dan de stappen via het menu
     show("vAndroid");
